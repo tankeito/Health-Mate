@@ -21,16 +21,59 @@ from pdf_generator import generate_pdf_report as generate_pdf_report_impl
 # ==================== 配置加载 ====================
 
 def load_user_config(config_path=None):
-    """加载用户配置文件"""
+    """加载用户配置文件（带容错机制）"""
     if config_path is None:
         script_dir = os.path.dirname(os.path.abspath(__file__))
         config_path = os.path.join(script_dir, 'user_config.json')
     
     if not os.path.exists(config_path):
-        raise FileNotFoundError(f"配置文件不存在：{config_path}")
+        # 返回默认配置（不抛出异常）
+        return _get_default_config()
     
-    with open(config_path, 'r', encoding='utf-8') as f:
-        return json.load(f)
+    try:
+        with open(config_path, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except json.JSONDecodeError as e:
+        print(f"警告：配置文件 JSON 格式错误，使用默认配置 - {e}", file=sys.stderr)
+        return _get_default_config()
+    except Exception as e:
+        print(f"警告：读取配置文件失败，使用默认配置 - {e}", file=sys.stderr)
+        return _get_default_config()
+
+def _get_default_config():
+    """返回默认配置"""
+    return {
+        "user_profile": {
+            "name": "用户",
+            "gender": "男",
+            "age": 30,
+            "height_cm": 170,
+            "current_weight_kg": 65,
+            "target_weight_kg": 60,
+            "target_body_fat_percent": 15,
+            "condition": "胆结石",
+            "activity_level": 1.2,
+            "dietary_preferences": {}
+        },
+        "condition_standards": {
+            "胆结石": {
+                "fat_min_g": 40,
+                "fat_max_g": 50,
+                "fiber_min_g": 25,
+                "water_min_ml": 2000
+            }
+        },
+        "scoring_weights": {
+            "diet": 0.35,
+            "water": 0.20,
+            "weight": 0.15,
+            "exercise": 0.30
+        },
+        "scoring_standards": {},
+        "exercise_standards": {
+            "weekly_target_minutes": 150
+        }
+    }
 
 def get_condition_standards(config, condition_name):
     """获取指定病理的饮食标准"""
@@ -244,47 +287,51 @@ def calculate_weight_score(weight_recorded, target_weight, current_weight):
 
 def calculate_exercise_score(exercise_data, exercise_standards, scoring_standards):
     """计算运动评分（0-100）"""
-    if not exercise_data:
+    try:
+        if not exercise_data or not isinstance(exercise_data, list):
+            return 0
+        
+        exercise_weights = scoring_standards.get('exercise', {
+            'duration_score_weight': 0.40,
+            'frequency_score_weight': 0.30,
+            'calorie_score_weight': 0.30,
+            'daily_calorie_target': 300,
+            'weekly_minutes_target': 150
+        })
+        
+        # 时长评分
+        total_minutes = sum(e.get('duration_min', 0) for e in exercise_data if isinstance(e, dict))
+        weekly_target = exercise_standards.get('weekly_target_minutes', 150)
+        daily_target = weekly_target / 7 if weekly_target > 0 else 30
+        
+        if total_minutes >= daily_target:
+            duration_score = 100
+        else:
+            duration_score = round((total_minutes / daily_target) * 100, 1) if daily_target > 0 else 0
+        
+        # 频率评分（今天是否运动）
+        frequency_score = 100 if len(exercise_data) > 0 else 0
+        
+        # 热量消耗评分
+        total_calories = sum(e.get('calories', 0) for e in exercise_data if isinstance(e, dict))
+        calorie_target = exercise_weights.get('daily_calorie_target', 300)
+        
+        if total_calories >= calorie_target:
+            calorie_score = 100
+        else:
+            calorie_score = round((total_calories / calorie_target) * 100, 1) if calorie_target > 0 else 0
+        
+        # 计算总分
+        score = (
+            duration_score * exercise_weights.get('duration_score_weight', 0.40) +
+            frequency_score * exercise_weights.get('frequency_score_weight', 0.30) +
+            calorie_score * exercise_weights.get('calorie_score_weight', 0.30)
+        )
+        
+        return max(0, min(100, round(score, 1)))
+    except Exception as e:
+        print(f"警告：运动评分计算失败 - {e}", file=sys.stderr)
         return 0
-    
-    exercise_weights = scoring_standards.get('exercise', {
-        'duration_score_weight': 0.40,
-        'frequency_score_weight': 0.30,
-        'calorie_score_weight': 0.30,
-        'daily_calorie_target': 300,
-        'weekly_minutes_target': 150
-    })
-    
-    # 时长评分
-    total_minutes = sum(e.get('duration_min', 0) for e in exercise_data)
-    weekly_target = exercise_standards.get('weekly_target_minutes', 150)
-    daily_target = weekly_target / 7
-    
-    if total_minutes >= daily_target:
-        duration_score = 100
-    else:
-        duration_score = round((total_minutes / daily_target) * 100, 1) if daily_target > 0 else 0
-    
-    # 频率评分（今天是否运动）
-    frequency_score = 100 if len(exercise_data) > 0 else 0
-    
-    # 热量消耗评分
-    total_calories = sum(e.get('calories', 0) for e in exercise_data)
-    calorie_target = exercise_weights.get('daily_calorie_target', 300)
-    
-    if total_calories >= calorie_target:
-        calorie_score = 100
-    else:
-        calorie_score = round((total_calories / calorie_target) * 100, 1) if calorie_target > 0 else 0
-    
-    # 计算总分
-    score = (
-        duration_score * exercise_weights.get('duration_score_weight', 0.40) +
-        frequency_score * exercise_weights.get('frequency_score_weight', 0.30) +
-        calorie_score * exercise_weights.get('calorie_score_weight', 0.30)
-    )
-    
-    return max(0, min(100, round(score, 1)))
 
 # ==================== 文件解析 ====================
 
@@ -443,44 +490,63 @@ def generate_text_report(health_data, config, date):
     return report
 
 def generate_report(memory_file, date):
-    """主报告生成函数"""
-    config = load_user_config()
-    user_profile = config.get('user_profile', {})
-    condition = user_profile.get('condition', '胆结石')
-    standards = get_condition_standards(config, condition)
-    
-    health_data = parse_memory_file(memory_file)
-    text_report = generate_text_report(health_data, config, date)
-    
+    """主报告生成函数（带完整容错机制）"""
     try:
-        pdf_url = generate_pdf_report_impl(
-            data=health_data,
-            profile=user_profile,
-            scores={
-                'diet': calculate_diet_score(health_data, standards, config.get('scoring_standards', {})),
-                'water': calculate_water_score(health_data.get('water_total', 0), health_data.get('water_target', 2000)),
-                'weight': calculate_weight_score(health_data.get('weight_morning') is not None, user_profile.get('target_weight_kg', 64), health_data.get('weight_morning')),
-                'exercise': calculate_exercise_score(health_data.get('exercise_records', []), config.get('exercise_standards', {}), config.get('scoring_standards', {}))
-            },
-            nutrition={
-                'calories': health_data.get('total_calories', 0),
-                'protein': health_data.get('total_protein', 0),
-                'fat': health_data.get('total_fat', 0),
-                'carb': health_data.get('total_carb', 0),
-                'fiber': health_data.get('total_fiber', 0),
-            },
-            macros={'protein_p': 15, 'fat_p': 25, 'carb_p': 60},
-            risks=[],
-            plan={'calorie_target': 1500, 'meals': 3},
-            output_path=f"/tmp/health_report_{date}.pdf",
-            water_records=health_data.get('water_records', []),
-            meals=health_data.get('meals', []),
-            exercise_data=health_data.get('exercise_records', []),
-        )
+        config = load_user_config()
+        user_profile = config.get('user_profile', {})
+        condition = user_profile.get('condition', '胆结石')
+        standards = get_condition_standards(config, condition)
+        
+        # 解析健康记录（带容错）
+        try:
+            health_data = parse_memory_file(memory_file)
+        except Exception as e:
+            print(f"警告：解析健康记录失败 - {e}", file=sys.stderr)
+            health_data = {'date': date, 'weight_morning': None, 'water_total': 0, 'water_target': 2000, 'meals': [], 'exercise_records': []}
+        
+        # 生成文本报告
+        try:
+            text_report = generate_text_report(health_data, config, date)
+        except Exception as e:
+            print(f"警告：生成文本报告失败 - {e}", file=sys.stderr)
+            text_report = f"⚠️ 报告生成失败：{e}\n\n请检查健康记录文件格式。"
+        
+        # 生成 PDF（带容错）
+        try:
+            pdf_url = generate_pdf_report_impl(
+                data=health_data,
+                profile=user_profile,
+                scores={
+                    'diet': calculate_diet_score(health_data, standards, config.get('scoring_standards', {})),
+                    'water': calculate_water_score(health_data.get('water_total', 0), health_data.get('water_target', 2000)),
+                    'weight': calculate_weight_score(health_data.get('weight_morning') is not None, user_profile.get('target_weight_kg', 64), health_data.get('weight_morning')),
+                    'exercise': calculate_exercise_score(health_data.get('exercise_records', []), config.get('exercise_standards', {}), config.get('scoring_standards', {}))
+                },
+                nutrition={
+                    'calories': health_data.get('total_calories', 0),
+                    'protein': health_data.get('total_protein', 0),
+                    'fat': health_data.get('total_fat', 0),
+                    'carb': health_data.get('total_carb', 0),
+                    'fiber': health_data.get('total_fiber', 0),
+                },
+                macros={'protein_p': 15, 'fat_p': 25, 'carb_p': 60},
+                risks=[],
+                plan={'calorie_target': 1500, 'meals': 3},
+                output_path=f"/tmp/health_report_{date}.pdf",
+                water_records=health_data.get('water_records', []),
+                meals=health_data.get('meals', []),
+                exercise_data=health_data.get('exercise_records', []),
+            )
+        except Exception as e:
+            print(f"警告：PDF 生成失败 - {e}", file=sys.stderr)
+            pdf_url = f"https://agent.btc354.com/health_report_{date}.pdf"
+        
+        return text_report, pdf_url
+        
     except Exception as e:
-        pdf_url = f"https://agent.btc354.com/health_report_{date}.pdf"
-    
-    return text_report, pdf_url
+        # 最后防线：返回基本错误信息
+        error_report = f"⚠️ **系统错误**\n\n发生错误：{e}\n\n请检查配置文件和日志。"
+        return error_report, "https://agent.btc354.com/health_report_error.pdf"
 
 if __name__ == '__main__':
     if len(sys.argv) < 3:
