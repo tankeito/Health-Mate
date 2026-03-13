@@ -33,14 +33,20 @@ C_BORDER  = HexColor("#E2E8F0")   # 表格边框色
 
 
 def clean_html_tags(text):
-    """移除 HTML 标签及会导致 PDF 崩溃的复杂彩色 Emoji"""
+    """移除 HTML 标签及会导致 PDF 崩溃的复杂彩色 Emoji 和特殊字符"""
     if not text:
         return ""
     text = str(text)
+    # 移除 HTML 标签
     text = re.sub(r'<[^>]+>', '', text)
-    emojis_to_remove = ['⭐', '✅', '⚠️', '❌', '🎉', '💡', '🚶', '🍎', '🥗', '💧', '🏃', '📊', '📈', '📄', '📥', '🥣', '🍜', '🍽️', '🍲', '⏰', '🚴', '🧘']
+    # 移除会导致 PDF 崩溃的复杂彩色 Emoji
+    emojis_to_remove = ['⭐', '✅', '⚠️', '❌', '🎉', '💡', '🚶', '🍎', '🥗', '💧', '🏃', '📊', '📈', '📄', '📥', '🥣', '🍜', '🍽️', '🍲', '⏰', '🚴', '🧘', '🔴', '🥦', '🍚', '🍳', '🥤', '🕐', '🌙', '💪', '🎯', '📌', '👍', '💯']
     for emoji in emojis_to_remove:
         text = text.replace(emoji, '')
+    # 修复 2：移除其他特殊字符（乱码、不可打印字符等）
+    text = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', text)  # 控制字符
+    text = re.sub(r'[\ufffd]', '', text)  # 替换字符
+    text = re.sub(r'\s+', ' ', text)  # 多个空格合并为一个
     return text.strip()
 
 def stars_to_text(stars_str):
@@ -74,8 +80,8 @@ def register_chinese_font():
     
     return 'Helvetica'
 
-def generate_pdf_report(data, profile, scores, nutrition, macros, risks, plan, output_path, water_records=None, meals=None, exercise_data=None):
-    """生成高颜值 PDF 报告"""
+def generate_pdf_report(data, profile, scores, nutrition, macros, risks, plan, output_path, water_records=None, meals=None, exercise_data=None, ai_comment=None):
+    """生成高颜值 PDF 报告（修复 2：JSON 解析 + 修复 3：AI 点评）"""
     font_name = register_chinese_font()
     
     doc = SimpleDocTemplate(output_path, pagesize=A4,
@@ -154,6 +160,22 @@ def generate_pdf_report(data, profile, scores, nutrition, macros, risks, plan, o
     score_table.setStyle(TableStyle(score_style))
     story.append(score_table)
     story.append(Spacer(1, 0.4*cm))
+    
+    # ==================== 修复 3：AI 专属健康点评 ====================
+    if ai_comment:
+        story.append(Paragraph("专家 AI 点评", heading_style))
+        # 清理评论中的日志前缀和特殊字符
+        clean_comment = ai_comment
+        for prefix in ['[plugins]', '[adp-', 'Hint:', 'error:']:
+            clean_comment = '\n'.join([l for l in clean_comment.split('\n') if not l.strip().startswith(prefix)])
+        clean_comment = clean_comment.strip()
+        
+        # 将点评分成段落（按句号分割）
+        paragraphs = re.split(r'(?<=[.!。!])\s+', clean_comment)
+        for para in paragraphs[:5]:  # 最多显示 5 段
+            if para.strip():
+                story.append(Paragraph(f"<font color='#1E293B'>{clean_html_tags(para)}</font>", normal_style))
+        story.append(Spacer(1, 0.3*cm))
     
     # ==================== 二、基础健康数据 ====================
     story.append(Paragraph("二、基础健康数据", heading_style))
@@ -248,24 +270,61 @@ def generate_pdf_report(data, profile, scores, nutrition, macros, risks, plan, o
                 meal_data = [["食物", "份量", "热量", "蛋白质", "脂肪", "碳水"]]
                 for food in food_nutrition:
                     name = food.get("name", "")
-                    name_simple = name.split('→')[0].strip() if '→' in name else name
-                    name_simple = re.sub(r'.*?）', '', name_simple)
-                    name_simple = re.sub(r'\(.*?\)', '', name_simple)
-                    name_simple = re.sub(r'\s*\d+g$', '', name_simple)
-                    name_simple = re.sub(r'\s*\d+ml$', '', name_simple)
-                    name_simple = re.sub(r'^\d+\s*个\s*', '', name_simple)
-                    name_simple = re.sub(r'^\d+\s*碗\s*', '', name_simple)
-                    name_simple = re.sub(r'^\d+\s*份\s*', '', name_simple)
+                    
+                    # 修复 1：智能提取食物名中的单位（如"250ml"、"200g"、"1 个"）
+                    if '→' in name:
+                        name_raw = name.split('→')[0].strip()
+                    else:
+                        name_raw = name.strip()
+                    
+                    # 提取份量单位（支持 ml/g/个/碗/份等）
+                    portion_match = re.search(r'(\d+(?:\.\d+)?)\s*(ml|g|个 | 碗 | 份 | 杯 | 片)', name_raw)
+                    if portion_match:
+                        portion_value = float(portion_match.group(1))
+                        portion_unit = portion_match.group(2)
+                        # 从食物名中移除份量
+                        name_simple = re.sub(r'\s*' + re.escape(portion_match.group(0)), '', name_raw).strip()
+                        # 转换为单位 g（ml 近似为 g）
+                        if portion_unit == 'ml':
+                            portion_grams = portion_value
+                        elif portion_unit == '个':
+                            portion_grams = portion_value * 50  # 估算
+                        elif portion_unit == '碗':
+                            portion_grams = portion_value * 150
+                        elif portion_unit == '份':
+                            portion_grams = portion_value * 100
+                        elif portion_unit == '杯':
+                            portion_grams = portion_value * 200
+                        elif portion_unit == '片':
+                            portion_grams = portion_value * 30
+                        else:  # g
+                            portion_grams = portion_value
+                        portion_display = f"{portion_value:.0f}{portion_unit}"
+                    else:
+                        # 没有单位，使用默认份量
+                        name_simple = name_raw
+                        portion_grams = food.get("portion_grams", 100)
+                        portion_display = f"{portion_grams:.0f}g"
+                    
+                    # 修复 1：清理食物名中的各种标注（约、约 75g 等）
+                    name_simple = re.sub(r'\s*（约\d+g）$', '', name_simple)
+                    name_simple = re.sub(r'\s*（约）$', '', name_simple)  # 移除单独的"（约）"
+                    name_simple = re.sub(r'\s*约$', '', name_simple)  # 移除末尾的"约"
                     name_simple = name_simple.strip()
                     
-                    portion = food.get("portion_grams", 0)
+                    # 如果名字太短，使用原始名
+                    if len(name_simple) < 2:
+                        name_simple = name_raw
+                    
+                    # 获取营养数据（已根据份量缩放）
                     calories = food.get("calories", 0)
                     protein = food.get("protein", 0)
                     fat = food.get("fat", 0)
                     carb = food.get("carb", 0)
+                    
                     meal_data.append([
                         clean_html_tags(name_simple),
-                        f"{portion:.0f}g" if portion > 0 else "-",
+                        portion_display,
                         f"{calories:.0f}kcal",
                         f"{protein:.1f}g",
                         f"{fat:.1f}g",
@@ -329,34 +388,90 @@ def generate_pdf_report(data, profile, scores, nutrition, macros, risks, plan, o
         story.append(Paragraph("<font color='#10B981'>今日无明显风险，继续保持健康生活方式！</font>", normal_style))
     story.append(Spacer(1, 0.4*cm))
     
-    # ==================== 八、次日方案 ====================
+    # ==================== 八、次日方案（修复 2：JSON 对象解析）====================
     story.append(Paragraph("八、次日可执行方案", heading_style))
     
+    # 修复 2 和 3：处理 AI 返回的 JSON 对象数组格式（增强通用性，兼容不同大模型）
+    # 修复 2：文字修改 - "居家简易版"改成"饮食计划"
     if plan.get("diet"):
-        story.append(Paragraph("<b>居家简易版</b>", ParagraphStyle('Sub', parent=normal_style, textColor=C_TEXT_MAIN, spaceAfter=6)))
+        story.append(Paragraph("<b>饮食计划</b>", ParagraphStyle('Sub', parent=normal_style, textColor=C_TEXT_MAIN, spaceAfter=6)))
         for item in plan.get("diet", []):
-            clean_item = clean_html_tags(item)
-            story.append(Paragraph(f"<font color='#2563EB'>■</font> {clean_item}", normal_style))
-        story.append(Spacer(1, 0.2*cm))
-        
-    if plan.get("dining_out"):
-        story.append(Paragraph("<b>外出就餐推荐</b>", ParagraphStyle('Sub', parent=normal_style, textColor=C_TEXT_MAIN, spaceAfter=6)))
-        for item in plan.get("dining_out", []):
-            clean_item = clean_html_tags(item)
+            if isinstance(item, dict):
+                # 修复 3：兼容不同大模型的字段名
+                meal = item.get('meal', item.get('meal_name', ''))
+                time = item.get('time', item.get('time_range', item.get('period', '')))
+                # 兼容多种字段名：menu/items/dishes/menu_detail/food/content
+                menu = item.get('menu', '')
+                if not menu:
+                    # AI 返回的是 items 数组（千问 3.5plus 格式）
+                    items = item.get('items', [])
+                    if items:
+                        menu = '、'.join(str(i) for i in items[:3])  # 只显示前 3 项
+                        if len(items) > 3:
+                            menu += ' 等'
+                # 如果还是空，尝试其他字段名
+                if not menu:
+                    menu = item.get('dishes', item.get('menu_detail', item.get('food', item.get('content', ''))))
+                calories = item.get('calories', item.get('kcal', ''))
+                fat = item.get('fat', item.get('fat_g', ''))
+                fiber = item.get('fiber', item.get('fiber_g', ''))
+                # 构建完整显示：时间 + 菜单 + 营养信息
+                if menu:
+                    nutrition_info = f"({calories}kcal"
+                    if fat: nutrition_info += f", 脂肪{fat}g"
+                    if fiber: nutrition_info += f", 纤维{fiber}g"
+                    nutrition_info += ")"
+                    clean_item = f"{time} {clean_html_tags(menu)} {nutrition_info}"
+                elif meal and time:
+                    clean_item = f"{meal} ({time})"
+                else:
+                    # 退化为显示所有可用字段
+                    clean_item = f"{meal} {time}"
+            else:
+                # 修复 3：如果是字符串（其他大模型直接返回文本），直接使用
+                clean_item = clean_html_tags(str(item))
             story.append(Paragraph(f"<font color='#2563EB'>■</font> {clean_item}", normal_style))
         story.append(Spacer(1, 0.2*cm))
         
     if plan.get("water"):
         story.append(Paragraph("<b>饮水计划</b>", ParagraphStyle('Sub', parent=normal_style, textColor=C_TEXT_MAIN, spaceAfter=6)))
         for item in plan.get("water", []):
-            clean_item = clean_html_tags(item)
+            if isinstance(item, dict):
+                # 修复 3：兼容不同大模型的字段名
+                time = item.get('time', item.get('period', ''))
+                amount = item.get('amount', item.get('amount_ml', item.get('volume', '')))
+                # 确保 amount 带单位
+                if amount and not any(unit in str(amount) for unit in ['ml', 'L']):
+                    amount = f"{amount}ml"
+                note = item.get('note', item.get('tip', item.get('remark', item.get('description', ''))))
+                clean_item = f"⏰ {time} {clean_html_tags(str(amount))} ({clean_html_tags(note)})"
+            else:
+                # 修复 3：如果是字符串（其他大模型直接返回文本），直接使用
+                clean_item = clean_html_tags(str(item))
             story.append(Paragraph(f"<font color='#2563EB'>■</font> {clean_item}", normal_style))
         story.append(Spacer(1, 0.2*cm))
 
     if plan.get("exercise"):
         story.append(Paragraph("<b>运动建议</b>", ParagraphStyle('Sub', parent=normal_style, textColor=C_TEXT_MAIN, spaceAfter=6)))
         for item in plan.get("exercise", []):
-            clean_item = clean_html_tags(item)
+            if isinstance(item, dict):
+                # 修复 3：兼容不同大模型的字段名
+                time = item.get('time', item.get('time_range', item.get('period', '')))
+                activity = item.get('activity', item.get('type', item.get('name', '')))
+                duration = item.get('duration', item.get('duration_min', item.get('time_length', '')))
+                details = item.get('details', item.get('description', item.get('desc', item.get('content', ''))))
+                # 确保所有字段都有值
+                if activity and duration and details:
+                    clean_item = f"{time} {clean_html_tags(activity)} ({clean_html_tags(duration)}): {clean_html_tags(details)}"
+                elif activity and duration:
+                    clean_item = f"{time} {clean_html_tags(activity)} ({clean_html_tags(duration)})"
+                elif activity:
+                    clean_item = f"{time} {clean_html_tags(activity)}"
+                else:
+                    clean_item = f"{time}"
+            else:
+                # 修复 3：如果是字符串（其他大模型直接返回文本），直接使用
+                clean_item = clean_html_tags(str(item))
             story.append(Paragraph(f"<font color='#2563EB'>■</font> {clean_item}", normal_style))
             
     if plan.get("notes"):
