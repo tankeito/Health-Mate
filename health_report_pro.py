@@ -46,6 +46,9 @@ def get_scoring_weights(config):
         'exercise': 0.00
     })
     
+    # 过滤掉非数值字段（如_comment）
+    weights = {k: v for k, v in weights.items() if isinstance(v, (int, float))}
+    
     # 归一化权重（确保总和为 1.0）
     total = sum(weights.values())
     if total > 0:
