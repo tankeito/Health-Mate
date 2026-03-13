@@ -2,7 +2,7 @@
 # 专业版每日健康报告脚本
 # 功能：读取健康记录文件，生成综合评分报告并发送到多通道
 # 执行频率：每天 22:00
-# 配置：从 .env 文件读取（与脚本同目录）
+# 配置：从 config/ 目录的 .env 文件读取
 
 # 获取脚本所在目录（scripts/）
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -13,6 +13,9 @@ PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 # 获取配置目录
 CONFIG_DIR="${PROJECT_ROOT}/config"
 LOGS_DIR="${PROJECT_ROOT}/logs"
+
+# 确保日志目录存在 (防错机制：防止因为没建 logs 文件夹导致无法写入)
+mkdir -p "${LOGS_DIR}"
 
 # 加载环境变量（从 config/目录的 .env 文件）
 if [ -f "${CONFIG_DIR}/.env" ]; then
@@ -79,6 +82,7 @@ TG_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN', '')
 TG_CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID', '')
 
 def send_dingtalk():
+    if not DINGTALK_WEBHOOK: return '➖'  # 增加非空判断
     try:
         data = json.dumps({
             'msgtype': 'markdown',
@@ -95,6 +99,7 @@ def send_dingtalk():
         return f'❌:{e}'
 
 def send_feishu():
+    if not FEISHU_WEBHOOK: return '➖'  # 增加非空判断
     try:
         data = json.dumps({
             'msg_type': 'text',
@@ -110,6 +115,7 @@ def send_feishu():
         return f'❌:{e}'
 
 def send_telegram():
+    if not TG_BOT_TOKEN or not TG_CHAT_ID: return '➖'  # 增加非空判断
     try:
         data = json.dumps({
             'chat_id': TG_CHAT_ID,
