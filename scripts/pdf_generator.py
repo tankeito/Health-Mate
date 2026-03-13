@@ -61,7 +61,11 @@ def register_chinese_font():
         pass
     
     script_dir = os.path.dirname(os.path.abspath(__file__))
+    # 字体文件可能在 scripts 目录或项目根目录
     local_ttf = os.path.join(script_dir, "NotoSansSC-VF.ttf")
+    if not os.path.exists(local_ttf):
+        project_root = os.path.dirname(script_dir)
+        local_ttf = os.path.join(project_root, "NotoSansSC-VF.ttf")
     
     if os.path.exists(local_ttf):
         try:

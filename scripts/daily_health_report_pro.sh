@@ -4,13 +4,16 @@
 # 执行频率：每天 22:00
 # 配置：从 .env 文件读取（与脚本同目录）
 
-# 获取脚本所在目录
+# 获取脚本所在目录（scripts/）
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# 加载环境变量（从 .env 文件）
-if [ -f "${SCRIPT_DIR}/.env" ]; then
+# 获取项目根目录（scripts/ 的上一级）
+PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
+# 加载环境变量（从项目根目录的 .env 文件）
+if [ -f "${PROJECT_ROOT}/.env" ]; then
     set -a
-    source "${SCRIPT_DIR}/.env"
+    source "${PROJECT_ROOT}/.env"
     set +a
 else
     echo "警告：未找到 .env 配置文件，使用默认值"

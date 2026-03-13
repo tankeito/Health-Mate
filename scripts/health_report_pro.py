@@ -4,18 +4,39 @@
 健康报告生成系统（OpenClaw Skill 通用版）
 支持多种病理条件的饮食分析与评分
 支持自定义评分权重和运动维度
+
+目录结构：
+skills/health_report/
+├── scripts/              # 核心代码目录
+│   ├── health_report_pro.py
+│   ├── constants.py
+│   ├── pdf_generator.py
+│   └── daily_health_report_pro.sh
+├── user_config.json      # 用户配置（项目根目录）
+├── pdf_style_config.json # PDF 样式配置
+└── ...
 """
 
 import sys
 import json
 import re
 import os
+from pathlib import Path
 from datetime import datetime, timedelta
 
-# 导入常量库
-from constants import DEFAULT_PORTIONS, FOOD_CALORIES
+# ==================== 路径管理（核心！）====================
 
-# 导入 PDF 生成模块
+# 获取当前脚本所在目录（scripts/）
+SCRIPT_DIR = Path(__file__).parent.resolve()
+
+# 获取项目根目录（scripts/ 的上一级）
+PROJECT_ROOT = SCRIPT_DIR.parent.resolve()
+
+# 添加 scripts 目录到 Python 路径（用于导入模块）
+sys.path.insert(0, str(SCRIPT_DIR))
+
+# 导入常量库和 PDF 生成模块
+from constants import DEFAULT_PORTIONS, FOOD_CALORIES
 from pdf_generator import generate_pdf_report as generate_pdf_report_impl
 
 # ==================== 配置加载 ====================
@@ -23,8 +44,8 @@ from pdf_generator import generate_pdf_report as generate_pdf_report_impl
 def load_user_config(config_path=None):
     """加载用户配置文件（带容错机制）"""
     if config_path is None:
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        config_path = os.path.join(script_dir, 'user_config.json')
+        # 从项目根目录加载配置（不是 scripts 目录！）
+        config_path = PROJECT_ROOT / 'user_config.json'
     
     if not os.path.exists(config_path):
         # 返回默认配置（不抛出异常）
