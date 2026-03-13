@@ -186,8 +186,12 @@ skills/health_report/
 │   ├── constants.py          # 常量库
 │   ├── pdf_generator.py      # PDF 生成
 │   └── daily_health_report_pro.sh  # Shell 包装
-├── user_config.json          # 用户配置
-├── pdf_style_config.json     # PDF 样式配置
+├── config/                   # 配置文件目录
+│   ├── user_config.json      # 用户配置
+│   └── .env                  # 环境变量
+├── assets/                   # 资源文件目录
+│   └── NotoSansSC-VF.ttf     # 中文字体
+├── logs/                     # 日志文件目录
 ├── SKILL.md                  # 本文件
 └── README.md                 # 使用说明
 ```
@@ -199,9 +203,17 @@ from pathlib import Path
 # 获取项目根目录
 PROJECT_ROOT = Path(__file__).parent.parent.resolve()
 
+# 配置目录
+CONFIG_DIR = PROJECT_ROOT / 'config'
+
 # 加载配置
-config_path = PROJECT_ROOT / 'user_config.json'
+config_path = CONFIG_DIR / 'user_config.json'
 ```
+
+### 修改配置
+- **个人健康档案**：编辑 `config/user_config.json`
+- **消息推送**：编辑 `config/.env`
+- **PDF 样式**：编辑 `config/pdf_style_config.json`
 
 ---
 

@@ -10,10 +10,14 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # 获取项目根目录（scripts/ 的上一级）
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-# 加载环境变量（从项目根目录的 .env 文件）
-if [ -f "${PROJECT_ROOT}/.env" ]; then
+# 获取配置目录
+CONFIG_DIR="${PROJECT_ROOT}/config"
+LOGS_DIR="${PROJECT_ROOT}/logs"
+
+# 加载环境变量（从 config/目录的 .env 文件）
+if [ -f "${CONFIG_DIR}/.env" ]; then
     set -a
-    source "${PROJECT_ROOT}/.env"
+    source "${CONFIG_DIR}/.env"
     set +a
 else
     echo "警告：未找到 .env 配置文件，使用默认值"
@@ -25,7 +29,7 @@ CURRENT_TIME=$(date +"%H:%M:%S")
 
 MEMORY_DIR="${MEMORY_DIR:-/root/.openclaw/workspace/memory}"
 TODAY_FILE="${MEMORY_DIR}/${CURRENT_DATE}.md"
-LOG_FILE="${LOG_FILE:-/root/.openclaw/logs/health_report_pro.log}"
+LOG_FILE="${LOG_FILE:-${LOGS_DIR}/health_report_pro.log}"
 
 echo "========================================" >> "$LOG_FILE"
 echo "执行时间：${CURRENT_DATE} ${CURRENT_TIME}" >> "$LOG_FILE"

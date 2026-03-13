@@ -7,14 +7,22 @@
 
 目录结构：
 skills/health_report/
-├── scripts/              # 核心代码目录
+├── scripts/                  # 核心代码目录
 │   ├── health_report_pro.py
 │   ├── constants.py
 │   ├── pdf_generator.py
 │   └── daily_health_report_pro.sh
-├── user_config.json      # 用户配置（项目根目录）
-├── pdf_style_config.json # PDF 样式配置
-└── ...
+├── config/                   # 配置文件目录
+│   ├── user_config.json
+│   ├── pdf_style_config.json
+│   └── .env
+├── assets/                   # 资源文件目录
+│   └── NotoSansSC-VF.ttf
+├── logs/                     # 日志文件目录
+│   └── health_report_pro.log
+├── SKILL.md
+├── README.md
+└── requirements.txt
 """
 
 import sys
@@ -32,6 +40,11 @@ SCRIPT_DIR = Path(__file__).parent.resolve()
 # 获取项目根目录（scripts/ 的上一级）
 PROJECT_ROOT = SCRIPT_DIR.parent.resolve()
 
+# 定义子目录路径
+CONFIG_DIR = PROJECT_ROOT / 'config'
+ASSETS_DIR = PROJECT_ROOT / 'assets'
+LOGS_DIR = PROJECT_ROOT / 'logs'
+
 # 添加 scripts 目录到 Python 路径（用于导入模块）
 sys.path.insert(0, str(SCRIPT_DIR))
 
@@ -44,8 +57,8 @@ from pdf_generator import generate_pdf_report as generate_pdf_report_impl
 def load_user_config(config_path=None):
     """加载用户配置文件（带容错机制）"""
     if config_path is None:
-        # 从项目根目录加载配置（不是 scripts 目录！）
-        config_path = PROJECT_ROOT / 'user_config.json'
+        # 从 config/目录加载配置
+        config_path = CONFIG_DIR / 'user_config.json'
     
     if not os.path.exists(config_path):
         # 返回默认配置（不抛出异常）

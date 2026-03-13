@@ -401,20 +401,32 @@ curl -X POST "https://oapi.dingtalk.com/robot/send?access_token=YOUR_TOKEN" \
 
 ```
 skills/health_report/
-├── _meta.json                  # OpenClaw Skill 元数据
-├── skill.md                    # 机器人指令说明
+├── scripts/                    # 核心代码目录
+│   ├── health_report_pro.py    # 主脚本（报告生成逻辑）
+│   ├── constants.py            # 常量库（食物份量/热量）
+│   ├── pdf_generator.py        # PDF 生成模块
+│   └── daily_health_report_pro.sh  # Shell 包装脚本
+├── config/                     # 配置文件目录 ⚠️ 敏感信息
+│   ├── user_config.json        # 用户配置（⚠️ 勿上传）
+│   ├── user_config.example.json # 配置模板
+│   ├── pdf_style_config.json   # PDF 样式配置
+│   ├── .env                    # 环境变量（⚠️ 勿上传）
+│   └── .env.example            # 环境变量模板
+├── assets/                     # 资源文件目录
+│   └── NotoSansSC-VF.ttf       # 中文字体
+├── logs/                       # 日志文件目录
+│   └── health_report_pro.log   # 运行日志
+├── SKILL.md                    # 机器人指令说明
 ├── README.md                   # 使用说明（本文件）
-├── health_report_pro.py        # 主脚本（报告生成逻辑）
-├── constants.py                # 常量库（食物份量/热量）
-├── pdf_generator.py            # PDF 生成模块
-├── daily_health_report_pro.sh  # Shell 包装脚本（定时任务用）
-├── user_config.json            # 用户配置（⚠️ 勿上传）
-├── .env                        # 环境变量（⚠️ 勿上传）
-├── .env.example                # 环境变量模板
-├── user_config.example.json    # 用户配置模板
-├── .gitignore                  # Git 忽略规则
-└── reports/                    # PDF 报告输出目录
+├── _meta.json                  # OpenClaw Skill 元数据
+├── requirements.txt            # Python 依赖清单
+└── .gitignore                  # Git 忽略规则
 ```
+
+**配置修改指南**：
+- 修改个人健康档案 → 编辑 `config/user_config.json`
+- 修改消息推送配置 → 编辑 `config/.env`
+- 修改 PDF 样式 → 编辑 `config/pdf_style_config.json`
 
 ---
 
