@@ -1,124 +1,184 @@
 # OpenClaw Skill - Health Report
 
-> 基于 OpenClaw 的专业健康报告生成插件  
-> 支持多种病理条件（胆结石/糖尿病/高血压）的饮食分析与评分
+> 🏥 专业健康报告生成插件 | 支持多种病理条件 | 自定义评分权重 | 运动维度追踪
+>
+> **适用人群**：胆结石/糖尿病/高血压患者，健身减脂人群，健康管理者
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![OpenClaw](https://img.shields.io/badge/OpenClaw-Skill-blue)](https://openclaw.ai)
+[![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)](https://github.com/tankeito/openclaw-skill-health-report/releases)
+[![OpenClaw](https://img.shields.io/badge/OpenClaw-Skill-green.svg)](https://openclaw.ai)
 
 ---
 
-## 🌟 功能特性
+## 🌟 功能亮点
 
-- **多维度健康评分** - 饮食控制、饮水完成、体重监测
-- **病理条件支持** - 胆结石/糖尿病/高血压饮食标准
-- **智能食物识别** - 自动解析份量，估算热量和营养
-- **多通道推送** - 钉钉/飞书/Telegram 自动发送
-- **PDF 报告导出** - 专业格式，可存档分享
-- **隐私保护** - 配置与代码分离，敏感数据不上传
+| 功能 | 说明 | 适合人群 |
+| :--- | :--- | :--- |
+| **多维度评分** | 饮食/饮水/体重/运动 四大维度 | 全面健康管理 |
+| **病理支持** | 胆结石/糖尿病/高血压/健身减脂 | 慢病管理人群 |
+| **自定义权重** | 自由设定各维度评分权重 | 个性化需求 |
+| **智能识别** | 自动解析食物份量，估算营养 | 懒人必备 |
+| **多通道推送** | 钉钉/飞书/Telegram 自动发送 | 多平台用户 |
+| **PDF 报告** | 专业格式，可存档分享 | 数据控 |
 
 ---
 
-## 📦 安装与配置
+## 📦 快速开始（5 分钟上手）
 
-### 1. 克隆仓库
+### 步骤 1：克隆到 OpenClaw 的 skills 目录
+
+**重要**：必须将本插件放到 OpenClaw 的 `skills/` 目录下！
 
 ```bash
-git clone git@github.com:tankeito/openclaw-skill-health-report.git
-cd openclaw-skill-health-report
+# 进入 OpenClaw 工作区
+cd /path/to/your/openclaw/workspace
+
+# 克隆插件到 skills 目录
+git clone git@github.com:tankeito/openclaw-skill-health-report.git skills/health_report
+
+# 进入插件目录
+cd skills/health_report
 ```
 
-### 2. 复制配置文件
+### 步骤 2：复制配置文件
 
 ```bash
-cp .env.example .env
+# 复制配置模板
 cp user_config.example.json user_config.json
+cp .env.example .env
 ```
 
-### 3. 编辑配置
+### 步骤 3：填写个人配置
 
-**编辑 `.env`** - 填写消息推送配置：
-
-```bash
-# 钉钉 Webhook
-DINGTALK_WEBHOOK="https://oapi.dingtalk.com/robot/send?access_token=YOUR_TOKEN"
-
-# 飞书 Webhook
-FEISHU_WEBHOOK="https://open.feishu.cn/open-apis/bot/v2/hook/YOUR_HOOK"
-
-# Telegram
-TELEGRAM_BOT_TOKEN="YOUR_BOT_TOKEN"
-TELEGRAM_CHAT_ID="YOUR_CHAT_ID"
-
-# 健康记录目录（OpenClaw memory 目录）
-MEMORY_DIR="/path/to/your/memory"
-
-# PDF 报告存放目录
-PUBLIC_DIR="/path/to/public/dir"
-PUBLIC_URL="https://your-domain.com"
-```
-
-**编辑 `user_config.json`** - 填写个人健康档案：
+**编辑 `user_config.json`**（这是你的健康档案）：
 
 ```json
 {
     "user_profile": {
-        "name": "你的名字",
-        "gender": "男",
-        "age": 34,
-        "height_cm": 172,
-        "current_weight_kg": 65.2,
-        "target_weight_kg": 64,
-        "condition": "胆结石",
-        "activity_level": 1.2,
+        "name": "东东",                    // 你的名字
+        "gender": "男",                    // 男/女
+        "age": 34,                         // 年龄
+        "height_cm": 172,                  // 身高（厘米）
+        "current_weight_kg": 65.2,         // 当前体重（公斤）
+        "target_weight_kg": 64,            // 目标体重（公斤）
+        "target_body_fat_percent": 15,     // 目标体脂率（健身人群填写）
+        "condition": "胆结石",             // 病理类型：胆结石/糖尿病/高血压/健身减脂
+        "activity_level": 1.2,             // 活动系数：1.2(久坐) ~ 1.9(重度运动)
         "dietary_preferences": {
-            "dislike": ["鱼", "海鲜"],
-            "allergies": ["海鲜"],
-            "favorite_fruits": ["苹果", "香蕉"]
+            "dislike": ["鱼", "海鲜"],      // 不吃的食物
+            "allergies": ["海鲜"],          // 过敏食物
+            "favorite_fruits": ["苹果", "香蕉"]  // 喜欢的水果
         }
+    },
+    
+    "scoring_weights": {
+        "diet": 0.35,      // 饮食权重（0-1，总和应为 1.0）
+        "water": 0.20,     // 饮水权重
+        "weight": 0.15,    // 体重权重
+        "exercise": 0.30   // 运动权重（健身人群可调高）
     }
 }
 ```
 
-### 4. 安装依赖
+**编辑 `.env`**（这是消息推送配置）：
+
+```bash
+# 钉钉 Webhook（选填，不用就留空）
+DINGTALK_WEBHOOK="https://oapi.dingtalk.com/robot/send?access_token=YOUR_TOKEN"
+
+# 飞书 Webhook（选填）
+FEISHU_WEBHOOK="https://open.feishu.cn/open-apis/bot/v2/hook/YOUR_HOOK"
+
+# Telegram（选填）
+TELEGRAM_BOT_TOKEN="YOUR_BOT_TOKEN"
+TELEGRAM_CHAT_ID="YOUR_CHAT_ID"
+
+# 健康记录目录（必填，OpenClaw 的 memory 目录）
+MEMORY_DIR="/path/to/your/openclaw/workspace/memory"
+
+# PDF 报告存放目录（必填）
+PUBLIC_DIR="/path/to/public/dir"
+PUBLIC_URL="https://your-domain.com"
+```
+
+### 步骤 4：安装依赖
 
 ```bash
 pip install reportlab pillow
 ```
 
-### 5. 配置 Crontab
+### 步骤 5：测试运行
 
 ```bash
-crontab -e
+# 测试今日报告（替换日期为你的实际日期）
+python3 health_report_pro.py /path/to/memory/2026-03-13.md 2026-03-13
 ```
 
-添加每日报告任务（每天 22:00 执行）：
-
-```cron
-# 每日健康报告 - 每天 22:00
-0 22 * * * /path/to/health_report/daily_health_report_pro.sh
+**看到类似输出即成功**：
+```
+=== TEXT_REPORT_START ===
+✅ **晚间数据已记录！**
+### 🌟 2026-03-13 今日综合评分
+...
+=== TEXT_REPORT_END ===
+=== PDF_URL ===
+https://your-domain.com/health_report_2026-03-13.pdf
 ```
 
 ---
 
-## 📖 使用说明
+## 📖 详细配置说明
 
-### 手动测试
+### 病理条件配置
 
-```bash
-# 测试今日报告
-python3 health_report_pro.py /path/to/memory/2026-03-13.md 2026-03-13
+在 `user_config.json` 的 `condition` 字段选择你的病理类型：
 
-# 查看输出
-# === TEXT_REPORT_START ===
-# ✅ **晚间数据已记录！**
-# ### 🌟 2026-03-13 今日综合评分
-# ...
+| 类型 | `condition` 值 | 说明 |
+| :--- | :--- | :--- |
+| **胆结石** | `"胆结石"` | 低脂高纤饮食，避免油腻 |
+| **糖尿病** | `"糖尿病"` | 控制碳水，低 GI 饮食 |
+| **高血压** | `"高血压"` | 低盐饮食，控制钠摄入 |
+| **健身减脂** | `"健身减脂"` | 高蛋白，热量缺口，运动导向 |
+
+### 评分权重配置
+
+在 `user_config.json` 的 `scoring_weights` 中调整各维度权重：
+
+```json
+"scoring_weights": {
+    "diet": 0.35,      // 饮食控制（默认 35%）
+    "water": 0.20,     // 饮水完成（默认 20%）
+    "weight": 0.15,    // 体重监测（默认 15%）
+    "exercise": 0.30   // 运动消耗（默认 30%）
+}
 ```
 
-### 健康记录格式
+**权重之和必须为 1.0**，系统会自动归一化。
 
-在 OpenClaw 的 `memory/YYYY-MM-DD.md` 文件中记录：
+**示例场景**：
+
+- **减脂人群**：提高运动权重 `{"exercise": 0.40, "diet": 0.35, "water": 0.15, "weight": 0.10}`
+- **慢病管理**：提高饮食权重 `{"diet": 0.50, "water": 0.20, "weight": 0.20, "exercise": 0.10}`
+- **均衡健康**：使用默认权重即可
+
+### 运动目标配置
+
+在 `exercise_standards` 中设定运动目标：
+
+```json
+"exercise_standards": {
+    "weekly_target_minutes": 150,    // 每周目标分钟数（WHO 推荐 150 分钟）
+    "daily_calorie_target": 300,     // 每日热量消耗目标（千卡）
+    "weekly_cardio_days": 3,         // 每周有氧运动天数
+    "weekly_strength_days": 2        // 每周力量训练天数
+}
+```
+
+---
+
+## 📋 健康记录格式
+
+在 OpenClaw 的 `memory/YYYY-MM-DD.md` 文件中记录每日数据：
 
 ```markdown
 # 2026-03-13 健康记录
@@ -140,80 +200,143 @@ python3 health_report_pro.py /path/to/memory/2026-03-13.md 2026-03-13
 - 半碗米饭 → 约 87kcal
 - 凉拌土豆牛肉 → 约 180kcal
 
+### 加餐
+- 苹果 1 个 → 约 104kcal
+
+### 晚餐
+- 清蒸鲈鱼 → 约 150kcal
+- 炒青菜 → 约 50kcal
+
 ## 🏃 运动记录
 ### 骑行
 - 距离：11.59 公里
 - 耗时：54 分 31 秒
+- 消耗：334 千卡
+```
+
+**说明**：
+- 食物格式：`食物名称 → 约 XXXkcal`（热量可选，系统会自动估算）
+- 运动格式：记录类型、时长、消耗热量
+- 饮水格式：记录单次饮水量和累计进度
+
+---
+
+## 🤖 OpenClaw 集成
+
+### 命令触发
+
+本插件支持以下 OpenClaw 命令：
+
+| 命令 | 说明 | 示例 |
+| :--- | :--- | :--- |
+| `/health` | 生成今日健康报告 | `/health` |
+| `/health score` | 查看评分详情 | `/health score` |
+| `/health summary` | 查看本周总结 | `/health summary` |
+| `/health config` | 查看/修改配置 | `/health config target_weight_kg 63` |
+
+### 定时任务
+
+在 Crontab 中添加每日报告任务：
+
+```cron
+# 每日健康报告 - 每天 22:00
+0 22 * * * /path/to/skills/health_report/daily_health_report_pro.sh
 ```
 
 ---
 
-## 🔬 支持的病理条件
+## 📊 评分标准详解
 
-### 胆结石
-- **脂肪控制**：40-50g/天
-- **烹饪方式**：蒸、煮、炖、白灼
-- **禁忌食物**：动物内脏、辛辣刺激、海鲜
+### 饮食评分（100 分）
 
-### 糖尿病
-- **碳水控制**：45-50% 总热量
-- **烹饪方式**：蒸、煮、炖、凉拌
-- **禁忌食物**：精制糖、白米饭、白面包
-
-### 高血压
-- **钠摄入**：<2000mg/天
-- **烹饪方式**：蒸、煮、炖、凉拌
-- **禁忌食物**：咸菜、腊肉、高盐零食
-
----
-
-## 📊 评分标准
-
-| 维度 | 权重 | 评分标准 |
+| 指标 | 权重 | 评分标准 |
 | :--- | :--- | :--- |
-| 饮食控制 | 40% | 脂肪/纤维摄入、禁忌食物、烹饪方式 |
-| 饮水完成 | 30% | 实际饮水量/目标饮水量 |
-| 体重监测 | 30% | 按时记录、体重趋势 |
+| 脂肪摄入 | 30% | 在目标范围内得满分，超出/不足按比例扣分 |
+| 膳食纤维 | 25% | 达到最低纤维量得满分 |
+| 禁忌食物 | 20% | 每摄入一种禁忌食物扣 25 分 |
+| 蛋白质 | 25% | 达到推荐量得满分 |
 
-**总分** = 饮食×0.4 + 饮水×0.3 + 体重×0.3
+### 饮水评分（100 分）
+
+| 完成率 | 得分 |
+| :--- | :--- |
+| ≥100% | 100 分 |
+| 80-99% | 80-99 分 |
+| 50-79% | 50-79 分 |
+| <50% | 按比例得分 |
+
+### 体重评分（100 分）
+
+| 指标 | 权重 | 评分标准 |
+| :--- | :--- | :--- |
+| 按时记录 | 50% | 记录了晨起体重得 50 分 |
+| 体重趋势 | 50% | 接近目标体重得高分 |
+
+### 运动评分（100 分）
+
+| 指标 | 权重 | 评分标准 |
+| :--- | :--- | :--- |
+| 运动时长 | 40% | 达到每日目标分钟数得满分 |
+| 运动频率 | 30% | 今天运动了得满分 |
+| 热量消耗 | 30% | 达到每日消耗目标得满分 |
 
 ---
 
-## 🔐 安全与隐私
+## 🔐 隐私与安全
 
 ### 敏感文件保护
 
-以下文件已加入 `.gitignore`，**切勿手动上传**：
+以下文件**已加入 `.gitignore`**，切勿手动上传到 GitHub：
 
 - `.env` - 包含 Webhook、API Token
 - `user_config.json` - 包含个人健康数据
 - `reports/*.pdf` - 个人健康报告
+- `*.log` - 日志文件
 
 ### 推荐实践
 
-1. **使用私有仓库** - 如包含个人配置，建议 Fork 为私有仓库
-2. **定期轮换密钥** - Webhook Token 建议每 3-6 个月更新
-3. **备份配置** - 将 `.env` 和 `user_config.json` 备份到安全位置
+1. **私有仓库** - 如果 Fork 本仓库，建议设置为 Private
+2. **定期备份** - 将 `.env` 和 `user_config.json` 备份到安全位置
+3. **密钥轮换** - Webhook Token 建议每 3-6 个月更新一次
 
 ---
 
 ## 🛠️ 故障排查
 
-### 报告生成失败
+### 问题 1：配置文件找不到
 
-```bash
-# 检查配置文件
-ls -la .env user_config.json
-
-# 测试配置加载
-python3 -c "from health_report_pro import load_user_config; print(load_user_config())"
-
-# 查看日志
-tail -f /var/log/health_report_pro.log
+```
+错误：配置文件不存在：/path/to/user_config.json
 ```
 
-### 消息推送失败
+**解决**：
+```bash
+cd /path/to/skills/health_report
+cp user_config.example.json user_config.json
+# 编辑 user_config.json 填写真实配置
+```
 
+### 问题 2：依赖库缺失
+
+```
+ModuleNotFoundError: No module named 'reportlab'
+```
+
+**解决**：
+```bash
+pip install reportlab pillow
+```
+
+### 问题 3：PDF 生成失败
+
+**解决**：
+1. 检查中文字体文件是否存在
+2. 检查输出目录是否有写权限
+3. 查看日志文件：`tail -f /var/log/health_report_pro.log`
+
+### 问题 4：消息推送失败
+
+**解决**：
 ```bash
 # 测试 Webhook
 curl -X POST "https://oapi.dingtalk.com/robot/send?access_token=YOUR_TOKEN" \
@@ -221,40 +344,30 @@ curl -X POST "https://oapi.dingtalk.com/robot/send?access_token=YOUR_TOKEN" \
   -d '{"msgtype":"text","content":{"text":"测试"}}'
 ```
 
-### PDF 生成失败
-
-```bash
-# 检查依赖
-pip install reportlab pillow
-
-# 检查字体文件
-ls -la *.ttf
-```
-
 ---
 
 ## 📦 项目结构
 
 ```
-health_report/
-├── health_report_pro.py      # 主脚本（业务逻辑）
-├── constants.py              # 常量库（食物份量/热量）
-├── pdf_generator.py          # PDF 生成模块
-├── daily_health_report_pro.sh # Shell 包装脚本
-├── user_config.json          # 用户配置（⚠️ 勿上传）
-├── .env                      # 环境变量（⚠️ 勿上传）
-├── .env.example              # 环境变量模板
-├── user_config.example.json  # 用户配置模板
-├── .gitignore                # Git 忽略规则
-├── README.md                 # 使用说明
-└── reports/                  # PDF 报告输出目录
+skills/health_report/
+├── _meta.json                  # OpenClaw Skill 元数据
+├── skill.md                    # 机器人指令说明
+├── README.md                   # 使用说明（本文件）
+├── health_report_pro.py        # 主脚本（报告生成逻辑）
+├── constants.py                # 常量库（食物份量/热量）
+├── pdf_generator.py            # PDF 生成模块
+├── daily_health_report_pro.sh  # Shell 包装脚本（定时任务用）
+├── user_config.json            # 用户配置（⚠️ 勿上传）
+├── .env                        # 环境变量（⚠️ 勿上传）
+├── .env.example                # 环境变量模板
+├── user_config.example.json    # 用户配置模板
+├── .gitignore                  # Git 忽略规则
+└── reports/                    # PDF 报告输出目录
 ```
 
 ---
 
-## 🤝 贡献
-
-欢迎提交 Issue 和 Pull Request！
+## 🤝 贡献指南
 
 ### 添加新的病理条件
 
@@ -275,6 +388,14 @@ health_report/
 }
 ```
 
+### 添加新的食物数据
+
+在 `constants.py` 的 `FOOD_CALORIES` 中添加：
+
+```python
+"你的食物": {"calories": 100, "protein": 10, "fat": 5, "carb": 10, "fiber": 2},
+```
+
 ---
 
 ## 📄 License
@@ -292,6 +413,16 @@ MIT License - 详见 [LICENSE](LICENSE)
 
 ## 📧 联系方式
 
-- 作者：tankeito
-- Email：tqd354@gmail.com
-- GitHub：[@tankeito](https://github.com/tankeito)
+- **作者**：tankeito
+- **Email**：tqd354@gmail.com
+- **GitHub**：[@tankeito](https://github.com/tankeito)
+- **Issue**：[提交问题](https://github.com/tankeito/openclaw-skill-health-report/issues)
+
+---
+
+## 📝 版本历史
+
+| 版本 | 日期 | 更新内容 |
+| :--- | :--- | :--- |
+| **v2.0.0** | 2026-03-13 | 添加运动维度评分，支持自定义权重，OpenClaw Skill 标准化 |
+| **v1.0.0** | 2026-03-10 | 初始版本（饮食/饮水/体重三维度） |
