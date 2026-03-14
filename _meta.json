@@ -1,7 +1,7 @@
 {
     "name": "health_report",
     "display_name": "健康报告",
-    "version": "2.0.0",
+    "version": "1.0.4",
     "description": "专业健康报告生成插件，支持多种病理条件的饮食分析与评分",
     "author": "tankeito",
     "email": "tqd354@gmail.com",
@@ -17,12 +17,51 @@
         "pillow"
     ],
     
+    "env": {
+        "DINGTALK_WEBHOOK": {
+            "required": false,
+            "description": "钉钉机器人 Webhook 地址（用于推送健康报告）"
+        },
+        "FEISHU_WEBHOOK": {
+            "required": false,
+            "description": "飞书机器人 Webhook 地址（用于推送健康报告）"
+        },
+        "TELEGRAM_BOT_TOKEN": {
+            "required": false,
+            "description": "Telegram Bot Token（用于推送健康报告）"
+        },
+        "TELEGRAM_CHAT_ID": {
+            "required": false,
+            "description": "Telegram Chat ID（用于推送健康报告）"
+        },
+        "TAVILY_API_KEY": {
+            "required": false,
+            "description": "Tavily Search API Key（用于 AI 搜索健康菜谱和运动方案）"
+        },
+        "REPORT_WEB_DIR": {
+            "required": false,
+            "description": "PDF 报告 Web 发布目录（用于生成公开访问链接）"
+        },
+        "REPORT_BASE_URL": {
+            "required": false,
+            "description": "PDF 报告公开访问域名（用于生成下载链接）"
+        },
+        "MEMORY_DIR": {
+            "required": true,
+            "description": "健康记录文件存储目录（OpenClaw memory 目录）"
+        },
+        "LOG_FILE": {
+            "required": false,
+            "description": "日志文件路径（默认：logs/health_report_pro.log）"
+        }
+    },
+    
     "commands": [
         {
             "trigger": "/health",
             "description": "生成今日健康报告",
             "usage": "/health [date]",
-            "example": "/health 2026-03-13"
+            "example": "/health 2026-03-14"
         },
         {
             "trigger": "/health summary",

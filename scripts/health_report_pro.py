@@ -31,7 +31,8 @@ from constants import DEFAULT_PORTIONS, FOOD_CALORIES
 from pdf_generator import generate_pdf_report as generate_pdf_report_impl
 
 # ==================== Tavily API 配置 ====================
-TAVILY_API_KEY = os.environ.get('TAVILY_API_KEY', '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')
+# 安全提示：API Key 必须通过环境变量配置，切勿硬编码
+TAVILY_API_KEY = os.environ.get('TAVILY_API_KEY', '')
 
 # ==================== 配置加载 ====================
 def load_user_config(config_path=None):
