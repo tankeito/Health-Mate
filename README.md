@@ -4,16 +4,16 @@
 > 
 > **Personal Health Assistant - A native skill exclusively designed for OpenClaw**
 > 
-> 专业的个人健康管理工具，支持胆结石/糖尿病/高血压/健身减脂等多种场景
+> **本技能为 OpenClaw 原生设计的专属健康插件**
 
-[![Version](https://img.shields.io/badge/version-1.1.0-blue.svg)](https://github.com/tankeito/openclaw-skill-health-report/releases)
+[![Version](https://img.shields.io/badge/version-1.1.1-blue.svg)](https://github.com/tankeito/openclaw-skill-health-report/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ---
 
 ## ⚠️ 隐私与数据外发警告 (Privacy & Data Export Warning)
 
-**本技能运行时，需要读取您本地配置的 `MEMORY_DIR` 目录下的健康记录文件。根据您的配置，生成的健康报告将通过 Webhook 自动发送至外部平台（钉钉/飞书/Telegram）。**
+**本技能运行时，需要读取用户本地配置的 `MEMORY_DIR` 目录下的健康记录文件。根据用户配置，生成的健康报告将通过 Webhook 自动发送至外部平台（钉钉/飞书/Telegram）。**
 
 **安全建议**：
 - ✅ 请确保您完全信任所配置的 Webhook 接收端
@@ -35,7 +35,7 @@ cd ~/.openclaw/workspace/skills
 git clone git@github.com:tankeito/openclaw-skill-health-report.git health_report
 
 # 安装依赖
-pip install reportlab pillow
+pip install -r health_report/requirements.txt
 ```
 
 ### 步骤 2：初始化配置
@@ -50,10 +50,10 @@ python3 scripts/init_config.py
 
 **脚本会自动询问**：
 ```
-👋 欢迎使用健康报告系统！
+👋 欢迎使用 Health-Mate 健康报告系统！
 
 1️⃣  您的姓名或昵称？
-   > 小明
+   > 张三
 
 2️⃣  性别和年龄？
    > 男，30 岁
@@ -67,7 +67,13 @@ python3 scripts/init_config.py
 5️⃣  健康状况？（胆结石/糖尿病/高血压/健身减脂）
    > 胆结石
 
-6️⃣  有没有不吃/过敏的食物？
+6️⃣  每日饮水目标（ml）？
+   > 2000
+
+7️⃣  每日运动目标（步数）？
+   > 8000
+
+8️⃣  有没有不吃/过敏的食物？
    > 海鲜
 
 ✅ 配置完成！配置文件已保存到 config/user_config.json
@@ -126,8 +132,8 @@ python3 scripts/health_report_pro.py /root/.openclaw/workspace/memory/2026-03-14
 - 身高：175cm
 - 体重：140 斤（70kg）
 - BMI：22.9
-- 基础代谢 (BMR)：1562 kcal
-- 每日消耗 (TDEE)：1874 kcal
+- 基础代谢 (BMR)：1650 kcal
+- 每日消耗 (TDEE)：1980 kcal
 
 📋 次日优化方案
 
@@ -171,7 +177,7 @@ PDF 报告共 3 页，包含以下内容：
 - 🥗 饮食计划（三餐详细菜单和营养信息）
 - 💧 饮水计划（8 次定时提醒）
 - 🏃 运动建议（具体活动和时长）
-- ⚠️ 特别关注（7 条健康提示）
+- ⚠️ 特别关注（健康提示）
 
 **PDF 下载链接格式**：
 ```
@@ -257,12 +263,25 @@ https://your-domain.com/health_report_YYYY-MM-DD.pdf
 
 ## ⚙️ 配置说明
 
+### 环境变量（必填/可选）
+
+| 变量名 | 必填 | 说明 | 示例值 |
+|--------|------|------|--------|
+| `MEMORY_DIR` | ✅ **是** | OpenClaw 记忆文件目录 | `/root/.openclaw/workspace/memory` |
+| `TAVILY_API_KEY` | ❌ 否 | Tavily 搜索 API 密钥 | `tvly-dev-xxx` |
+| `DINGTALK_WEBHOOK` | ❌ 否 | 钉钉机器人 Webhook | `https://oapi.dingtalk.com/robot/send?access_token=xxx` |
+| `FEISHU_WEBHOOK` | ❌ 否 | 飞书机器人 Webhook | `https://open.feishu.cn/open-apis/bot/v2/hook/xxx` |
+| `TELEGRAM_BOT_TOKEN` | ❌ 否 | Telegram Bot Token | `8667974729:AAFIc3RyuADM-B-J_KYZEVX5hoYsNrd5SQE` |
+| `TELEGRAM_CHAT_ID` | ❌ 否 | Telegram Chat ID | `5868448763` |
+| `REPORT_WEB_DIR` | ❌ 否 | PDF 报告 Web 目录 | `/opt/1panel/www/sites/agent.btc354.com/index` |
+| `REPORT_BASE_URL` | ❌ 否 | PDF 报告下载域名 | `https://agent.btc354.com` |
+
 ### 个人健康档案（`config/user_config.json`）
 
 ```json
 {
     "user_profile": {
-        "name": "小明",
+        "name": "张三",
         "gender": "男",
         "age": 30,
         "height_cm": 175,
@@ -274,7 +293,9 @@ https://your-domain.com/health_report_YYYY-MM-DD.pdf
             "dislike": ["鱼", "海鲜"],
             "allergies": ["海鲜"],
             "favorite_fruits": ["苹果", "香蕉"]
-        }
+        },
+        "water_target_ml": 2000,
+        "step_target": 8000
     },
     "scoring_weights": {
         "diet": 0.45,
@@ -283,27 +304,6 @@ https://your-domain.com/health_report_YYYY-MM-DD.pdf
         "exercise_bonus": 0.10
     }
 }
-```
-
-### 消息推送配置（`config/.env`）
-
-```bash
-# 钉钉 Webhook
-DINGTALK_WEBHOOK="https://oapi.dingtalk.com/robot/send?access_token=YOUR_TOKEN"
-
-# 飞书 Webhook
-FEISHU_WEBHOOK="https://open.feishu.cn/open-apis/bot/v2/hook/YOUR_HOOK"
-
-# Telegram
-TELEGRAM_BOT_TOKEN="YOUR_BOT_TOKEN"
-TELEGRAM_CHAT_ID="YOUR_CHAT_ID"
-
-# 健康记录目录
-MEMORY_DIR="/root/.openclaw/workspace/memory"
-
-# PDF 报告目录
-REPORT_WEB_DIR="/path/to/public/dir"
-REPORT_BASE_URL="https://your-domain.com"
 ```
 
 ---
@@ -334,7 +334,7 @@ python3 scripts/init_config.py
 ### 问题 2：依赖库缺失
 
 ```bash
-pip install reportlab pillow
+pip install -r requirements.txt
 ```
 
 ### 问题 3：推送失败
@@ -346,6 +346,17 @@ curl -X POST "https://oapi.dingtalk.com/robot/send?access_token=YOUR_TOKEN" \
   -d '{"msgtype":"text","text":{"content":"测试"}}'
 ```
 
+### 问题 4：PDF 中文字体乱码
+
+```bash
+# 检查字体文件
+ls -la assets/NotoSansSC-VF.ttf
+
+# 如果不存在，脚本会自动从 GitHub 下载
+# 或者手动下载
+wget https://github.com/tankeito/openclaw-skill-health-report/raw/main/assets/NotoSansSC-VF.ttf -P assets/
+```
+
 ---
 
 ## 📦 项目结构
@@ -353,9 +364,9 @@ curl -X POST "https://oapi.dingtalk.com/robot/send?access_token=YOUR_TOKEN" \
 ```
 health_report/
 ├── scripts/                    # 核心代码
-│   ├── health_report_pro.py    # 主脚本
-│   ├── pdf_generator.py        # PDF 生成
-│   ├── constants.py            # 食物常量
+│   ├── health_report_pro.py    # 主脚本（报告生成）
+│   ├── pdf_generator.py        # PDF 生成（支持字体自动下载）
+│   ├── constants.py            # 食物常量库
 │   ├── init_config.py          # 初始化脚本（小白专用）
 │   └── daily_health_report_pro.sh  # 定时任务脚本
 ├── config/                     # 配置文件
@@ -363,12 +374,33 @@ health_report/
 │   ├── .env                    # 推送配置
 │   └── user_config.example.json # 配置模板
 ├── assets/                     # 资源文件
-│   └── NotoSansSC-VF.ttf       # 中文字体
+│   └── NotoSansSC-VF.ttf       # 中文字体（自动下载）
 ├── logs/                       # 日志目录
+├── reports/                    # PDF 报告输出目录
 ├── README.md                   # 使用说明（本文件）
 ├── SKILL.md                    # 机器人交互说明
 └── requirements.txt            # Python 依赖
 ```
+
+---
+
+## 📝 版本历史
+
+| 版本 | 日期 | 更新内容 |
+|------|------|---------|
+| **v1.1.1** | 2026-03-14 | ✅ ClawHub 元数据一致性修复：env 声明格式统一，README 详细描述 |
+| **v1.1.0** | 2026-03-14 | 🚀 品牌升级为 Health-Mate，修复 PDF 中文字体加载问题，优化引导配置 |
+| **v1.0.10** | 2026-03-14 | ✅ ClawHub 合规修复：type: python/app、env 完整声明、install 机制、解决元数据不一致警告 |
+| **v1.0.9** | 2026-03-14 | 🔄 全局元数据同步：对齐 Registry Install & Credentials 声明，统一版本号 |
+| **v1.0.8** | 2026-03-14 | 📋 YAML Frontmatter 声明（ClawHub 元数据同步） |
+| **v1.0.7** | 2026-03-14 | 🔒 安全合规重构：强制环境校验、隐私警告声明、优雅退出机制、type 字段声明 |
+| **v1.0.6** | 2026-03-14 | 📦 包规范化：新增 install 字段（pip install -r requirements.txt），解决包管理规范警告 |
+| **v1.0.5** | 2026-03-14 | 🔥 热修复：通过代码审查，解决安全扫描警告，新增环境配置说明 |
+| **v1.0.4** | 2026-03-14 | 安全合规修复（移除硬编码 API Key、完善 env 声明、文档脱敏） |
+| **v1.0.3** | 2026-03-14 | 文档完善（README/SKILL 重构、init_config.py 初始化脚本） |
+| **v1.0.2** | 2026-03-14 | PDF 优化（JSON 解析修复、AI 点评板块、特殊字符清理） |
+| **v1.0.1** | 2026-03-13 | 数据解析修复（食物丢失修复、过饱系数、症状惩罚） |
+| **v1.0.0** | 2026-03-13 | 初始版本（AI 点评、动态方案、多端推送、PDF 导出） |
 
 ---
 

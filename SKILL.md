@@ -1,7 +1,7 @@
 ---
 name: health-mate
 display_name: Health-Mate
-version: 1.1.0
+version: 1.1.1
 type: python/app
 install: pip install -r requirements.txt
 capabilities:
@@ -9,20 +9,38 @@ capabilities:
   - pdf_generation
   - http_request
 env:
-  - MEMORY_DIR
-  - TAVILY_API_KEY
-  - DINGTALK_WEBHOOK
-  - FEISHU_WEBHOOK
-  - TELEGRAM_BOT_TOKEN
-  - TELEGRAM_CHAT_ID
-  - REPORT_WEB_DIR
-  - REPORT_BASE_URL
+  MEMORY_DIR:
+    required: true
+    description: OpenClaw 记忆文件目录路径（必填）
+  TAVILY_API_KEY:
+    required: false
+    description: Tavily 搜索 API 密钥（可选）
+  DINGTALK_WEBHOOK:
+    required: false
+    description: 钉钉群机器人 Webhook 地址（可选）
+  FEISHU_WEBHOOK:
+    required: false
+    description: 飞书群机器人 Webhook 地址（可选）
+  TELEGRAM_BOT_TOKEN:
+    required: false
+    description: Telegram Bot API Token（可选）
+  TELEGRAM_CHAT_ID:
+    required: false
+    description: Telegram 接收者 Chat ID（可选）
+  REPORT_WEB_DIR:
+    required: false
+    description: PDF 报告 Web 本地目录路径（可选）
+  REPORT_BASE_URL:
+    required: false
+    description: PDF 报告对外提供下载的基础域名 URL（可选）
 ---
 # Health-Mate - 个人健康助手
 
-> **版本**：1.1.0 | **适用**：OpenClaw AI 助理
+> **版本**：1.1.1 | **适用**：OpenClaw AI 助理
 > 
-> **本技能为 OpenClaw 原生设计的专属健康插件 (A native skill exclusively designed for OpenClaw)**
+> **Personal Health Assistant - A native skill exclusively designed for OpenClaw**
+> 
+> **本技能为 OpenClaw 原生设计的专属健康插件**
 
 ---
 
@@ -506,6 +524,7 @@ TELEGRAM_CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID', '')
 
 | 版本 | 日期 | 更新内容 |
 |------|------|---------|
+| **v1.1.1** | 2026-03-14 | ✅ ClawHub 元数据一致性修复：env 声明格式统一，README 详细描述 |
 | **v1.1.0** | 2026-03-14 | 🚀 品牌升级为 Health-Mate，修复 PDF 中文字体加载问题，优化引导配置 |
 | **v1.0.10** | 2026-03-14 | ✅ ClawHub 合规修复：type: python/app、env 完整声明、install 机制、解决元数据不一致警告 |
 | **v1.0.9** | 2026-03-14 | 🔄 全局元数据同步：对齐 Registry Install & Credentials 声明，统一版本号 |
