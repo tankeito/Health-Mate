@@ -268,13 +268,18 @@ https://your-domain.com/health_report_YYYY-MM-DD.pdf
 | 变量名 | 必填 | 说明 | 示例值 |
 |--------|------|------|--------|
 | `MEMORY_DIR` | ✅ **是** | OpenClaw 记忆文件目录 | `/root/.openclaw/workspace/memory` |
-| `TAVILY_API_KEY` | ❌ 否 | Tavily 搜索 API 密钥 | `tvly-dev-xxx` |
-| `DINGTALK_WEBHOOK` | ❌ 否 | 钉钉机器人 Webhook | `https://oapi.dingtalk.com/robot/send?access_token=xxx` |
-| `FEISHU_WEBHOOK` | ❌ 否 | 飞书机器人 Webhook | `https://open.feishu.cn/open-apis/bot/v2/hook/xxx` |
-| `TELEGRAM_BOT_TOKEN` | ❌ 否 | Telegram Bot Token | `8667974729:AAFIc3RyuADM-B-J_KYZEVX5hoYsNrd5SQE` |
-| `TELEGRAM_CHAT_ID` | ❌ 否 | Telegram Chat ID | `5868448763` |
-| `REPORT_WEB_DIR` | ❌ 否 | PDF 报告 Web 目录 | `/opt/1panel/www/sites/agent.btc354.com/index` |
-| `REPORT_BASE_URL` | ❌ 否 | PDF 报告下载域名 | `https://agent.btc354.com` |
+| `TAVILY_API_KEY` | ❌ 否 | Tavily 搜索 API 密钥（用于 AI 搜索菜谱） | `tvly-dev-xxx` |
+| `DINGTALK_WEBHOOK` | ❌ 否 | 钉钉机器人 Webhook（可选，不配置则不推送） | `https://oapi.dingtalk.com/robot/send?access_token=xxx` |
+| `FEISHU_WEBHOOK` | ❌ 否 | 飞书机器人 Webhook（可选，不配置则不推送） | `https://open.feishu.cn/open-apis/bot/v2/hook/xxx` |
+| `TELEGRAM_BOT_TOKEN` | ❌ 否 | Telegram Bot Token（可选，不配置则不推送） | `8667974729:AAFIc3RyuADM-B-J_KYZEVX5hoYsNrd5SQE` |
+| `TELEGRAM_CHAT_ID` | ❌ 否 | Telegram Chat ID（可选，不配置则不推送） | `5868448763` |
+| `REPORT_WEB_DIR` | ❌ 否 | PDF 报表存放的本地目录（不配置则保存在 reports 目录） | `/opt/1panel/www/sites/agent.btc354.com/index` |
+| `REPORT_BASE_URL` | ❌ 否 | PDF 报告对外下载域名（如不推送可留空） | `` |
+
+**说明**：
+- ✅ **MEMORY_DIR 是必填项**，否则无法读取健康记录
+- ❌ **推送渠道（钉钉/飞书/Telegram）可选**，不配置则仅在本地生成 PDF
+- ❌ **REPORT_BASE_URL 可选**，如不需要外部访问可留空
 
 ### 个人健康档案（`config/user_config.json`）
 
@@ -310,15 +315,30 @@ https://your-domain.com/health_report_YYYY-MM-DD.pdf
 
 ## 🤖 定时任务
 
-### 设置每日自动推送
+### 方式一：初始化配置时设定（推荐）
+
+在运行 `python3 scripts/init_config.py` 时，脚本会询问：
+```
+9️⃣  希望每天几点接收健康报告？（建议 22:00）
+   > 22
+```
+
+脚本会自动为您配置定时任务。
+
+### 方式二：手动配置 Crontab
 
 ```bash
 # 编辑 Crontab
 crontab -e
 
-# 添加每日 22:00 推送
+# 添加每日 22:00 推送（可自定义时间）
 0 22 * * * bash /root/.openclaw/workspace/skills/health_report/scripts/daily_health_report_pro.sh
 ```
+
+**时间格式说明**：`分 时 日 月 周 命令`
+- `0 22 * * *` = 每天 22:00 执行
+- `0 8 * * *` = 每天早上 8:00 执行
+- `0 12 * * *` = 每天中午 12:00 执行
 
 ---
 
@@ -388,7 +408,7 @@ health_report/
 
 | 版本 | 日期 | 更新内容 |
 |------|------|---------|
-| **v1.1.1** | 2026-03-14 | ✅ ClawHub 元数据一致性修复：env 声明格式统一，README 详细描述 |
+| **v1.1.1** | 2026-03-14 | ✅ ClawHub 元数据一致性修复 + 定时任务引导 + 推送渠道可选配置 |
 | **v1.1.0** | 2026-03-14 | 🚀 品牌升级为 Health-Mate，修复 PDF 中文字体加载问题，优化引导配置 |
 | **v1.0.10** | 2026-03-14 | ✅ ClawHub 合规修复：type: python/app、env 完整声明、install 机制、解决元数据不一致警告 |
 | **v1.0.9** | 2026-03-14 | 🔄 全局元数据同步：对齐 Registry Install & Credentials 声明，统一版本号 |

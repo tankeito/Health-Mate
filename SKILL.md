@@ -29,10 +29,13 @@ env:
     description: Telegram 接收者 Chat ID（可选）
   REPORT_WEB_DIR:
     required: false
-    description: PDF 报告 Web 本地目录路径（可选）
+    description: PDF 报表存放的本地目录（可选，不配置则保存在 reports 目录）
   REPORT_BASE_URL:
     required: false
-    description: PDF 报告对外提供下载的基础域名 URL（可选）
+    description: PDF 报告对外下载域名（可选，如不推送可留空）
+  REPORT_TIME:
+    required: false
+    description: 每日健康报告推送时间（小时，默认 22）
 ---
 # Health-Mate - 个人健康助手
 
@@ -107,6 +110,7 @@ Health-Mate 是一款**个人健康助手 (Personal Health Assistant)**，使 AI
 - target_weight_kg: 目标体重（公斤，数字）
 - water_target_ml: 每日饮水目标（毫升，数字，默认 2000）
 - step_target: 每日步数目标（数字，默认 8000）
+- report_time: 每日报告推送时间（小时，默认 22）
 - condition: 病理类型（胆结石/糖尿病/高血压/健身减脂）
 - dietary_dislike: 不吃的食物（数组）
 - dietary_allergies: 过敏食物（数组）
@@ -161,6 +165,8 @@ Health-Mate 是一款**个人健康助手 (Personal Health Assistant)**，使 AI
 3. 您每日的饮水目标是多少？（建议 2000ml）
 4. 您每日的运动目标是多少？（建议 8000 步）
 5. 有没有不吃的食物或过敏食物？
+6. 希望每天几点接收健康报告？（建议 22:00）
+7. 是否需要配置推送渠道？（钉钉/飞书/Telegram，可选）
 
 请告诉我第一项信息~
 ```
@@ -524,7 +530,7 @@ TELEGRAM_CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID', '')
 
 | 版本 | 日期 | 更新内容 |
 |------|------|---------|
-| **v1.1.1** | 2026-03-14 | ✅ ClawHub 元数据一致性修复：env 声明格式统一，README 详细描述 |
+| **v1.1.1** | 2026-03-14 | ✅ ClawHub 元数据一致性修复 + 定时任务引导 + 推送渠道可选配置 |
 | **v1.1.0** | 2026-03-14 | 🚀 品牌升级为 Health-Mate，修复 PDF 中文字体加载问题，优化引导配置 |
 | **v1.0.10** | 2026-03-14 | ✅ ClawHub 合规修复：type: python/app、env 完整声明、install 机制、解决元数据不一致警告 |
 | **v1.0.9** | 2026-03-14 | 🔄 全局元数据同步：对齐 Registry Install & Credentials 声明，统一版本号 |

@@ -3,7 +3,7 @@
     "display_name": "Health-Mate",
     "type": "python/app",
     "version": "1.1.1",
-    "description": "Personal Health Assistant - 专业健康报告生成插件，支持多种病理条件的饮食分析与评分。⚠️ 必须配置 MEMORY_DIR 环境变量方可运行。",
+    "description": "Personal Health Assistant - 专业健康报告生成插件，支持多种病理条件的饮食分析与评分。⚠️ 必须配置 MEMORY_DIR 环境变量方可运行。推送渠道可选配置。",
     "author": "tankeito",
     "email": "tqd354@gmail.com",
     "license": "MIT",
@@ -51,11 +51,11 @@
         },
         "REPORT_WEB_DIR": {
             "required": false,
-            "description": "生成的 PDF 报告复制到的 Web 本地目录路径"
+            "description": "PDF 报表存放的本地目录路径（如不配置则仅保存在本地 reports 目录）"
         },
         "REPORT_BASE_URL": {
             "required": false,
-            "description": "PDF 报告对外提供下载的基础域名 URL"
+            "description": "PDF 报告对外提供下载的基础域名 URL（如不配置外部推送可留空）"
         }
     },
     "commands": [
