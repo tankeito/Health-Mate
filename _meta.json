@@ -1,7 +1,7 @@
 {
     "name": "health_report",
     "display_name": "健康报告",
-    "version": "1.0.5",
+    "version": "1.0.6",
     "description": "专业健康报告生成插件，支持多种病理条件的饮食分析与评分。注意：本插件必须配置 MEMORY_DIR 等环境变量方可运行。",
     "author": "tankeito",
     "email": "tqd354@gmail.com",
@@ -10,6 +10,7 @@
     "repository": "https://github.com/tankeito/openclaw-skill-health-report.git",
     "openclaw_version": ">=2024.1.0",
     "python_version": ">=3.8",
+    "install": "pip install -r requirements.txt",
     "dependencies": [
         "reportlab",
         "pillow"
