@@ -4,8 +4,20 @@
 > 
 > 专业的个人健康管理工具，支持胆结石/糖尿病/高血压/健身减脂等多种场景
 
-[![Version](https://img.shields.io/badge/version-1.0.6-blue.svg)](https://github.com/tankeito/openclaw-skill-health-report/releases)
+[![Version](https://img.shields.io/badge/version-1.0.7-blue.svg)](https://github.com/tankeito/openclaw-skill-health-report/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+---
+
+## ⚠️ 隐私与数据外发警告 (Privacy & Data Export Warning)
+
+**本技能运行时，需要读取您本地配置的 `MEMORY_DIR` 目录下的健康记录文件。根据您的配置，生成的健康报告将通过 Webhook 自动发送至外部平台（钉钉/飞书/Telegram）。**
+
+**安全建议**：
+- ✅ 请确保您完全信任所配置的 Webhook 接收端
+- ✅ 建议在沙箱或隔离环境中使用
+- ✅ 谨慎配置您的私有环境变量（Webhook Token、API Key 等）
+- ✅ 定期检查 Webhook 访问日志，确保无异常调用
 
 ---
 

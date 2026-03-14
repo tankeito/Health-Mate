@@ -6,6 +6,11 @@
 - 修复 PDF JSON 解析
 - 添加 AI 点评到 PDF
 - 引入过饱系数和症状惩罚算法
+
+安全合规：
+- 强制环境变量校验（MEMORY_DIR 必填）
+- Webhook 未配置时仅本地生成 PDF
+- 优雅退出机制，避免异常崩溃
 """
 
 import sys
@@ -16,6 +21,58 @@ import shutil
 import subprocess
 from pathlib import Path
 from datetime import datetime, timedelta
+
+# ==================== 安全校验：环境变量检查 ====================
+def validate_environment():
+    """启动前强制校验环境变量，确保安全运行"""
+    errors = []
+    warnings = []
+    
+    # 1. MEMORY_DIR 必填检查
+    memory_dir = os.environ.get('MEMORY_DIR', '')
+    if not memory_dir:
+        errors.append("❌ 错误：MEMORY_DIR 环境变量未配置（必填）")
+        errors.append("   请在 .env 文件中设置 MEMORY_DIR='/path/to/memory'")
+    elif not os.path.exists(memory_dir):
+        errors.append(f"❌ 错误：MEMORY_DIR 目录不存在：{memory_dir}")
+    elif not os.access(memory_dir, os.R_OK):
+        errors.append(f"❌ 错误：MEMORY_DIR 目录无读取权限：{memory_dir}")
+    
+    # 2. Webhook 配置检查（可选，但需提示）
+    webhooks = {
+        'DINGTALK_WEBHOOK': os.environ.get('DINGTALK_WEBHOOK', ''),
+        'FEISHU_WEBHOOK': os.environ.get('FEISHU_WEBHOOK', ''),
+        'TELEGRAM_BOT_TOKEN': os.environ.get('TELEGRAM_BOT_TOKEN', ''),
+    }
+    configured_webhooks = [k for k, v in webhooks.items() if v]
+    
+    if not configured_webhooks:
+        warnings.append("⚠️  警告：未配置任何 Webhook，报告将仅在本地生成 PDF")
+        warnings.append("   如需推送，请配置 DINGTALK_WEBHOOK/FEISHU_WEBHOOK/TELEGRAM_*")
+    
+    # 3. 输出检查结果
+    if warnings:
+        print("=" * 60)
+        print("⚠️  安全警告")
+        print("=" * 60)
+        for w in warnings:
+            print(w)
+        print("=" * 60)
+    
+    if errors:
+        print("=" * 60)
+        print("❌ 环境校验失败")
+        print("=" * 60)
+        for e in errors:
+            print(e)
+        print("=" * 60)
+        print("\n程序已安全退出。请修复上述问题后重新运行。")
+        sys.exit(1)
+    
+    return True
+
+# 执行环境校验
+validate_environment()
 
 # ==================== 路径管理 ====================
 SCRIPT_DIR = Path(__file__).parent.resolve()
