@@ -1,6 +1,19 @@
+---
+name: health_report
+version: 1.0.8
+env:
+  - MEMORY_DIR
+  - TAVILY_API_KEY
+  - DINGTALK_WEBHOOK
+  - FEISHU_WEBHOOK
+  - TELEGRAM_BOT_TOKEN
+  - TELEGRAM_CHAT_ID
+  - REPORT_WEB_DIR
+  - REPORT_BASE_URL
+---
 # Health Report Skill - 机器人交互指令
 
-> **版本**：1.0.7 | **适用**：OpenClaw AI 助理
+> **版本**：1.0.8 | **适用**：OpenClaw AI 助理
 
 ---
 
@@ -205,15 +218,15 @@
 
 **用户**：
 ```
-今天早上空腹体重 130.4 斤
+今天早上空腹体重 140 斤
 ```
 
 **机器人**：
 ```
 ✅ **体重已记录！**
 
-2026-03-14 晨起空腹：130.4 斤（65.2kg）
-BMI：22.0（正常范围）
+2026-03-14 晨起空腹：140 斤（70kg）
+BMI：22.9（正常范围）
 
 与昨日持平，继续保持！
 ```
@@ -300,7 +313,8 @@ health_report/
 │   └── NotoSansSC-VF.ttf         # 中文字体
 ├── logs/
 ├── README.md                     # 使用说明
-└── SKILL.md                      # 本文件
+├── SKILL.md                      # 本文件
+└── requirements.txt              # Python 依赖
 ```
 
 ### 配置加载
@@ -481,6 +495,7 @@ TELEGRAM_CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID', '')
 
 | 版本 | 日期 | 更新内容 |
 |------|------|---------|
+| **v1.0.8** | 2026-03-14 | 📋 YAML Frontmatter 声明（ClawHub 元数据同步） |
 | **v1.0.7** | 2026-03-14 | 🔒 安全合规重构：强制环境校验、隐私警告声明、优雅退出机制、type 字段声明 |
 | **v1.0.6** | 2026-03-14 | 📦 包规范化：新增 install 字段（pip install -r requirements.txt），解决包管理规范警告 |
 | **v1.0.5** | 2026-03-14 | 🔥 热修复：通过代码审查，解决安全扫描警告，新增环境配置说明 |

@@ -2,7 +2,7 @@
     "name": "health_report",
     "display_name": "健康报告",
     "type": "python",
-    "version": "1.0.7",
+    "version": "1.0.8",
     "description": "专业健康报告生成插件，支持多种病理条件的饮食分析与评分。注意：本插件必须配置 MEMORY_DIR 等环境变量方可运行。",
     "author": "tankeito",
     "email": "tqd354@gmail.com",
