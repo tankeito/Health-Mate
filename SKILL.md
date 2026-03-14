@@ -1,7 +1,7 @@
 ---
 name: health-mate
 display_name: Health-Mate
-version: 1.1.1
+version: 1.1.3
 type: python/app
 install: pip install -r requirements.txt
 capabilities:
@@ -11,22 +11,22 @@ capabilities:
 env:
   MEMORY_DIR:
     required: true
-    description: OpenClaw 记忆文件目录路径（必填）
+    description: OpenClaw 记忆文件目录路径（必填，用于读取健康记录）
   TAVILY_API_KEY:
     required: false
-    description: Tavily 搜索 API 密钥（可选）
+    description: Tavily 搜索 API 密钥（可选，用于 AI 搜索菜谱）
   DINGTALK_WEBHOOK:
     required: false
-    description: 钉钉群机器人 Webhook 地址（可选）
+    description: 钉钉群机器人 Webhook 地址（可选，不配置则不推送）
   FEISHU_WEBHOOK:
     required: false
-    description: 飞书群机器人 Webhook 地址（可选）
+    description: 飞书群机器人 Webhook 地址（可选，不配置则不推送）
   TELEGRAM_BOT_TOKEN:
     required: false
-    description: Telegram Bot API Token（可选）
+    description: Telegram Bot API Token（可选，不配置则不推送）
   TELEGRAM_CHAT_ID:
     required: false
-    description: Telegram 接收者 Chat ID（可选）
+    description: Telegram 接收者 Chat ID（可选，不配置则不推送）
   REPORT_WEB_DIR:
     required: false
     description: PDF 报表存放的本地目录（可选，不配置则保存在 reports 目录）
@@ -39,7 +39,7 @@ env:
 ---
 # Health-Mate - 个人健康助手
 
-> **版本**：1.1.1 | **适用**：OpenClaw AI 助理
+> **版本**：1.1.3 | **适用**：OpenClaw AI 助理
 > 
 > **Personal Health Assistant - A native skill exclusively designed for OpenClaw**
 > 
@@ -49,13 +49,14 @@ env:
 
 ## ⚠️ 隐私与数据外发警告 (Privacy & Data Export Warning)
 
-**本技能运行时，需要读取用户本地配置的 `MEMORY_DIR` 目录下的健康记录文件。根据用户配置，生成的健康报告将通过 Webhook 自动发送至外部平台（钉钉/飞书/Telegram）。**
+**本技能运行时，需要读取用户本地配置的 `MEMORY_DIR` 目录下的健康记录文件（包含体重、饮食、饮水等个人健康数据）。根据用户配置，生成的健康报告将通过 Webhook 自动发送至外部平台（钉钉/飞书/Telegram）。**
 
 **安全建议**：
-- ✅ 确保用户完全信任所配置的 Webhook 接收端
+- ✅ 确保您完全信任所配置的 Webhook 接收端
 - ✅ 建议在沙箱或隔离环境中使用
 - ✅ 谨慎配置私有环境变量（Webhook Token、API Key 等）
 - ✅ 定期检查 Webhook 访问日志，确保无异常调用
+- ✅ 不要将 `config/.env` 文件上传到公开仓库
 
 ---
 
@@ -65,7 +66,7 @@ Health-Mate 是一款**个人健康助手 (Personal Health Assistant)**，使 AI
 1. **自然语言配置** - 用户无需编辑 JSON，对话即可完成健康档案配置
 2. **数据录入引导** - 主动引导用户记录体重、饮食、饮水、运动数据
 3. **健康报告生成** - 自动生成专业健康报告和 PDF
-4. **多端推送** - 支持钉钉/飞书/Telegram 三通道推送
+4. **多端推送** - 支持钉钉/飞书/Telegram 三通道推送（可选配置）
 5. **AI 健康点评** - 基于大模型生成个性化健康建议
 
 ---
@@ -338,15 +339,16 @@ health_report/
 │   ├── health_report_pro.py      # 主脚本（报告生成）
 │   ├── pdf_generator.py          # PDF 生成模块（支持字体自动下载）
 │   ├── constants.py              # 食物常量库
-│   ├── init_config.py            # 初始化脚本
+│   ├── init_config.py            # 初始化脚本（交互式问答）
 │   └── daily_health_report_pro.sh # 定时任务脚本
 ├── config/
 │   ├── user_config.json          # 用户健康档案
-│   ├── .env                      # 推送配置
+│   ├── .env                      # 推送配置（⚠️ 切勿上传）
 │   └── user_config.example.json  # 配置模板
 ├── assets/
 │   └── NotoSansSC-VF.ttf         # 中文字体（自动下载）
-├── logs/
+├── logs/                         # 日志目录
+├── reports/                      # PDF 报告输出目录
 ├── README.md                     # 使用说明
 ├── SKILL.md                      # 本文件
 └── requirements.txt              # Python 依赖
@@ -369,7 +371,7 @@ with open(config_path, 'r', encoding='utf-8') as f:
 
 ### 推送配置
 ```python
-# 从环境变量读取推送配置
+# 从环境变量读取推送配置（可选）
 DINGTALK_WEBHOOK = os.environ.get('DINGTALK_WEBHOOK', '')
 FEISHU_WEBHOOK = os.environ.get('FEISHU_WEBHOOK', '')
 TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN', '')
@@ -511,10 +513,10 @@ TELEGRAM_CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID', '')
 
 ### 敏感文件保护
 
-以下文件**已加入 `.gitignore`**，切勿上传：
+以下文件**已加入 `.gitignore`**，切勿上传到公开仓库：
 
 - `config/user_config.json` - 个人健康数据
-- `config/.env` - Webhook Token
+- `config/.env` - Webhook Token 和私密配置
 - `reports/*.pdf` - 个人健康报告
 - `logs/*.log` - 日志文件
 
@@ -523,6 +525,8 @@ TELEGRAM_CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID', '')
 1. **私有仓库** - Fork 时设置为 Private
 2. **定期备份** - 备份配置文件到安全位置
 3. **密钥轮换** - Webhook Token 每 3-6 个月更新
+4. **沙箱测试** - 在隔离环境中测试推送功能
+5. **日志审计** - 定期检查 Webhook 访问日志
 
 ---
 
@@ -530,6 +534,8 @@ TELEGRAM_CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID', '')
 
 | 版本 | 日期 | 更新内容 |
 |------|------|---------|
+| **v1.1.3** | 2026-03-14 | ✅ ClawHub 元数据一致性修复：明确 MEMORY_DIR 必填、install 声明、文档一致性 |
+| **v1.1.2** | 2026-03-14 | ✅ ClawHub 隐私合规：明确 MEMORY_DIR 必填、推送渠道可选、隐私警告强化 |
 | **v1.1.1** | 2026-03-14 | ✅ ClawHub 元数据一致性修复 + 定时任务引导 + 推送渠道可选配置 |
 | **v1.1.0** | 2026-03-14 | 🚀 品牌升级为 Health-Mate，修复 PDF 中文字体加载问题，优化引导配置 |
 | **v1.0.10** | 2026-03-14 | ✅ ClawHub 合规修复：type: python/app、env 完整声明、install 机制、解决元数据不一致警告 |

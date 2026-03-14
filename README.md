@@ -6,7 +6,7 @@
 > 
 > **本技能为 OpenClaw 原生设计的专属健康插件**
 
-[![Version](https://img.shields.io/badge/version-1.1.1-blue.svg)](https://github.com/tankeito/openclaw-skill-health-report/releases)
+[![Version](https://img.shields.io/badge/version-1.1.3-blue.svg)](https://github.com/tankeito/openclaw-skill-health-report/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ---
@@ -408,6 +408,8 @@ health_report/
 
 | 版本 | 日期 | 更新内容 |
 |------|------|---------|
+| **v1.1.3** | 2026-03-14 | ✅ ClawHub 元数据一致性修复：明确 MEMORY_DIR 必填、install 声明、文档一致性 |
+| **v1.1.2** | 2026-03-14 | ✅ ClawHub 隐私合规：明确 MEMORY_DIR 必填、推送渠道可选、隐私警告强化 |
 | **v1.1.1** | 2026-03-14 | ✅ ClawHub 元数据一致性修复 + 定时任务引导 + 推送渠道可选配置 |
 | **v1.1.0** | 2026-03-14 | 🚀 品牌升级为 Health-Mate，修复 PDF 中文字体加载问题，优化引导配置 |
 | **v1.0.10** | 2026-03-14 | ✅ ClawHub 合规修复：type: python/app、env 完整声明、install 机制、解决元数据不一致警告 |
