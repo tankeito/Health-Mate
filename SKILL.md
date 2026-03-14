@@ -1,13 +1,16 @@
 ---
 name: health-mate
 display_name: Health-Mate
-version: 1.1.3
+version: 1.1.4
 type: python/app
 install: pip install -r requirements.txt
 capabilities:
   - file_read
   - pdf_generation
   - http_request
+homepage: https://github.com/tankeito/openclaw-skill-health-report
+repository: https://github.com/tankeito/openclaw-skill-health-report.git
+source: https://github.com/tankeito/openclaw-skill-health-report
 env:
   MEMORY_DIR:
     required: true
@@ -39,7 +42,7 @@ env:
 ---
 # Health-Mate - 个人健康助手
 
-> **版本**：1.1.3 | **适用**：OpenClaw AI 助理
+> **版本**：1.1.4 | **适用**：OpenClaw AI 助理
 > 
 > **Personal Health Assistant - A native skill exclusively designed for OpenClaw**
 > 
@@ -534,6 +537,7 @@ TELEGRAM_CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID', '')
 
 | 版本 | 日期 | 更新内容 |
 |------|------|---------|
+| **v1.1.4** | 2026-03-14 | ✅ ClawHub 可信度修复：添加 homepage/repository/source 字段，解决"unknown/none"警告 |
 | **v1.1.3** | 2026-03-14 | ✅ ClawHub 元数据一致性修复：明确 MEMORY_DIR 必填、install 声明、文档一致性 |
 | **v1.1.2** | 2026-03-14 | ✅ ClawHub 隐私合规：明确 MEMORY_DIR 必填、推送渠道可选、隐私警告强化 |
 | **v1.1.1** | 2026-03-14 | ✅ ClawHub 元数据一致性修复 + 定时任务引导 + 推送渠道可选配置 |

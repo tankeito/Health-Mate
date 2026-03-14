@@ -6,7 +6,7 @@
 > 
 > **本技能为 OpenClaw 原生设计的专属健康插件**
 
-[![Version](https://img.shields.io/badge/version-1.1.3-blue.svg)](https://github.com/tankeito/openclaw-skill-health-report/releases)
+[![Version](https://img.shields.io/badge/version-1.1.4-blue.svg)](https://github.com/tankeito/openclaw-skill-health-report/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ---
@@ -408,6 +408,7 @@ health_report/
 
 | 版本 | 日期 | 更新内容 |
 |------|------|---------|
+| **v1.1.4** | 2026-03-14 | ✅ ClawHub 可信度修复：添加 homepage/repository/source 字段，解决"unknown/none"警告 |
 | **v1.1.3** | 2026-03-14 | ✅ ClawHub 元数据一致性修复：明确 MEMORY_DIR 必填、install 声明、文档一致性 |
 | **v1.1.2** | 2026-03-14 | ✅ ClawHub 隐私合规：明确 MEMORY_DIR 必填、推送渠道可选、隐私警告强化 |
 | **v1.1.1** | 2026-03-14 | ✅ ClawHub 元数据一致性修复 + 定时任务引导 + 推送渠道可选配置 |
