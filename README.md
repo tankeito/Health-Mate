@@ -4,7 +4,7 @@
 > 
 > 专业的个人健康管理工具，支持胆结石/糖尿病/高血压/健身减脂等多种场景
 
-[![Version](https://img.shields.io/badge/version-1.0.7-blue.svg)](https://github.com/tankeito/openclaw-skill-health-report/releases)
+[![Version](https://img.shields.io/badge/version-1.0.9-blue.svg)](https://github.com/tankeito/openclaw-skill-health-report/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ---

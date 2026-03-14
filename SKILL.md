@@ -1,6 +1,10 @@
 ---
 name: health_report
-version: 1.0.8
+version: 1.0.9
+install: pip install -r requirements.txt
+capabilities:
+ - file_read
+ - http_request
 env:
   - MEMORY_DIR
   - TAVILY_API_KEY
@@ -13,7 +17,7 @@ env:
 ---
 # Health Report Skill - 机器人交互指令
 
-> **版本**：1.0.8 | **适用**：OpenClaw AI 助理
+> **版本**：1.0.9 | **适用**：OpenClaw AI 助理
 
 ---
 
@@ -495,6 +499,7 @@ TELEGRAM_CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID', '')
 
 | 版本 | 日期 | 更新内容 |
 |------|------|---------|
+| **v1.0.9** | 2026-03-14 | 🔄 全局元数据同步：对齐 Registry Install & Credentials 声明，统一版本号 |
 | **v1.0.8** | 2026-03-14 | 📋 YAML Frontmatter 声明（ClawHub 元数据同步） |
 | **v1.0.7** | 2026-03-14 | 🔒 安全合规重构：强制环境校验、隐私警告声明、优雅退出机制、type 字段声明 |
 | **v1.0.6** | 2026-03-14 | 📦 包规范化：新增 install 字段（pip install -r requirements.txt），解决包管理规范警告 |
