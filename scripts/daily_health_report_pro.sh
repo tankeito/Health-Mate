@@ -84,11 +84,11 @@ TG_CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID', '')
 def send_dingtalk():
     if not DINGTALK_WEBHOOK: return '➖'  # 增加非空判断
     try:
+        # 修复：钉钉 text 类型使用 {"text": {"content": "..."}} 格式
         data = json.dumps({
-            'msgtype': 'markdown',
-            'markdown': {
-                'title': f'每日健康报告 {current_date}',
-                'text': message_text
+            'msgtype': 'text',
+            'text': {
+                'content': message_text
             }
         }).encode('utf-8')
         req = urllib.request.Request(DINGTALK_WEBHOOK, data=data, headers={'Content-Type': 'application/json'})
