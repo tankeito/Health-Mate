@@ -1,10 +1,13 @@
 ---
-name: health_report
-version: 1.0.9
+name: health-mate
+display_name: Health-Mate
+version: 1.1.0
+type: python/app
 install: pip install -r requirements.txt
 capabilities:
- - file_read
- - http_request
+  - file_read
+  - pdf_generation
+  - http_request
 env:
   - MEMORY_DIR
   - TAVILY_API_KEY
@@ -15,9 +18,11 @@ env:
   - REPORT_WEB_DIR
   - REPORT_BASE_URL
 ---
-# Health Report Skill - 机器人交互指令
+# Health-Mate - 个人健康助手
 
-> **版本**：1.0.9 | **适用**：OpenClaw AI 助理
+> **版本**：1.1.0 | **适用**：OpenClaw AI 助理
+> 
+> **本技能为 OpenClaw 原生设计的专属健康插件 (A native skill exclusively designed for OpenClaw)**
 
 ---
 
@@ -35,7 +40,7 @@ env:
 
 ## 🎯 功能概述
 
-本 Skill 使 AI 助理能够：
+Health-Mate 是一款**个人健康助手 (Personal Health Assistant)**，使 AI 助理能够：
 1. **自然语言配置** - 用户无需编辑 JSON，对话即可完成健康档案配置
 2. **数据录入引导** - 主动引导用户记录体重、饮食、饮水、运动数据
 3. **健康报告生成** - 自动生成专业健康报告和 PDF
@@ -82,6 +87,8 @@ env:
 - height_cm: 身高（厘米，数字）
 - current_weight_kg: 当前体重（公斤，数字）
 - target_weight_kg: 目标体重（公斤，数字）
+- water_target_ml: 每日饮水目标（毫升，数字，默认 2000）
+- step_target: 每日步数目标（数字，默认 8000）
 - condition: 病理类型（胆结石/糖尿病/高血压/健身减脂）
 - dietary_dislike: 不吃的食物（数组）
 - dietary_allergies: 过敏食物（数组）
@@ -132,9 +139,9 @@ env:
 
 还需要您提供以下信息（可以分多次告诉我）：
 1. 您的姓名或昵称？
-2. 性别和年龄？
-3. 身高和当前体重？
-4. 目标体重是多少？
+2. 身高、当前体重和目标体重？
+3. 您每日的饮水目标是多少？（建议 2000ml）
+4. 您每日的运动目标是多少？（建议 8000 步）
 5. 有没有不吃的食物或过敏食物？
 
 请告诉我第一项信息~
@@ -305,7 +312,7 @@ BMI：22.9（正常范围）
 health_report/
 ├── scripts/
 │   ├── health_report_pro.py      # 主脚本（报告生成）
-│   ├── pdf_generator.py          # PDF 生成模块
+│   ├── pdf_generator.py          # PDF 生成模块（支持字体自动下载）
 │   ├── constants.py              # 食物常量库
 │   ├── init_config.py            # 初始化脚本
 │   └── daily_health_report_pro.sh # 定时任务脚本
@@ -314,7 +321,7 @@ health_report/
 │   ├── .env                      # 推送配置
 │   └── user_config.example.json  # 配置模板
 ├── assets/
-│   └── NotoSansSC-VF.ttf         # 中文字体
+│   └── NotoSansSC-VF.ttf         # 中文字体（自动下载）
 ├── logs/
 ├── README.md                     # 使用说明
 ├── SKILL.md                      # 本文件
@@ -499,6 +506,8 @@ TELEGRAM_CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID', '')
 
 | 版本 | 日期 | 更新内容 |
 |------|------|---------|
+| **v1.1.0** | 2026-03-14 | 🚀 品牌升级为 Health-Mate，修复 PDF 中文字体加载问题，优化引导配置 |
+| **v1.0.10** | 2026-03-14 | ✅ ClawHub 合规修复：type: python/app、env 完整声明、install 机制、解决元数据不一致警告 |
 | **v1.0.9** | 2026-03-14 | 🔄 全局元数据同步：对齐 Registry Install & Credentials 声明，统一版本号 |
 | **v1.0.8** | 2026-03-14 | 📋 YAML Frontmatter 声明（ClawHub 元数据同步） |
 | **v1.0.7** | 2026-03-14 | 🔒 安全合规重构：强制环境校验、隐私警告声明、优雅退出机制、type 字段声明 |
