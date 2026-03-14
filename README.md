@@ -38,22 +38,22 @@ python3 scripts/init_config.py
 ```
 👋 欢迎使用健康报告系统！
 
-1️⃣ 您的姓名或昵称？
-   > 东东
+1️⃣  您的姓名或昵称？
+   > 小明
 
-2️⃣ 性别和年龄？
-   > 男，34 岁
+2️⃣  性别和年龄？
+   > 男，30 岁
 
-3️⃣ 身高（cm）和当前体重（kg）？
-   > 172, 65
+3️⃣  身高（cm）和当前体重（kg）？
+   > 175, 70
 
-4️⃣ 目标体重（kg）？
-   > 64
+4️⃣  目标体重（kg）？
+   > 65
 
-5️⃣ 健康状况？（胆结石/糖尿病/高血压/健身减脂）
+5️⃣  健康状况？（胆结石/糖尿病/高血压/健身减脂）
    > 胆结石
 
-6️⃣ 有没有不吃/过敏的食物？
+6️⃣  有没有不吃/过敏的食物？
    > 海鲜
 
 ✅ 配置完成！配置文件已保存到 config/user_config.json
@@ -85,12 +85,17 @@ python3 scripts/health_report_pro.py /root/.openclaw/workspace/memory/2026-03-14
 - 运动管理：0/100 ⭐
 
 🤖 AI 专属健康点评
-东东，今天你在脂肪管理上表现非常出色！38.4g 的摄入量精准落在胆结石患者的安全区间内...
+今天你在脂肪管理上表现非常出色！38.4g 的摄入量精准落在安全区间内。
+饮水 2000ml 达标，充分稀释了胆汁浓度。
+
+但必须严肃指出两个健康隐患：
+第一，膳食纤维仅 14.1g，距离 25g 的最低要求差距较大。
+第二，全天零运动，久坐不动会显著降低胆囊排空效率。
 
 📝 今日详情汇总
 
 🥗 进食情况
-- 早餐 (08:06): 清汤牛肉面、安佳脱脂纯牛奶 250ml、鸡蛋蛋白 1 个 - 257kcal
+- 早餐 (08:06): 清汤牛肉面、脱脂纯牛奶 250ml、鸡蛋蛋白 1 个 - 257kcal
 - 午餐 (12:49): 半碗米饭（约 75g）、凉拌土豆牛肉、煎蛋青菜汤 - 332kcal
 - 加餐 (17:24): 苹果 1 个（约 200g） - 52kcal
 - 晚餐 (19:27): 半碗米饭（约 75g）、豆腐青菜汤、凉拌鸡肉豆干 - 195kcal
@@ -130,21 +135,34 @@ python3 scripts/health_report_pro.py /root/.openclaw/workspace/memory/2026-03-14
 ━━━━━━━━━━━━━━━━━━
 
 📄 PDF 完整报告
-https://agent.btc354.com/health_report_2026-03-14.pdf
+https://your-domain.com/health_report_2026-03-14.pdf
 ```
 
 ### PDF 报告预览
 
-PDF 报告包含：
-- 📊 综合评分卡片（带星级）
-- 📈 基础健康数据表格
-- 🥗 进食详情表（食物/份量/热量/营养素）
-- 💧 饮水时间轴
-- 🏃 运动记录
-- 🤖 AI 专属健康点评
-- 📋 次日可执行方案
+PDF 报告共 3 页，包含以下内容：
 
-**下载示例**：https://agent.btc354.com/health_report_2026-03-14.pdf
+**第 1 页 - 综合评分与健康数据**
+- 📊 综合评分卡片（带星级和百分比）
+- 📈 基础健康数据表格（身高/体重/BMI/BMR/TDEE）
+- 🔥 热量与营养素环形图
+
+**第 2 页 - 详细记录**
+- 🥗 进食详情表（食物名称/份量/热量/蛋白质/脂肪/碳水）
+- 💧 饮水时间轴（每次饮水时间和毫升数）
+- 🏃 运动记录（类型/时长/消耗）
+- 🤖 AI 专属健康点评（150-300 字深度分析）
+
+**第 3 页 - 次日方案**
+- 🥗 饮食计划（三餐详细菜单和营养信息）
+- 💧 饮水计划（8 次定时提醒）
+- 🏃 运动建议（具体活动和时长）
+- ⚠️ 特别关注（7 条健康提示）
+
+**PDF 下载链接格式**：
+```
+https://your-domain.com/health_report_YYYY-MM-DD.pdf
+```
 
 ---
 
@@ -230,18 +248,18 @@ PDF 报告包含：
 ```json
 {
     "user_profile": {
-        "name": "东东",
+        "name": "小明",
         "gender": "男",
-        "age": 34,
-        "height_cm": 172,
-        "current_weight_kg": 65,
-        "target_weight_kg": 64,
+        "age": 30,
+        "height_cm": 175,
+        "current_weight_kg": 70,
+        "target_weight_kg": 65,
         "condition": "胆结石",
         "activity_level": 1.2,
         "dietary_preferences": {
             "dislike": ["鱼", "海鲜"],
             "allergies": ["海鲜"],
-            "favorite_fruits": ["苹果", "耙耙柑", "香蕉", "梨"]
+            "favorite_fruits": ["苹果", "香蕉"]
         }
     },
     "scoring_weights": {
@@ -270,8 +288,8 @@ TELEGRAM_CHAT_ID="YOUR_CHAT_ID"
 MEMORY_DIR="/root/.openclaw/workspace/memory"
 
 # PDF 报告目录
-REPORT_WEB_DIR="/opt/1panel/www/sites/agent.btc354.com/index"
-REPORT_BASE_URL="https://agent.btc354.com"
+REPORT_WEB_DIR="/path/to/public/dir"
+REPORT_BASE_URL="https://your-domain.com"
 ```
 
 ---
