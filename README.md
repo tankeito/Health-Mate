@@ -4,7 +4,7 @@
 > 
 > 专业的个人健康管理工具，支持胆结石/糖尿病/高血压/健身减脂等多种场景
 
-[![Version](https://img.shields.io/badge/version-5.0.0-blue.svg)](https://github.com/tankeito/openclaw-skill-health-report/releases)
+[![Version](https://img.shields.io/badge/version-1.0.4-blue.svg)](https://github.com/tankeito/openclaw-skill-health-report/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ---
@@ -109,9 +109,9 @@ python3 scripts/health_report_pro.py /root/.openclaw/workspace/memory/2026-03-14
 → 总计：2000ml/2000ml ✅
 
 📈 基础健康数据
-- 身高：172cm
-- 体重：130.4 斤（65.2kg）
-- BMI：22.0
+- 身高：175cm
+- 体重：140 斤（70kg）
+- BMI：22.9
 - 基础代谢 (BMR)：1562 kcal
 - 每日消耗 (TDEE)：1874 kcal
 
@@ -173,9 +173,9 @@ https://your-domain.com/health_report_YYYY-MM-DD.pdf
 直接告诉机器人你今天的数据：
 
 ```
-你：今天早上空腹体重 130.4 斤
+你：今天早上空腹体重 140 斤
 
-机器人：✅ 体重已记录！2026-03-14 晨起空腹：130.4 斤
+机器人：✅ 体重已记录！2026-03-14 晨起空腹：140 斤
 
 你：早上喝了 250ml 温水
 
@@ -197,7 +197,7 @@ https://your-domain.com/health_report_YYYY-MM-DD.pdf
 # 2026-03-14 健康记录
 
 ## 📊 体重记录
-**晨起空腹**：130.4 斤
+**晨起空腹**：140 斤
 
 ## 💧 饮水记录
 ### 晨起（约 07:30）
