@@ -1,7 +1,7 @@
 ---
 name: health-mate
 display_name: Health-Mate
-version: 1.1.5
+version: 1.1.6
 type: python/app
 install: pip install -r requirements.txt
 capabilities:
@@ -42,7 +42,7 @@ env:
 ---
 # Health-Mate - 个人健康助手
 
-> **版本**：1.1.4 | **适用**：OpenClaw AI 助理
+> **版本**：1.1.6 | **适用**：OpenClaw AI 助理
 > 
 > **Personal Health Assistant - A native skill exclusively designed for OpenClaw**
 > 
