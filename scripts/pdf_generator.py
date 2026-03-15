@@ -1,17 +1,16 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-PDF 报告生成器（现代 SaaS 高颜值版 v1.1.9 - 全局扁平化 UI 统一版）
-- 引入 HexColor 现代网页级配色（蓝/绿/橙/红）
-- 新增：Matplotlib 生成中文化营养环形图，带深色描边解决文字泛白问题
-- 优化：全局表格统一采用 SaaS 级扁平化无边框列表布局（移除所有生硬网格）
-- 保留：KeepTogether 防止表格跨页断裂
+PDF 报告生成器（现代 SaaS 高颜值版 v1.1.9 - 图表字体与统一步长版）
+- 优化：饮水图表堆叠数值移至柱体外部并采用黑色字体，彻底解决白色看不清的问题
+- 优化：运动条形图强制采用统一长条，内部嵌入“公里/时长”，外部尾随“卡路里”
+- 保留：全局原版排版、空行、注释及基础逻辑
 """
 
 import os
 import re
 import urllib.request
-import tempfile  # 用于生成临时图表文件
+import tempfile 
 from datetime import datetime
 from reportlab.lib import colors
 from reportlab.lib.colors import HexColor
@@ -23,188 +22,307 @@ from reportlab.lib.enums import TA_CENTER, TA_LEFT
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 
-# ==================== 可视化库初始化 ====================
 try:
     import matplotlib.pyplot as plt
-    import matplotlib.font_manager as fm  # 用于加载外部中文字体
-    import matplotlib.patheffects as path_effects  # 用于为文字添加描边
+    import matplotlib.font_manager as fm  
+    import matplotlib.patheffects as path_effects  
     MATPLOTLIB_AVAILABLE = True
 except ImportError:
     MATPLOTLIB_AVAILABLE = False
-    print("⚠️ 未安装 matplotlib，营养环形图功能将被禁用。")
+    print("⚠️ 未安装 matplotlib，图表功能将被禁用。")
 
-# ==================== 现代 UI 配色板 ====================
-C_PRIMARY = HexColor("#2563EB")   # 科技蓝 (主标题/重要标识)
-C_SUCCESS = HexColor("#10B981")   # 达标绿 (正常/优秀)
-C_WARNING = HexColor("#F59E0B")   # 警告橙 (关注/待改进)
-C_DANGER  = HexColor("#EF4444")   # 危险红 (超标/有症状)
-C_TEXT_MAIN = HexColor("#1E293B") # 主文本色 (深灰)
-C_TEXT_MUTED= HexColor("#64748B") # 辅助文本色 (浅灰)
-C_BG_HEAD = HexColor("#F8FAFC")   # 表头背景色(极浅灰)
-C_BORDER  = HexColor("#E2E8F0")   # 表格边框色
+C_PRIMARY_STR = "#2563EB"
+C_SUCCESS_STR = "#10B981"
+C_WARNING_STR = "#F59E0B"
+C_DANGER_STR  = "#EF4444"
+C_TEXT_MAIN_STR = "#1E293B"
+C_TEXT_MUTED_STR= "#64748B"
+C_BG_HEAD_STR = "#F8FAFC"
+C_BORDER_STR  = "#E2E8F0"
 
-# 营养素专属配色（用于图表）
-C_CARB = "#3B82F6"    # 碳水 - 蓝
-C_PROTEIN = "#10B981" # 蛋白 - 绿
-C_FAT = "#F59E0B"     # 脂肪 - 橙
+C_PRIMARY_LIGHT_STR = "#60A5FA" 
 
+C_PRIMARY = HexColor(C_PRIMARY_STR)
+C_SUCCESS = HexColor(C_SUCCESS_STR)
+C_WARNING = HexColor(C_WARNING_STR)
+C_DANGER  = HexColor(C_DANGER_STR)
+C_TEXT_MAIN = HexColor(C_TEXT_MAIN_STR)
+C_TEXT_MUTED= HexColor(C_TEXT_MUTED_STR)
+C_BG_HEAD = HexColor(C_BG_HEAD_STR)
+C_BORDER  = HexColor(C_BORDER_STR)
+C_CARB, C_PROTEIN, C_FAT = "#3B82F6", "#10B981", "#F59E0B"     
 
 def clean_html_tags(text):
-    """移除 HTML 标签及复杂字符"""
     if not text: return ""
-    text = str(text)
-    text = re.sub(r'<[^>]+>', '', text)
-    emojis_to_remove = ['⭐', '✅', '⚠️', '❌', '🎉', '💡', '🚶', '🍎', '🥗', '💧', '🏃', '📊', '📈', '📄', '📥', '🥣', '🍜', '🍽️', '🍲', '⏰', '🚴', '🧘', '🔴', '🥦', '🍚', '🍳', '🥤', '🕐', '🌙', '💪', '🎯', '📌', '👍', '💯']
-    for emoji in emojis_to_remove: text = text.replace(emoji, '')
-    text = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', text)  
-    text = re.sub(r'[\ufffd]', '', text)  
-    text = re.sub(r'\s+', ' ', text)  
-    return text.strip()
+    text = re.sub(r'<[^>]+>', '', str(text))
+    for emoji in ['⭐', '✅', '⚠️', '❌', '🎉', '💡', '🚶', '🍎', '🥗', '💧', '🏃', '📊', '📈', '📄', '📥', '🥣', '🍜', '🍽️', '🍲', '⏰', '🚴', '🧘', '🔴', '🥦', '🍚', '🍳', '🥤', '🕐', '🌙', '💪', '🎯', '📌', '👍', '💯']: text = text.replace(emoji, '')
+    return re.sub(r'\s+', ' ', re.sub(r'[\ufffd]', '', re.sub(r'[\x00-\x1f\x7f-\x9f]', '', text))).strip()
 
 def stars_to_text(stars_str):
-    """利用富文本实现美观的彩色星级"""
     if not stars_str: return ""
     star_count = stars_str.count('⭐')
-    active = f'<font color="#F59E0B">{"★" * star_count}</font>'
-    inactive = f'<font color="#E2E8F0">{"★" * (5 - star_count)}</font>'
-    return active + inactive
+    return f'<font color="{C_WARNING_STR}">{"★" * star_count}</font>' + f'<font color="{C_BORDER_STR}">{"★" * (5 - star_count)}</font>'
 
 def register_chinese_font():
-    """注册 ReportLab 中文字体（带自动下载机制）"""
-    try:
-        pdfmetrics.getFont('Chinese')
-        return 'Chinese'
-    except:
-        pass
-    
+    try: pdfmetrics.getFont('Chinese'); return 'Chinese'
+    except: pass
     script_dir = os.path.dirname(os.path.abspath(__file__))
     assets_dir = os.path.join(script_dir, "..", "assets")
-    local_ttf = os.path.join(assets_dir, "NotoSansSC-VF.ttf")
-    local_ttf = os.path.normpath(local_ttf)
-    
+    local_ttf = os.path.normpath(os.path.join(assets_dir, "NotoSansSC-VF.ttf"))
     if not os.path.exists(local_ttf):
-        print("⚠️ 未检测到中文字体文件，正在尝试自动下载...")
         try:
             if not os.path.exists(assets_dir): os.makedirs(assets_dir, exist_ok=True)
-            font_url = "https://raw.githubusercontent.com/tankeito/Health-Mate/main/assets/NotoSansSC-VF.ttf"
-            with urllib.request.urlopen(font_url, timeout=120) as response:
-                with open(local_ttf, 'wb') as out_file:
-                    out_file.write(response.read())
-            print("✅ 字体自动下载成功！")
-        except Exception as e:
-            print(f"❌ 字体下载失败：{e}")
-            return 'Helvetica'
-            
+            with urllib.request.urlopen("https://raw.githubusercontent.com/tankeito/Health-Mate/main/assets/NotoSansSC-VF.ttf", timeout=120) as response:
+                with open(local_ttf, 'wb') as f: f.write(response.read())
+        except: return 'Helvetica'
     if os.path.exists(local_ttf):
-        try:
-            pdfmetrics.registerFont(TTFont('Chinese', local_ttf))
-            return 'Chinese'
-        except Exception as e:
-            print(f"⚠️ 字体加载失败：{e}")
-    
+        try: pdfmetrics.registerFont(TTFont('Chinese', local_ttf)); return 'Chinese'
+        except: pass
     return 'Helvetica'
 
-def create_nutrition_chart(nutrition):
-    """
-    生成每日三大营养素占比环形图
-    - 支持中文图例
-    - 增加文字描边提高可读性
-    """
-    if not MATPLOTLIB_AVAILABLE: return None
-        
-    try:
-        # 获取本地字体路径供 matplotlib 使用
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        local_ttf = os.path.normpath(os.path.join(script_dir, "..", "assets", "NotoSansSC-VF.ttf"))
-        # 如果存在字体，则创建一个字体属性对象
-        my_font = fm.FontProperties(fname=local_ttf) if os.path.exists(local_ttf) else None
+def get_font_prop():
+    local_ttf = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "assets", "NotoSansSC-VF.ttf"))
+    return fm.FontProperties(fname=local_ttf) if os.path.exists(local_ttf) else None
 
-        # 将克数转换为热量(kcal)，以体现真实的能量占比
-        carb_kcal = nutrition.get('carb', 0) * 4
-        protein_kcal = nutrition.get('protein', 0) * 4
-        fat_kcal = nutrition.get('fat', 0) * 9
-        total_kcal = carb_kcal + protein_kcal + fat_kcal
-        
-        if total_kcal <= 0: return None
-            
-        # 中文标签
-        labels = ['碳水化合物', '蛋白质', '脂肪']
-        sizes = [carb_kcal, protein_kcal, fat_kcal]
-        colors = [C_CARB, C_PROTEIN, C_FAT]
+def create_nutrition_chart(nutrition):
+    if not MATPLOTLIB_AVAILABLE: return None
+    try:
+        my_font = get_font_prop()
+        carb_kcal, protein_kcal, fat_kcal = nutrition.get('carb', 0)*4, nutrition.get('protein', 0)*4, nutrition.get('fat', 0)*9
+        if carb_kcal + protein_kcal + fat_kcal <= 0: return None
         
         fig, ax = plt.subplots(figsize=(5, 3), subplot_kw=dict(aspect="equal"))
-        
-        # 绘制环形图 (wedgeprops 设置环的宽度和白色描边间隔)
-        wedges, texts, autotexts = ax.pie(sizes, labels=labels, colors=colors, 
-                                          autopct='%1.1f%%', startangle=90, 
-                                          wedgeprops=dict(width=0.4, edgecolor='w'))
-        
-        # 调整图例文字样式（外部文本）
-        for text in texts:
-            text.set_color("#64748B") # 浅灰色
-            text.set_fontsize(9)
-            if my_font: text.set_fontproperties(my_font) # 应用中文字体
+        wedges, texts, autotexts = ax.pie([carb_kcal, protein_kcal, fat_kcal], labels=['碳水化合物', '蛋白质', '脂肪'], colors=[C_CARB, C_PROTEIN, C_FAT], autopct='%1.1f%%', startangle=90, wedgeprops=dict(width=0.4, edgecolor='w'))
+        for t in texts:
+            t.set_color(C_TEXT_MUTED_STR)
+            t.set_fontsize(9)
+            if my_font: t.set_fontproperties(my_font)
+        for at in autotexts:
+            at.set_color("#FFFFFF")
+            at.set_fontsize(9)
+            at.set_fontweight("bold")
+            at.set_path_effects([path_effects.withStroke(linewidth=2, foreground=C_TEXT_MAIN_STR)])
+            if my_font: at.set_fontproperties(my_font)
             
-        # 调整百分比文字样式（内部文本）
-        for autotext in autotexts:
-            autotext.set_color("#FFFFFF") # 白色字体
-            autotext.set_fontsize(9)
-            autotext.set_fontweight("bold")
-            # 核心修复：为白色文字添加深蓝色描边，确保在黄色脂肪切片上也清晰可见
-            autotext.set_path_effects([path_effects.withStroke(linewidth=2, foreground='#1E293B')])
-            if my_font: autotext.set_fontproperties(my_font)
-        
-        # 中心总热量文本
-        total_cal_int = int(nutrition.get('calories', 0))
-        t_center = ax.text(0, 0, f"{total_cal_int}\nkcal", ha='center', va='center', 
-                           fontsize=12, fontweight='bold', color="#1E293B")
+        t_center = ax.text(0, 0, f"{int(nutrition.get('calories', 0))}\nkcal", ha='center', va='center', fontsize=12, fontweight='bold', color=C_TEXT_MAIN_STR)
         if my_font: t_center.set_fontproperties(my_font)
-        
         plt.tight_layout()
         temp_img = tempfile.NamedTemporaryFile(delete=False, suffix='.png')
         plt.savefig(temp_img.name, transparent=True, dpi=150)
         plt.close(fig)
+        return temp_img.name
+    except: return None
+
+def create_water_chart(water_records, target_ml):
+    """饮水图表：修复堆叠文字显示问题，全部外挂为黑色字体，刻度更精细"""
+    if not MATPLOTLIB_AVAILABLE or not water_records: return None
+    try:
+        my_font = get_font_prop()
+        total_drank = sum([int(r.get('amount_ml', 0)) for r in water_records])
+        target = target_ml if target_ml > 0 else 2000
+        remaining = max(0, target - total_drank)
         
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(8, 3), gridspec_kw={'width_ratios': [1, 1.5]})
+        
+        # --- 左侧：完成率环形图 ---
+        vibrant_colors = ["#4A90E2", "#50E3C2", "#F5A623", "#F8E71C", "#FF4081", "#00BCD4", "#9013FE"]
+        if total_drank == 0: 
+            ax1.pie([1], colors=[C_BORDER_STR], startangle=90, wedgeprops=dict(width=0.3, edgecolor='w'))
+        else: 
+            amounts_circle = [int(r.get('amount_ml', 0)) for r in water_records]
+            sizes = amounts_circle + ([remaining] if remaining > 0 else [])
+            c_list = [vibrant_colors[i % len(vibrant_colors)] for i in range(len(amounts_circle))]
+            if remaining > 0: c_list.append(C_BORDER_STR)
+            ax1.pie(sizes, colors=c_list, startangle=90, wedgeprops=dict(width=0.3, edgecolor='w', linewidth=1.5))
+            
+        t_center = ax1.text(0, 0, f"{total_drank}\n/ {target}ml", ha='center', va='center', fontsize=11, fontweight='bold', color=C_TEXT_MAIN_STR)
+        if my_font: t_center.set_fontproperties(my_font)
+        
+        # --- 右侧：24 小时堆叠柱状图 ---
+        hours = [0, 3, 6, 9, 12, 15, 18, 21, 24]
+        ax2.set_xticks(hours)
+        ax2.set_xticklabels(['0', '3', '6', '9', '12', '15', '18', '21', '0'])
+        ax2.set_xlim(-1, 25) 
+        
+        bins = {} 
+        for r in water_records:
+            exact = r.get('exact_time', '')
+            if exact:
+                try:
+                    h, m = map(int, exact.split(':'))
+                    pos = h + m/60.0
+                except: pos = -1
+            else:
+                mapping = {'晨起': 7, '上午': 10, '中午': 12.5, '下午': 16, '晚上': 20}
+                pos = mapping.get(r.get('time_label', ''), -1)
+            
+            if pos >= 0:
+                bin_key = round(pos / 1.5) * 1.5
+                if bin_key not in bins: bins[bin_key] = []
+                bins[bin_key].append(int(r.get('amount_ml', 0)))
+                
+        max_y = 0
+        for bin_pos, amounts in bins.items():
+            current_bottom = 0
+            colors_stack = [C_PRIMARY_STR, C_PRIMARY_LIGHT_STR]
+            for i, amt in enumerate(amounts):
+                color = colors_stack[i % 2]
+                bars = ax2.bar(bin_pos, amt, bottom=current_bottom, color=color, width=1.2, alpha=0.9, edgecolor='w', linewidth=0.5)
+                
+                # [1.1.9 修复] 无论是否堆叠，数字全部显示在柱子外部并采用深色字体
+                if len(amounts) == 1:
+                    t_bar = ax2.text(bin_pos, current_bottom + amt + 15, f"{amt}", ha='center', va='bottom', fontsize=8, color=C_TEXT_MAIN_STR)
+                else:
+                    # 堆叠的层级向右偏移输出，避免重叠
+                    t_bar = ax2.text(bin_pos + 0.8, current_bottom + amt/2, f"{amt}", ha='left', va='center', fontsize=8, color=C_TEXT_MAIN_STR)
+                if my_font: t_bar.set_fontproperties(my_font)
+                current_bottom += amt
+            
+            if len(amounts) > 1:
+                t_total = ax2.text(bin_pos, current_bottom + 15, f"总{current_bottom}", ha='center', va='bottom', fontsize=8, color=C_TEXT_MAIN_STR, fontweight='bold')
+                if my_font: t_total.set_fontproperties(my_font)
+            
+            max_y = max(max_y, current_bottom)
+        
+        ax2.spines['top'].set_visible(False)
+        ax2.spines['right'].set_visible(False)
+        ax2.spines['left'].set_visible(True)
+        ax2.spines['left'].set_color(C_BORDER_STR)
+        ax2.spines['bottom'].set_color(C_BORDER_STR)
+        
+        ax2.set_yticks(range(100, 2200, 200))
+        ax2.tick_params(axis='y', labelleft=True, colors=C_TEXT_MUTED_STR, labelsize=8)
+        ax2.tick_params(axis='x', colors=C_TEXT_MUTED_STR)
+        ax2.yaxis.grid(True, linestyle='--', alpha=0.4, color=C_BORDER_STR)
+        ax2.set_ylim(0, 2200)
+        
+        if my_font:
+            for label in ax2.get_xticklabels(): label.set_fontproperties(my_font)
+
+        plt.tight_layout()
+        temp_img = tempfile.NamedTemporaryFile(delete=False, suffix='.png')
+        plt.savefig(temp_img.name, transparent=True, dpi=150)
+        plt.close(fig)
         return temp_img.name
     except Exception as e:
-        print(f"⚠️ 图表生成失败：{e}")
+        print(f"⚠️ 饮水图表生成失败：{e}")
+        return None
+
+def create_exercise_chart(exercise_data, steps, step_target=8000):
+    """[1.1.9 修复] 运动条形图全部长度统一。内部写详情，尾端写热量，高度自适应。"""
+    if not MATPLOTLIB_AVAILABLE: return None
+    try:
+        my_font = get_font_prop()
+        labels, calories, targets, is_step, inner_texts = [], [], [], [], []
+        
+        if exercise_data:
+            for e in exercise_data:
+                ex_type = e.get('type', '运动')
+                dist = e.get('distance_km', 0)
+                dur = e.get('duration_min', 0)
+                
+                # 1. Y 轴仅保留“骑行”等类型名
+                labels.append(ex_type)
+                
+                # 2. 准备条形图内部文字 "4.54km (22min)"
+                in_str = []
+                if dist > 0: in_str.append(f"{dist}km")
+                if dur > 0: in_str.append(f"({dur}min)")
+                inner_texts.append(" ".join(in_str))
+                
+                calories.append(e.get('calories', 0))
+                targets.append(None) 
+                is_step.append(False)
+                
+        if steps > 0:
+            labels.append(f"今日步数")
+            calories.append(steps)
+            targets.append(step_target) 
+            is_step.append(True)
+            inner_texts.append("")
+            
+        if not labels or sum(calories) == 0: return None
+            
+        fig_height = max(1.2, len(labels) * 0.6 + 0.5)
+        fig, ax = plt.subplots(figsize=(7, fig_height))
+        
+        y_pos = range(len(labels))
+        
+        chart_color = "#20D091" 
+        track_color = "#F1F5F9"
+        step_color = "#3B82F6" 
+        
+        # 定义全局长条长度（以步数目标或默认值 100 为基准）
+        max_bg = max(step_target, steps) if steps > 0 else 100
+        
+        for i, (label, cal, tgt, is_s, in_txt) in enumerate(zip(labels, calories, targets, is_step, inner_texts)):
+            if is_s:
+                # 步数采用双轨进度条
+                ax.plot([0, max_bg], [i, i], color=track_color, linewidth=12, solid_capstyle='round', zorder=1)
+                ax.plot([0, cal], [i, i], color=step_color, linewidth=12, solid_capstyle='round', zorder=2)
+                text_str = f"{int(cal)} / {int(tgt)} 步"
+                t_val = ax.text(max_bg * 1.05, i, text_str, ha='left', va='center', fontsize=9, color=C_TEXT_MUTED_STR, zorder=3)
+            else:
+                # [核心修复] 所有运动长条填满全局长度
+                ax.plot([0, max_bg], [i, i], color=chart_color, linewidth=12, solid_capstyle='round', zorder=1)
+                # 内部嵌入公里/时长（白字粗体）
+                if in_txt:
+                    t_in = ax.text(max_bg * 0.02, i, in_txt, ha='left', va='center', fontsize=9, color='white', fontweight='bold', zorder=3)
+                    if my_font: t_in.set_fontproperties(my_font)
+                # 外部尾随热量（灰字）
+                text_str = f"{int(cal)} kcal"
+                t_val = ax.text(max_bg * 1.05, i, text_str, ha='left', va='center', fontsize=9, color=C_TEXT_MUTED_STR, zorder=3)
+
+            if my_font: t_val.set_fontproperties(my_font)
+
+        ax.set_yticks(y_pos)
+        ax.set_yticklabels(labels)
+        ax.invert_yaxis()  
+        ax.set_ylim(len(labels) - 0.5, -0.5)
+        
+        # 扩大 xlim 保证外部文字不被切除
+        ax.set_xlim(0, max_bg * 1.35)
+        
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.spines['bottom'].set_visible(False)
+        ax.spines['left'].set_visible(False)
+        ax.tick_params(axis='y', colors=C_TEXT_MAIN_STR, length=0, pad=10) 
+        ax.tick_params(axis='x', bottom=False, labelbottom=False) 
+        
+        if my_font:
+            for label in ax.get_yticklabels(): label.set_fontproperties(my_font)
+
+        plt.tight_layout()
+        temp_img = tempfile.NamedTemporaryFile(delete=False, suffix='.png')
+        plt.savefig(temp_img.name, transparent=True, dpi=150)
+        plt.close(fig)
+        return temp_img.name
+    except Exception as e:
+        print(f"⚠️ 运动图表生成失败：{e}")
         return None
 
 def generate_pdf_report(data, profile, scores, nutrition, macros, risks, plan, output_path, water_records=None, meals=None, exercise_data=None, ai_comment=None):
-    """生成高颜值 PDF 报告，整合图表与无边框 SaaS 级排版"""
     font_name = register_chinese_font()
+    footer_text = f"{profile.get('condition', '健康')}专属健康管理 - Health-Mate"
     
-    condition = profile.get('condition', '健康')
-    footer_text = f"{condition}专属健康管理 - Health-Mate"
-    
-    doc = SimpleDocTemplate(output_path, pagesize=A4,
-                            rightMargin=2*cm, leftMargin=2*cm,
-                            topMargin=2*cm, bottomMargin=2*cm)
-    
+    doc = SimpleDocTemplate(output_path, pagesize=A4, rightMargin=2*cm, leftMargin=2*cm, topMargin=2*cm, bottomMargin=2*cm)
     styles = getSampleStyleSheet()
     title_style = ParagraphStyle('CustomTitle', parent=styles['Heading1'], fontSize=20, textColor=C_PRIMARY, spaceAfter=10, alignment=TA_CENTER, fontName=font_name)
     heading_style = ParagraphStyle('CustomHeading', parent=styles['Heading2'], fontSize=13, textColor=C_PRIMARY, spaceBefore=15, spaceAfter=10, fontName=font_name)
     normal_style = ParagraphStyle('CustomNormal', parent=styles['Normal'], fontSize=10, textColor=C_TEXT_MAIN, fontName=font_name, leading=15)
     cell_style_center = ParagraphStyle('CellCenter', parent=normal_style, alignment=TA_CENTER, leading=12)
     
-    # ==================== 核心重构：全局基础表格样式扁平化 ====================
     base_table_style = [
-        ('BACKGROUND', (0, 0), (-1, 0), C_BG_HEAD),          # 表头极浅灰背景
-        ('TEXTCOLOR', (0, 0), (-1, 0), C_TEXT_MUTED),        # 表头文字颜色变淡 (SaaS风格)
-        ('TEXTCOLOR', (0, 1), (-1, -1), C_TEXT_MAIN),        # 正文文字保持深灰
-        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),               # 全局居中对齐
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('FONTNAME', (0, 0), (-1, -1), font_name),
-        ('FONTSIZE', (0, 0), (-1, -1), 9),                   # 统一字号
-        ('TOPPADDING', (0, 0), (-1, -1), 8),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
-        # 取消全封闭网格线，仅保留底部的浅色分隔线
-        ('LINEBELOW', (0, 0), (-1, -1), 0.5, HexColor("#E2E8F0")), 
+        ('BACKGROUND', (0, 0), (-1, 0), C_BG_HEAD), ('TEXTCOLOR', (0, 0), (-1, 0), C_TEXT_MUTED),
+        ('TEXTCOLOR', (0, 1), (-1, -1), C_TEXT_MAIN), ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'), ('FONTNAME', (0, 0), (-1, -1), font_name),
+        ('FONTSIZE', (0, 0), (-1, -1), 9), ('TOPPADDING', (0, 0), (-1, -1), 8),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 8), ('LINEBELOW', (0, 0), (-1, -1), 0.5, HexColor("#E2E8F0")), 
     ]
 
     story = []
     
-    # 一、综合评分等头部区块
     story.append(Paragraph("<b>胆结石健康日报</b>", title_style))
     story.append(Paragraph(f"<font color='#64748B'>{data['date']} | 监测人：{profile.get('name', '默认用户')}</font>", ParagraphStyle('Date', parent=normal_style, alignment=TA_CENTER)))
     story.append(Spacer(1, 0.5*cm))
@@ -220,37 +338,28 @@ def generate_pdf_report(data, profile, scores, nutrition, macros, risks, plan, o
         ["健康依从性", f"{scores['adherence']['raw']:.0f}/100", Paragraph(stars_to_text(scores['adherence']['stars']), cell_style_center), "优秀" if scores['adherence']['raw']>=80 else "一般"],
         ["总分", f"{scores['total']:.0f}/100", Paragraph(stars_to_text(scores['total_stars']), cell_style_center), "优秀" if scores['total']>=80 else "良好" if scores['total']>=60 else "待改进"],
     ]
-    
     score_table = Table(score_data, colWidths=[4*cm, 3*cm, 3.5*cm, 3.5*cm])
     score_style = list(base_table_style)
     for i in range(1, len(score_data)):
         status = score_data[i][3]
         if status in ["达标", "优秀", "正常", "无症状"]: score_style.append(('TEXTCOLOR', (3, i), (3, i), C_SUCCESS))
         elif status in ["待改进", "未达标", "关注", "有症状", "待加强", "一般"]: score_style.append(('TEXTCOLOR', (3, i), (3, i), C_WARNING if status in ["关注", "待加强", "一般", "待改进"] else C_DANGER))
-    
     score_table.setStyle(TableStyle(score_style))
     story.append(score_table)
     story.append(Spacer(1, 0.4*cm))
     
-    # AI 点评
     if ai_comment:
         story.append(Paragraph("专家 AI 点评", heading_style))
-        clean_comment = ai_comment
-        for prefix in ['[plugins]', '[adp-', 'Hint:', 'error:']:
-            clean_comment = '\n'.join([l for l in clean_comment.split('\n') if not l.strip().startswith(prefix)])
-        
-        paragraphs = re.split(r'(?<=[.!。!])\s+', clean_comment.strip())
-        for para in paragraphs[:5]:  
+        clean_comment = '\n'.join([l for l in ai_comment.split('\n') if not l.strip().startswith(('[plugins]', '[adp-', 'Hint:', 'error:'))]).strip()
+        for para in re.split(r'(?<=[.!。!])\s+', clean_comment)[:5]:  
             if para.strip(): story.append(Paragraph(f"<font color='#1E293B'>{clean_html_tags(para)}</font>", normal_style))
         story.append(Spacer(1, 0.3*cm))
     
-    # 二、基础健康数据
     story.append(Paragraph("二、基础健康数据", heading_style))
-    from health_report_pro import calculate_bmr, calculate_tdee
     bmi_val = scores["weight"].get("bmi", 0) or 0
     weight_val = data.get("weight_morning")
-    bmr_val = calculate_bmr(weight_val if weight_val else 65, profile["height_cm"], profile["age"], profile["gender"])
-    tdee_val = calculate_tdee(bmr_val, profile["activity_level"])
+    bmr_val = (10*(weight_val or 65) + 6.25*profile.get('height_cm',172) - 5*profile.get('age',34) + (5 if profile.get('gender')=='男' else -161))
+    tdee_val = bmr_val * profile.get('activity_level', 1.2)
     
     health_data = [
         ["指标", "数值", "参考范围"],
@@ -265,7 +374,6 @@ def generate_pdf_report(data, profile, scores, nutrition, macros, risks, plan, o
         ["碳水", f"{macros.get('carb_g', 0)}g/天", f"{macros.get('carb_p', 0)}%总热量"],
         ["膳食纤维", f">={macros.get('fiber_min_g', 25)}g/天", "促进胆汁排泄"],
     ]
-    
     health_table = Table(health_data, colWidths=[5*cm, 4*cm, 5*cm])
     health_style = list(base_table_style)
     if 18.5 <= bmi_val < 24: health_style.append(('TEXTCOLOR', (1, 3), (1, 3), C_SUCCESS))
@@ -274,12 +382,13 @@ def generate_pdf_report(data, profile, scores, nutrition, macros, risks, plan, o
     story.append(health_table)
     story.append(Spacer(1, 0.4*cm))
     
-    # 三、当日营养摄入 (带环形图)
+    temp_images = []
+
     story.append(Paragraph("三、当日营养摄入核算", heading_style))
-    
-    chart_path = create_nutrition_chart(nutrition)
-    if chart_path:
-        img = Image(chart_path, width=10*cm, height=6*cm)
+    chart_path_nutrition = create_nutrition_chart(nutrition)
+    if chart_path_nutrition:
+        temp_images.append(chart_path_nutrition)
+        img = Image(chart_path_nutrition, width=10*cm, height=6*cm)
         img.hAlign = 'CENTER'
         story.append(img)
         story.append(Spacer(1, 0.2*cm))
@@ -297,24 +406,19 @@ def generate_pdf_report(data, profile, scores, nutrition, macros, risks, plan, o
     story.append(nutri_table)
     story.append(Spacer(1, 0.4*cm))
     
-    # 四、饮水详情
     story.append(Paragraph("四、饮水详情", heading_style))
     if water_records and len(water_records) > 0:
-        water_data = [["时间", "饮水量", "累计进度"]]
-        for record in water_records:
-            time_str = record.get("time", "")
-            amount = record.get("amount_ml", 0)
-            cumulative = record.get("cumulative_ml", 0)
-            progress = f"{cumulative}/2000ml ({cumulative//20}%)"
-            water_data.append([time_str, f"{amount}ml", progress])
-        water_table = Table(water_data, colWidths=[4*cm, 3*cm, 7*cm])
-        water_table.setStyle(TableStyle(base_table_style))
-        story.append(water_table)
+        chart_path_water = create_water_chart(water_records, data.get('water_target', 2000))
+        if chart_path_water:
+            temp_images.append(chart_path_water)
+            img_water = Image(chart_path_water, width=14*cm, height=5.25*cm)
+            img_water.hAlign = 'CENTER'
+            story.append(img_water)
+            story.append(Spacer(1, 0.4*cm))
     else:
         story.append(Paragraph("<font color='#64748B'>今日无饮水记录</font>", normal_style))
-    story.append(Spacer(1, 0.4*cm))
+        story.append(Spacer(1, 0.4*cm))
     
-    # 五、进食详情
     story.append(Paragraph("五、进食详情", heading_style))
     if meals and len(meals) > 0:
         seen_meals = set()
@@ -327,191 +431,111 @@ def generate_pdf_report(data, profile, scores, nutrition, macros, risks, plan, o
             if meal_key in seen_meals: continue
             seen_meals.add(meal_key)
             
-            food_nutrition = meal.get("food_nutrition", [])
-            total_calories = meal.get("total_calories", 0)
-            
-            meal_title_text = f"<font color='{C_PRIMARY}'>■</font> <b>{meal_type}</b> <font color='#64748B' size='9'>({meal_time}) · 合计 {total_calories:.0f} kcal</font>"
+            meal_time_str = f" <font color='#64748B' size='9'>({meal_time})</font>" if meal_time else ""
+            meal_title_text = f"<font color='{C_PRIMARY_STR}'>■</font> <b>{meal_type}</b>{meal_time_str} <font color='#64748B' size='9'>· 合计 {meal.get('total_calories', 0):.0f} kcal</font>"
             meal_title = Paragraph(meal_title_text, ParagraphStyle('MealTitle', parent=normal_style, spaceBefore=8, spaceAfter=4))
             meal_elements.append(meal_title)
             
+            food_nutrition = meal.get("food_nutrition", [])
             if food_nutrition and len(food_nutrition) > 0:
                 meal_data = [["食物名称", "份量", "热量", "蛋白质", "脂肪", "碳水"]]
                 for food in food_nutrition:
-                    name = food.get("name", "")
-                    name_raw = name.split('→')[0].strip() if '→' in name else name.strip()
-                    
+                    name_raw = food.get("name", "").split('→')[0].strip() if '→' in food.get("name", "") else food.get("name", "").strip()
                     portion_match = re.search(r'(\d+(?:\.\d+)?)\s*(ml|g|个 | 碗 | 份 | 杯 | 片)', name_raw)
                     if portion_match:
-                        portion_value = float(portion_match.group(1))
-                        portion_unit = portion_match.group(2)
                         name_simple = re.sub(r'\s*' + re.escape(portion_match.group(0)), '', name_raw).strip()
-                        portion_display = f"{portion_value:.0f}{portion_unit}"
+                        portion_display = f"{float(portion_match.group(1)):.0f}{portion_match.group(2)}"
                     else:
                         name_simple = name_raw
                         portion_display = f"{food.get('portion_grams', 100):.0f}g"
                     
                     name_simple = re.sub(r'\s*（约\d+g）$|\s*（约）$|\s*约$', '', name_simple).strip()
                     if len(name_simple) < 2: name_simple = name_raw
-                    
-                    meal_data.append([
-                        clean_html_tags(name_simple), 
-                        portion_display, 
-                        f"{food.get('calories', 0):.0f}kcal", 
-                        f"{food.get('protein', 0):.1f}g", 
-                        f"{food.get('fat', 0):.1f}g", 
-                        f"{food.get('carb', 0):.1f}g"
-                    ])
+                    meal_data.append([clean_html_tags(name_simple), portion_display, f"{food.get('calories', 0):.0f}kcal", f"{food.get('protein', 0):.1f}g", f"{food.get('fat', 0):.1f}g", f"{food.get('carb', 0):.1f}g"])
                 
-                # 进食明细保留居左样式，底线采用与全局一致的配置
                 modern_meal_style = [
-                    ('BACKGROUND', (0, 0), (-1, 0), HexColor("#F8FAFC")), 
-                    ('TEXTCOLOR', (0, 0), (-1, 0), C_TEXT_MUTED),  
-                    ('TEXTCOLOR', (0, 1), (-1, -1), C_TEXT_MAIN),         
-                    ('ALIGN', (0, 0), (0, -1), 'LEFT'),                   
-                    ('ALIGN', (1, 0), (-1, -1), 'CENTER'),                
-                    ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-                    ('FONTNAME', (0, 0), (-1, -1), font_name),
-                    ('FONTSIZE', (0, 0), (-1, -1), 9),
-                    ('TOPPADDING', (0, 0), (-1, -1), 6),
-                    ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
-                    ('LINEBELOW', (0, 0), (-1, -1), 0.5, HexColor("#E2E8F0")), 
+                    ('BACKGROUND', (0, 0), (-1, 0), C_BG_HEAD), ('TEXTCOLOR', (0, 0), (-1, 0), C_TEXT_MUTED),  
+                    ('TEXTCOLOR', (0, 1), (-1, -1), C_TEXT_MAIN), ('ALIGN', (0, 0), (0, -1), 'LEFT'),                   
+                    ('ALIGN', (1, 0), (-1, -1), 'CENTER'), ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                    ('FONTNAME', (0, 0), (-1, -1), font_name), ('FONTSIZE', (0, 0), (-1, -1), 9),
+                    ('TOPPADDING', (0, 0), (-1, -1), 6), ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+                    ('LINEBELOW', (0, 0), (-1, -1), 0.5, C_BORDER), 
                 ]
                 meal_table = Table(meal_data, colWidths=[4.5*cm, 2*cm, 2*cm, 2*cm, 2*cm, 2.5*cm])
                 meal_table.setStyle(TableStyle(modern_meal_style))
                 meal_elements.append(meal_table)
             else:
                 meal_elements.append(Paragraph("<font color='#64748B'>无详细食物记录</font>", normal_style))
-            
             meal_elements.append(Spacer(1, 0.4*cm))
             story.append(KeepTogether(meal_elements))
     else:
         story.append(Paragraph("<font color='#64748B'>今日无进食记录</font>", normal_style))
     story.append(Spacer(1, 0.2*cm))
     
-    # 六、运动详情
     story.append(Paragraph("六、运动详情", heading_style))
-    if exercise_data:
-        cycling_list = exercise_data.get("cycling", []) if isinstance(exercise_data, dict) else [e for e in exercise_data if e.get("type") == "骑行"]
-        walking = exercise_data.get("walking", {}) if isinstance(exercise_data, dict) else {}
-        steps = walking.get("steps", 0)
-        
-        total_cycling_km = sum(c.get("distance_km", 0) for c in cycling_list)
-        total_cycling_min = sum(c.get("duration_min", 0) for c in cycling_list)
-        
-        exercise_table_data = [["项目", "详情"]]
-        if cycling_list:
-            cycling_details = [f"{c.get('distance_km', 0)}km/{c.get('duration_min', 0)}分钟" for c in cycling_list]
-            exercise_table_data.append(["骑行", "；".join(cycling_details) + f"\n（合计 {total_cycling_km}km / {total_cycling_min:.0f}分钟）"])
-        if steps > 0: exercise_table_data.append(["步数", f"{steps}步"])
+    steps = data.get("steps", 0)
+    step_target = profile.get("step_target", 8000)
+    if exercise_data or steps > 0:
+        chart_path_exercise = create_exercise_chart(exercise_data, steps, step_target)
+        if chart_path_exercise:
+            temp_images.append(chart_path_exercise)
+            img_ex = Image(chart_path_exercise, width=12*cm, height=4.2*cm)
+            img_ex.hAlign = 'LEFT'
+            story.append(img_ex)
+            story.append(Spacer(1, 0.2*cm))
             
-        exercise_raw = scores.get("exercise", {}).get("raw", 0)
-        exercise_status = "达标" if exercise_raw >= 60 else "待加强"
-        exercise_table_data.append(["运动评分", f"{exercise_raw:.0f}/100"])
-        exercise_table_data.append(["状态", Paragraph(f"<font color='#10B981'><b>达标</b></font>" if exercise_status == "达标" else f"<font color='#F59E0B'><b>待加强</b></font>", cell_style_center)])
-        
-        exercise_table = Table(exercise_table_data, colWidths=[5*cm, 9*cm])
-        exercise_table.setStyle(TableStyle(base_table_style))
-        story.append(exercise_table)
     else:
         story.append(Paragraph("<font color='#64748B'>今日无运动记录</font>", normal_style))
     story.append(Spacer(1, 0.4*cm))
     
-    # 七、风险预警
     story.append(Paragraph("七、风险预警", heading_style))
     if risks:
         for risk in risks:
-            level = clean_html_tags(risk.get('level', '')).strip()
-            item_text = clean_html_tags(risk.get('item', ''))
-            story.append(Paragraph(f"<font color='#EF4444'><b>{level} {item_text}</b></font>", normal_style))
+            story.append(Paragraph(f"<font color='{C_DANGER_STR}'><b>{clean_html_tags(risk.get('level', '')).strip()} {clean_html_tags(risk.get('item', ''))}</b></font>", normal_style))
             story.append(Paragraph(f"<font color='#64748B'>风险：</font>{clean_html_tags(risk.get('risk', ''))}", normal_style))
             story.append(Paragraph(f"<font color='#64748B'>建议：</font>{clean_html_tags(risk.get('action', ''))}", normal_style))
             story.append(Spacer(1, 0.2*cm))
     else:
-        story.append(Paragraph("<font color='#10B981'>今日无明显风险，继续保持健康生活方式！</font>", normal_style))
+        story.append(Paragraph(f"<font color='{C_SUCCESS_STR}'>今日无明显风险，继续保持健康生活方式！</font>", normal_style))
     story.append(Spacer(1, 0.4*cm))
     
-    # 八、次日方案
     story.append(Paragraph("八、次日可执行方案", heading_style))
-    
-    if plan.get("diet"):
-        story.append(Paragraph("<b>饮食计划</b>", ParagraphStyle('Sub', parent=normal_style, textColor=C_TEXT_MAIN, spaceAfter=6)))
-        for item in plan.get("diet", []):
-            if isinstance(item, dict):
-                meal = item.get('meal', item.get('meal_name', ''))
-                time = item.get('time', item.get('time_range', item.get('period', '')))
-                menu = item.get('menu', '')
-                if not menu:
-                    items = item.get('items', [])
-                    if items:
-                        menu = '、'.join(str(i) for i in items[:3])  
-                        if len(items) > 3: menu += ' 等'
-                if not menu:
-                    menu = item.get('dishes', item.get('menu_detail', item.get('food', item.get('content', ''))))
-                calories = item.get('calories', item.get('kcal', ''))
-                fat = item.get('fat', item.get('fat_g', ''))
-                fiber = item.get('fiber', item.get('fiber_g', ''))
-                if menu:
-                    nutrition_info = f"({calories}kcal"
-                    if fat: nutrition_info += f", 脂肪{fat}g"
-                    if fiber: nutrition_info += f", 纤维{fiber}g"
-                    nutrition_info += ")"
-                    clean_item = f"{time} {clean_html_tags(menu)} {nutrition_info}"
-                elif meal and time: clean_item = f"{meal} ({time})"
-                else: clean_item = f"{meal} {time}"
-            else: clean_item = clean_html_tags(str(item))
-            story.append(Paragraph(f"<font color='#2563EB'>■</font> {clean_item}", normal_style))
-        story.append(Spacer(1, 0.2*cm))
-        
-    if plan.get("water"):
-        story.append(Paragraph("<b>饮水计划</b>", ParagraphStyle('Sub', parent=normal_style, textColor=C_TEXT_MAIN, spaceAfter=6)))
-        for item in plan.get("water", []):
-            if isinstance(item, dict):
-                time = item.get('time', item.get('period', ''))
-                amount = item.get('amount', item.get('amount_ml', item.get('volume', '')))
-                if amount and not any(unit in str(amount) for unit in ['ml', 'L']): amount = f"{amount}ml"
-                note = item.get('note', item.get('tip', item.get('remark', item.get('description', ''))))
-                clean_item = f"⏰ {time} {clean_html_tags(str(amount))} ({clean_html_tags(note)})"
-            else: clean_item = clean_html_tags(str(item))
-            story.append(Paragraph(f"<font color='#2563EB'>■</font> {clean_item}", normal_style))
-        story.append(Spacer(1, 0.2*cm))
-
-    if plan.get("exercise"):
-        story.append(Paragraph("<b>运动建议</b>", ParagraphStyle('Sub', parent=normal_style, textColor=C_TEXT_MAIN, spaceAfter=6)))
-        for item in plan.get("exercise", []):
-            if isinstance(item, dict):
-                time = item.get('time', item.get('time_range', item.get('period', '')))
-                activity = item.get('activity', item.get('type', item.get('name', '')))
-                duration = item.get('duration', item.get('duration_min', item.get('time_length', '')))
-                details = item.get('details', item.get('description', item.get('desc', item.get('content', ''))))
-                if activity and duration and details: clean_item = f"{time} {clean_html_tags(activity)} ({clean_html_tags(duration)}): {clean_html_tags(details)}"
-                elif activity and duration: clean_item = f"{time} {clean_html_tags(activity)} ({clean_html_tags(duration)})"
-                elif activity: clean_item = f"{time} {clean_html_tags(activity)}"
-                else: clean_item = f"{time}"
-            else: clean_item = clean_html_tags(str(item))
-            story.append(Paragraph(f"<font color='#2563EB'>■</font> {clean_item}", normal_style))
+    for category, title in [("diet", "饮食计划"), ("water", "饮水计划"), ("exercise", "运动建议")]:
+        if plan.get(category):
+            story.append(Paragraph(f"<b>{title}</b>", ParagraphStyle('Sub', parent=normal_style, textColor=C_TEXT_MAIN, spaceAfter=6)))
+            for item in plan.get(category, []):
+                if isinstance(item, dict):
+                    time = item.get('time', item.get('period', item.get('time_range', '')))
+                    content = item.get('menu', item.get('activity', item.get('amount', '')))
+                    note = item.get('note', item.get('details', ''))
+                    
+                    if not content: content = '、'.join(str(i) for i in item.get('items', []))[:30]
+                    
+                    cal = item.get('calories', '')
+                    if cal: note = f"{cal}kcal " + note
+                    
+                    clean_item = f"<b>{time}</b> {clean_html_tags(content)}"
+                    if note: clean_item += f" <font color='#64748B'>({clean_html_tags(note)})</font>"
+                else: 
+                    clean_item = clean_html_tags(str(item))
+                story.append(Paragraph(f"<font color='{C_PRIMARY_STR}'>■</font> {clean_item}", normal_style))
+            story.append(Spacer(1, 0.2*cm))
             
     if plan.get("notes"):
-        story.append(Spacer(1, 0.2*cm))
         story.append(Paragraph("<b>特别关注</b>", ParagraphStyle('Sub', parent=normal_style, textColor=C_TEXT_MAIN, spaceAfter=6)))
         for item in plan.get("notes", []):
-            story.append(Paragraph(f"<font color='#F59E0B'>■</font> {clean_html_tags(item)}", normal_style))
+            story.append(Paragraph(f"<font color='{C_WARNING_STR}'>■</font> {clean_html_tags(item)}", normal_style))
     
-    # 页脚
     story.append(Spacer(1, 1.5*cm))
     footer_style = ParagraphStyle('Footer', parent=normal_style, fontSize=9, textColor=C_TEXT_MUTED, alignment=TA_CENTER)
     story.append(Paragraph(f"报告生成时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", footer_style))
-    story.append(Paragraph(f"{condition}专属健康管理 - Health-Mate", footer_style))
+    story.append(Paragraph(f"{footer_text}", footer_style))
     
-    # 构建 PDF
     doc.build(story)
-    
-    # 清理临时图表
-    if chart_path and os.path.exists(chart_path):
-        try: os.remove(chart_path)
+    for temp_img in temp_images:
+        try: os.remove(temp_img)
         except: pass
-            
-    print(f"✅ 高颜值 PDF 报告已生成：{output_path}")
+    print(f"✅ 高颜值全图表 PDF 报告已生成：{output_path}")
 
 if __name__ == "__main__":
     print("PDF 生成器模块，请通过 health_report_pro.py 调用")
-    

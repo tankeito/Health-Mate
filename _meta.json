@@ -2,7 +2,7 @@
     "name": "health-mate",
     "display_name": "Health-Mate",
     "type": "python/app",
-    "version": "1.1.8",
+    "version": "1.1.9",
     "description": "Personal Health Assistant - 专业健康报告生成插件。必需环境变量：MEMORY_DIR（读取健康记录）。推送渠道（钉钉/飞书/Telegram）可选配置。",
     "author": "tankeito",
     "email": "tqd354@gmail.com",

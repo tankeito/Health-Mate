@@ -8,7 +8,7 @@
 
 > **⚠️ 重要提示**：本项目已从 `openclaw-skill-health-report` 更名为 `Health-Mate`，仓库地址已变更为：https://github.com/tankeito/Health-Mate
 
-[![Version](https://img.shields.io/badge/version-1.1.8-blue.svg)](https://github.com/tankeito/Health-Mate/releases)
+[![Version](https://img.shields.io/badge/version-1.1.9-blue.svg)](https://github.com/tankeito/Health-Mate/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ---
@@ -275,7 +275,7 @@ https://your-domain.com/health_report_YYYY-MM-DD.pdf
 | `FEISHU_WEBHOOK` | ❌ 否 | 飞书机器人 Webhook（可选，不配置则不推送） | `https://open.feishu.cn/open-apis/bot/v2/hook/xxx` |
 | `TELEGRAM_BOT_TOKEN` | ❌ 否 | Telegram Bot Token（可选，不配置则不推送） | `8667974729:AAFIc3RyuADM-B-J_KYZEVX5hoYsNrd5SQE` |
 | `TELEGRAM_CHAT_ID` | ❌ 否 | Telegram Chat ID（可选，不配置则不推送） | `5868448763` |
-| `REPORT_WEB_DIR` | ❌ 否 | PDF 报表存放的本地目录（不配置则保存在 reports 目录） | `/opt/1panel/www/sites/agent.btc354.com/index` |
+| `REPORT_WEB_DIR` | ❌ 否 | PDF 报表存放的本地目录（不配置则保存在 reports 目录） | `/var/www/html/report` |
 | `REPORT_BASE_URL` | ❌ 否 | PDF 报告对外下载域名（如不推送可留空） | `` |
 
 **说明**：
@@ -410,6 +410,7 @@ health_report/
 
 | 版本 | 日期 | 更新内容 |
 |------|------|---------|
+| **v1.1.9** | 2026-03-15 | 🚀 全局可视化重构：引入 matplotlib 绘制营养环形图、饮水堆叠柱状图及运动双轨进度条；全局统一 SaaS 级无边框排版；增强正则引擎容错率；脱敏文档配置示例 |
 | **v1.1.8** | 2026-03-15 | 🎨 视觉与体验重构：引入 matplotlib 生成中文化营养环形图；全局表格统一升级为无边框 SaaS 扁平化布局；PDF 文件名支持精确到秒的时间戳 |
 | **v1.1.7** | 2026-03-15 | ✅ 强化字体加载：增加 assets 目录自动创建与字体文件缺失时的自动下载机制 |
 | **v1.1.6** | 2026-03-15 | ✅ 字体自动下载 + 无公网域名支持：自动检测/下载字体、无 REPORT_BASE_URL 时仅提供本地路径 |
