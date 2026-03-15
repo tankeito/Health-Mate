@@ -84,6 +84,11 @@ def generate_pdf_report(data, profile, scores, nutrition, macros, risks, plan, o
     """生成高颜值 PDF 报告（修复 2：JSON 解析 + 修复 3：AI 点评）"""
     font_name = register_chinese_font()
     
+    # 根据用户病理生成页脚
+    condition = profile.get('condition', '健康')
+    user_name = profile.get('name', '用户')
+    footer_text = f"{condition}专属健康管理 - Health-Mate"
+    
     doc = SimpleDocTemplate(output_path, pagesize=A4,
                            rightMargin=2*cm, leftMargin=2*cm,
                            topMargin=2*cm, bottomMargin=2*cm)

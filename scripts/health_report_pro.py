@@ -345,18 +345,28 @@ def generate_ai_comment(health_data, config):
     """调用大模型生成 AI 专属健康点评（≥150 字）"""
     user_profile = config.get('user_profile', {})
     condition = user_profile.get('condition', '胆结石')
+    user_name = user_profile.get('name', '用户')
     standards = get_condition_standards(config, condition)
     
     fat_min, fat_max = standards.get('fat_min_g', 40), standards.get('fat_max_g', 50)
     fiber_min = standards.get('fiber_min_g', 25)
     
+    # 根据病理类型生成饮食原则描述
+    condition_tips = {
+        '胆结石': '低脂（{}-{}g/天）、高纤维（≥{}g/天）、规律进食'.format(fat_min, fat_max, fiber_min),
+        '糖尿病': '低糖（<50g/天）、高纤维（≥30g/天）、少食多餐',
+        '高血压': '低盐（<2000mg/天）、高钾、高纤维',
+        '健身减脂': '高蛋白（≥2g/kg）、适量碳水、低脂肪'
+    }
+    diet_principle = condition_tips.get(condition, '均衡饮食')
+    
     # 构建 Prompt
-    prompt = f"""你是一位专业的私人营养师，专门服务胆结石患者。请根据以下健康数据，生成一段深度健康点评：
+    prompt = f"""你是一位专业的私人营养师，专门服务{condition}患者。请根据以下健康数据，生成一段深度健康点评：
 
 【用户档案】
-- 称呼：东东
-- 病理：胆结石
-- 饮食原则：低脂（{fat_min}-{fat_max}g/天）、高纤维（≥{fiber_min}g/天）、规律进食
+- 称呼：{user_name}
+- 病理：{condition}
+- 饮食原则：{diet_principle}
 
 【今日数据】
 - 总热量：{health_data.get('total_calories', 0):.0f} kcal

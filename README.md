@@ -6,7 +6,9 @@
 > 
 > **本技能为 OpenClaw 原生设计的专属健康插件**
 
-[![Version](https://img.shields.io/badge/version-1.1.4-blue.svg)](https://github.com/tankeito/openclaw-skill-health-report/releases)
+> **⚠️ 重要提示**：本项目已从 `openclaw-skill-health-report` 更名为 `Health-Mate`，仓库地址已变更为：https://github.com/tankeito/Health-Mate
+
+[![Version](https://img.shields.io/badge/version-1.1.5-blue.svg)](https://github.com/tankeito/Health-Mate/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ---
@@ -32,10 +34,10 @@
 cd ~/.openclaw/workspace/skills
 
 # 克隆插件
-git clone git@github.com:tankeito/openclaw-skill-health-report.git health_report
+git clone git@github.com:tankeito/Health-Mate.git health-mate
 
 # 安装依赖
-pip install -r health_report/requirements.txt
+pip install -r health-mate/requirements.txt
 ```
 
 ### 步骤 2：初始化配置
@@ -332,7 +334,7 @@ https://your-domain.com/health_report_YYYY-MM-DD.pdf
 crontab -e
 
 # 添加每日 22:00 推送（可自定义时间）
-0 22 * * * bash /root/.openclaw/workspace/skills/health_report/scripts/daily_health_report_pro.sh
+0 22 * * * bash /root/.openclaw/workspace/skills/health-mate/scripts/daily_health_report_pro.sh
 ```
 
 **时间格式说明**：`分 时 日 月 周 命令`
@@ -408,6 +410,7 @@ health_report/
 
 | 版本 | 日期 | 更新内容 |
 |------|------|---------|
+| **v1.1.5** | 2026-03-15 | ✅ 项目重构：移除硬编码用户信息、动态 PDF 页脚、GitHub 地址更新为 Health-Mate |
 | **v1.1.4** | 2026-03-14 | ✅ ClawHub 可信度修复：添加 homepage/repository/source 字段，解决"unknown/none"警告 |
 | **v1.1.3** | 2026-03-14 | ✅ ClawHub 元数据一致性修复：明确 MEMORY_DIR 必填、install 声明、文档一致性 |
 | **v1.1.2** | 2026-03-14 | ✅ ClawHub 隐私合规：明确 MEMORY_DIR 必填、推送渠道可选、隐私警告强化 |
@@ -429,7 +432,7 @@ health_report/
 
 ## 📞 获取帮助
 
-- **GitHub Issues**: https://github.com/tankeito/openclaw-skill-health-report/issues
+- **GitHub Issues**: https://github.com/tankeito/Health-Mate/issues
 - **作者邮箱**: tqd354@gmail.com
 
 ---
