@@ -916,7 +916,7 @@ def generate_report(memory_file, date):
     pdf_filename = f"health_report_{date}.pdf"
     local_pdf_path = str(REPORTS_DIR / pdf_filename)
     web_dir = os.environ.get("REPORT_WEB_DIR", "")
-    base_url = os.environ.get("REPORT_BASE_URL", "https://agent.btc354.com").rstrip('/')
+    base_url = os.environ.get("REPORT_BASE_URL", "").rstrip('/')
     
     # 生成 PDF（传入真实数据）
     try:
@@ -938,22 +938,27 @@ def generate_report(memory_file, date):
             water_records=health_data.get('water_records', []),
             meals=health_data.get('meals', []),
             exercise_data=health_data.get('exercise_records', []),
-            ai_comment=ai_comment  # 修复 3：传递 AI 点评到 PDF
+            ai_comment=ai_comment  # 传递 AI 点评到 PDF
         )
         
-        # 复制到 Web 目录
-        if web_dir and os.path.exists(web_dir):
+        # 复制到 Web 目录并生成下载链接
+        if web_dir and os.path.exists(web_dir) and base_url:
+            # 有公网域名配置，生成下载链接
             web_pdf_path = os.path.join(web_dir, pdf_filename)
             shutil.copy2(local_pdf_path, web_pdf_path)
             pdf_url = f"{base_url}/{pdf_filename}"
+            print(f"✅ PDF 已复制到 Web 目录：{web_pdf_path}", file=sys.stderr)
+            print(f"🔗 下载链接：{pdf_url}", file=sys.stderr)
         else:
-            print(f"提示：未配置 REPORT_WEB_DIR 或目录不存在，PDF 仅保存在本地 {local_pdf_path}", file=sys.stderr)
-            pdf_url = f"{base_url}/{pdf_filename}"
+            # 无公网域名配置，仅提供本地文件路径
+            print(f"ℹ️  未配置公网域名，PDF 仅保存在本地", file=sys.stderr)
+            print(f"📁 本地路径：{local_pdf_path}", file=sys.stderr)
+            pdf_url = local_pdf_path  # 返回本地路径
     except Exception as e:
-        print(f"警告：PDF 生成失败 - {e}", file=sys.stderr)
+        print(f"❌ PDF 生成失败 - {e}", file=sys.stderr)
         import traceback
         traceback.print_exc()
-        pdf_url = f"{base_url}/{pdf_filename}"
+        pdf_url = local_pdf_path
     
     # 生成文本报告
     text_report = generate_text_report(health_data, config, date)

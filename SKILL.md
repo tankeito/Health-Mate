@@ -537,6 +537,7 @@ TELEGRAM_CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID', '')
 
 | 版本 | 日期 | 更新内容 |
 |------|------|---------|
+| **v1.1.6** | 2026-03-15 | ✅ 字体自动下载 + 无公网域名支持：自动检测/下载字体、无 REPORT_BASE_URL 时仅提供本地路径 |
 | **v1.1.5** | 2026-03-15 | ✅ 项目重构：移除硬编码用户信息、动态 PDF 页脚、GitHub 地址更新为 Health-Mate |
 | **v1.1.4** | 2026-03-14 | ✅ ClawHub 可信度修复：添加 homepage/repository/source 字段，解决"unknown/none"警告 |
 | **v1.1.3** | 2026-03-14 | ✅ ClawHub 元数据一致性修复：明确 MEMORY_DIR 必填、install 声明、文档一致性 |
