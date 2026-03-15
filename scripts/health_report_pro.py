@@ -1,16 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-健康报告生成系统（AI 专业版 v5.0 - 最终修复版）
-- 修复餐次第一行食物丢失（增强正则容错）
-- 修复 PDF JSON 解析
+健康报告生成系统（AI 专业版 v1.2 - 本地测试版）
 - 添加 AI 点评到 PDF
 - 引入过饱系数和症状惩罚算法
-
-安全合规：
-- 强制环境变量校验（MEMORY_DIR 必填）
-- Webhook 未配置时仅本地生成 PDF
-- 优雅退出机制，避免异常崩溃
+- 新增：PDF 文件名支持精确到秒的时间戳，防止缓存覆盖
 """
 
 import sys
@@ -766,27 +760,22 @@ def generate_exercise_detail(health_data):
     return '\n'.join(lines) if lines else '无详细记录'
 
 def generate_plan_text(plan):
-    """修复 2 和 3：处理 AI 返回的 JSON 对象数组格式（增强通用性，兼容不同大模型）"""
+    """处理 AI 返回的 JSON 对象数组格式（增强通用性，兼容不同大模型）"""
     lines = []
     
-    # 修复 2：文字修改 - "饮食建议"改成"饮食计划"
     if plan.get('diet'):
         lines.append('**🥗 饮食计划**')
         for item in plan.get('diet', []):
             if isinstance(item, dict):
-                # 修复 3：兼容不同大模型的字段名
                 meal = item.get('meal', item.get('meal_name', ''))
                 time = item.get('time', item.get('time_range', item.get('period', '')))
-                # 兼容多种字段名：menu/items/dishes/menu_detail/food/content
                 menu = item.get('menu', '')
                 if not menu:
-                    # AI 返回的是 items 数组（千问 3.5plus 格式）
                     items = item.get('items', [])
                     if items:
-                        menu = '、'.join(str(i) for i in items[:3])  # 只显示前 3 项
+                        menu = '、'.join(str(i) for i in items[:3])  
                         if len(items) > 3:
                             menu += ' 等'
-                # 如果还是空，尝试其他字段名
                 if not menu:
                     menu = item.get('dishes', item.get('menu_detail', item.get('food', item.get('content', ''))))
                 calories = item.get('calories', item.get('kcal', ''))
@@ -803,39 +792,31 @@ def generate_plan_text(plan):
                 else:
                     lines.append(f"* {item}")
             else:
-                # 修复 3：如果是字符串（其他大模型直接返回文本），直接使用
                 lines.append(f'* {item}')
         lines.append('')
     
-    # 处理饮水计划
     if plan.get('water'):
         lines.append('**💧 饮水计划**')
         for item in plan.get('water', []):
             if isinstance(item, dict):
-                # 修复 3：兼容不同大模型的字段名
                 time = item.get('time', item.get('period', ''))
                 amount = item.get('amount', item.get('amount_ml', item.get('volume', '')))
-                # 确保 amount 带单位
                 if amount and not any(unit in str(amount) for unit in ['ml', 'L']):
                     amount = f"{amount}ml"
                 note = item.get('note', item.get('tip', item.get('remark', '')))
                 lines.append(f"* ⏰ {time} {amount} ({note})")
             else:
-                # 修复 3：如果是字符串（其他大模型直接返回文本），直接使用
                 lines.append(f'* {item}')
         lines.append('')
     
-    # 处理运动建议
     if plan.get('exercise'):
         lines.append('**🏃 运动建议**')
         for item in plan.get('exercise', []):
             if isinstance(item, dict):
-                # 修复 3：兼容不同大模型的字段名
                 time = item.get('time', item.get('time_range', item.get('period', '')))
                 activity = item.get('activity', item.get('type', item.get('name', '')))
                 duration = item.get('duration', item.get('duration_min', item.get('time_length', '')))
                 details = item.get('details', item.get('description', item.get('desc', item.get('content', ''))))
-                # 确保所有字段都有值
                 if activity and duration and details:
                     lines.append(f"* {time} {activity} ({duration}): {details}")
                 elif activity and duration:
@@ -845,11 +826,9 @@ def generate_plan_text(plan):
                 else:
                     lines.append(f"* {time}")
             else:
-                # 修复 3：如果是字符串（其他大模型直接返回文本），直接使用
                 lines.append(f'* {item}')
         lines.append('')
     
-    # 处理特别关注
     if plan.get('notes'):
         lines.append('**⚠️ 特别关注**')
         for item in plan.get('notes', []):
@@ -913,7 +892,12 @@ def generate_report(memory_file, date):
         'fiber_min_g': standards.get('fiber_min_g', 25)
     }
     
-    pdf_filename = f"health_report_{date}.pdf"
+    # ==================== 核心修改点：带时间戳的文件名 ====================
+    # 获取当前精确到秒的时间戳，格式为 YYYYMMDDHHMMSS
+    timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+    # 生成带时间戳的新文件名
+    pdf_filename = f"health_report_{timestamp}.pdf"
+    
     local_pdf_path = str(REPORTS_DIR / pdf_filename)
     web_dir = os.environ.get("REPORT_WEB_DIR", "")
     base_url = os.environ.get("REPORT_BASE_URL", "").rstrip('/')

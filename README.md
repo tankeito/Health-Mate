@@ -8,7 +8,7 @@
 
 > **⚠️ 重要提示**：本项目已从 `openclaw-skill-health-report` 更名为 `Health-Mate`，仓库地址已变更为：https://github.com/tankeito/Health-Mate
 
-[![Version](https://img.shields.io/badge/version-1.1.7-blue.svg)](https://github.com/tankeito/Health-Mate/releases)
+[![Version](https://img.shields.io/badge/version-1.1.8-blue.svg)](https://github.com/tankeito/Health-Mate/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ---
@@ -410,6 +410,7 @@ health_report/
 
 | 版本 | 日期 | 更新内容 |
 |------|------|---------|
+| **v1.1.8** | 2026-03-15 | 🎨 视觉与体验重构：引入 matplotlib 生成中文化营养环形图；全局表格统一升级为无边框 SaaS 扁平化布局；PDF 文件名支持精确到秒的时间戳 |
 | **v1.1.7** | 2026-03-15 | ✅ 强化字体加载：增加 assets 目录自动创建与字体文件缺失时的自动下载机制 |
 | **v1.1.6** | 2026-03-15 | ✅ 字体自动下载 + 无公网域名支持：自动检测/下载字体、无 REPORT_BASE_URL 时仅提供本地路径 |
 | **v1.1.5** | 2026-03-15 | ✅ 项目重构：移除硬编码用户信息、动态 PDF 页脚、GitHub 地址更新为 Health-Mate |

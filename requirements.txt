@@ -5,5 +5,8 @@
 reportlab>=4.0.0
 Pillow>=10.0.0
 
+# 数据可视化
+matplotlib>=3.7.0
+
 # 可选依赖（用于高级功能）
 # requests>=2.31.0  # HTTP 请求（如需网络功能）

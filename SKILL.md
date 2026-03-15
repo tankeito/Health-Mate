@@ -1,7 +1,7 @@
 ---
 name: health-mate
 display_name: Health-Mate
-version: 1.1.7
+version: 1.1.8
 type: python/app
 install: pip install -r requirements.txt
 capabilities:
@@ -42,7 +42,7 @@ env:
 ---
 # Health-Mate - 个人健康助手
 
-> **版本**：1.1.7 | **适用**：OpenClaw AI 助理
+> **版本**：1.1.8 | **适用**：OpenClaw AI 助理
 > 
 > **Personal Health Assistant - A native skill exclusively designed for OpenClaw**
 > 
@@ -537,6 +537,7 @@ TELEGRAM_CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID', '')
 
 | 版本 | 日期 | 更新内容 |
 |------|------|---------|
+| **v1.1.8** | 2026-03-15 | 🎨 视觉与体验重构：引入 matplotlib 生成中文化营养环形图；全局表格统一升级为无边框 SaaS 扁平化布局；PDF 文件名支持精确到秒的时间戳 |
 | **v1.1.7** | 2026-03-15 | ✅ 强化字体加载：增加 assets 目录自动创建与字体文件缺失时的自动下载机制 |
 | **v1.1.6** | 2026-03-15 | ✅ 字体自动下载 + 无公网域名支持：自动检测/下载字体、无 REPORT_BASE_URL 时仅提供本地路径 |
 | **v1.1.5** | 2026-03-15 | ✅ 项目重构：移除硬编码用户信息、动态 PDF 页脚、GitHub 地址更新为 Health-Mate |
