@@ -10,6 +10,7 @@ PDF 报告生成器（现代 SaaS 高颜值版 v4 - 逻辑完全对齐原版）
 
 import os
 import re
+import urllib.request
 from datetime import datetime
 from reportlab.lib import colors
 from reportlab.lib.colors import HexColor
@@ -60,7 +61,7 @@ def stars_to_text(stars_str):
     return active + inactive
 
 def register_chinese_font():
-    """注册中文字体"""
+    """注册中文字体（带自动创建目录与下载机制）"""
     try:
         pdfmetrics.getFont('Chinese')
         return 'Chinese'
@@ -68,9 +69,31 @@ def register_chinese_font():
         pass
     
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    local_ttf = os.path.join(script_dir, "..", "assets", "NotoSansSC-VF.ttf")
+    assets_dir = os.path.join(script_dir, "..", "assets")
+    local_ttf = os.path.join(assets_dir, "NotoSansSC-VF.ttf")
     local_ttf = os.path.normpath(local_ttf)
     
+    # 追加逻辑：判断是否有字体文件，没有则创建目录并下载
+    if not os.path.exists(local_ttf):
+        print("⚠️ 未检测到中文字体文件，正在尝试自动下载...")
+        try:
+            # 判断是否有 assets 目录，没有则创建
+            if not os.path.exists(assets_dir):
+                os.makedirs(assets_dir, exist_ok=True)
+                print(f"📁 已创建资源目录: {assets_dir}")
+            
+            # 从 GitHub 下载字体
+            font_url = "https://raw.githubusercontent.com/tankeito/Health-Mate/main/assets/NotoSansSC-VF.ttf"
+            print(f"⬇️ 开始下载 NotoSansSC-VF.ttf (约 10MB，请耐心等待)...")
+            with urllib.request.urlopen(font_url, timeout=120) as response:
+                with open(local_ttf, 'wb') as out_file:
+                    out_file.write(response.read())
+            print("✅ 字体自动下载成功！")
+        except Exception as e:
+            print(f"❌ 字体下载失败，请手动下载。错误详情：{e}")
+            return 'Helvetica' # 保底方案
+            
+    # 再次判断，确认文件已存在（无论是原有的还是刚下载的），然后注册
     if os.path.exists(local_ttf):
         try:
             pdfmetrics.registerFont(TTFont('Chinese', local_ttf))
@@ -90,8 +113,8 @@ def generate_pdf_report(data, profile, scores, nutrition, macros, risks, plan, o
     footer_text = f"{condition}专属健康管理 - Health-Mate"
     
     doc = SimpleDocTemplate(output_path, pagesize=A4,
-                           rightMargin=2*cm, leftMargin=2*cm,
-                           topMargin=2*cm, bottomMargin=2*cm)
+                            rightMargin=2*cm, leftMargin=2*cm,
+                            topMargin=2*cm, bottomMargin=2*cm)
     
     styles = getSampleStyleSheet()
     
@@ -490,7 +513,7 @@ def generate_pdf_report(data, profile, scores, nutrition, macros, risks, plan, o
     story.append(Spacer(1, 1.5*cm))
     footer_style = ParagraphStyle('Footer', parent=normal_style, fontSize=9, textColor=C_TEXT_MUTED, alignment=TA_CENTER)
     story.append(Paragraph(f"报告生成时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", footer_style))
-    story.append(Paragraph("胆结石专属健康管理 - 西西小帮手", footer_style))
+    story.append(Paragraph(f"{condition}专属健康管理 - Health-Mate", footer_style))
     
     # 构建 PDF
     doc.build(story)
