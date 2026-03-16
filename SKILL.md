@@ -12,37 +12,19 @@ homepage: https://github.com/tankeito/Health-Mate
 repository: https://github.com/tankeito/Health-Mate.git
 source: https://github.com/tankeito/Health-Mate
 env:
-  MEMORY_DIR:
-    required: true
-    description: OpenClaw 记忆文件目录路径（必填，用于读取健康记录）
-  TAVILY_API_KEY:
-    required: false
-    description: Tavily 搜索 API 密钥（可选，用于 AI 搜索菜谱）
-  DINGTALK_WEBHOOK:
-    required: false
-    description: 钉钉群机器人 Webhook 地址（可选，不配置则不推送）
-  FEISHU_WEBHOOK:
-    required: false
-    description: 飞书群机器人 Webhook 地址（可选，不配置则不推送）
-  TELEGRAM_BOT_TOKEN:
-    required: false
-    description: Telegram Bot API Token（可选，不配置则不推送）
-  TELEGRAM_CHAT_ID:
-    required: false
-    description: Telegram 接收者 Chat ID（可选，不配置则不推送）
-  REPORT_WEB_DIR:
-    required: false
-    description: PDF 报表存放的本地目录（可选，不配置则保存在 reports 目录）
-  REPORT_BASE_URL:
-    required: false
-    description: PDF 报告对外下载域名（可选，如不推送可留空）
-  REPORT_TIME:
-    required: false
-    description: 每日健康报告推送时间（小时，默认 22）
+  MEMORY_DIR: OpenClaw 记忆文件目录路径（必填）
+  TAVILY_API_KEY: Tavily 搜索 API 密钥（可选）
+  DINGTALK_WEBHOOK: 钉钉群机器人 Webhook 地址（可选）
+  FEISHU_WEBHOOK: 飞书群机器人 Webhook 地址（可选）
+  TELEGRAM_BOT_TOKEN: Telegram Bot API Token（可选）
+  TELEGRAM_CHAT_ID: Telegram 接收者 Chat ID（可选）
+  REPORT_WEB_DIR: PDF 报表存放的本地 Web 目录（可选）
+  REPORT_BASE_URL: PDF 报告对外下载域名（可选）
+  REPORT_TIME: 每日推送时间（可选，默认 22）
 ---
 # Health-Mate - 个人健康助手
 
-> **版本**：1.1.9 | **适用**：OpenClaw AI 助理
+> **版本**：1.1.10 | **适用**：OpenClaw AI 助理
 > 
 > **Personal Health Assistant - A native skill exclusively designed for OpenClaw**
 > 
@@ -333,6 +315,23 @@ BMI：22.9（正常范围）
 
 ---
 
+## 💡 强烈建议：AI 记忆落盘铁律配置
+
+为了确保后端 Python 引擎能够 100% 精准解析健康数据，强烈建议安装此技能的用户，将以下规则补充到您的 AI 助理的 System Prompt 或 soul.md 中，强制规范大模型的本地文件写入格式：
+
+```markdown
+## 💾 记忆落盘铁律 (Memory Write Protocol)
+当把用户的健康记录写入 MEMORY_DIR 的 Markdown 文件时，**必须强制执行格式翻译**，绝对禁止原样照抄！落盘格式必须 100% 满足以下规则：
+
+1. **强制预估时间**：所有 `###` 级餐次或时段标题后，必须带有具体或预估时间。格式：`### 早餐（约 08:30）`。
+2. **饮食强制热量估算**：食物必须用无序列表 `- ` 记录，且**必须包含 ` → ` 符号和估算热量**。格式：`- 中式快餐 1 份 → 约 600kcal`。
+3. **饮水强制双行**：饮水记录块**只能包含两行**核心数据。格式：第一行 `- 饮水量：XXXml`，第二行 `- 累计：XXXml/2000ml`（分母为目标值）。
+4. **运动强制明细**：非步数运动标题必须带类型（如 `### 下午骑行（约 17:17）`），内容包含距离、时间或消耗。步数格式严格为 `- 总步数：XXXX 步`。
+5. **占位符**：当日全无数据的独立模块，保留 `##` 标题并在下方写 `（待记录）`。
+```
+
+---
+
 ## 🛠️ 技术实现
 
 ### 目录结构
@@ -537,6 +536,7 @@ TELEGRAM_CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID', '')
 
 | 版本 | 日期 | 更新内容 |
 |------|------|---------|
+| **v1.1.10** | 2026-03-16 | 🧠 AI 核心链路升级：在文档中引入《记忆落盘铁律 (Memory Write Protocol)》，指导用户规范大模型 Markdown 输出格式，从源头消除乱序与数据丢失 Bug |
 | **v1.1.9** | 2026-03-15 | 🚀 全局可视化重构：引入 matplotlib 绘制营养环形图、饮水堆叠柱状图及运动双轨进度条；全局统一 SaaS 级无边框排版；增强正则引擎容错率；脱敏文档配置示例 |
 | **v1.1.8** | 2026-03-15 | 🎨 视觉与体验重构：引入 matplotlib 生成中文化营养环形图；全局表格统一升级为无边框 SaaS 扁平化布局；PDF 文件名支持精确到秒的时间戳 |
 | **v1.1.7** | 2026-03-15 | ✅ 强化字体加载：增加 assets 目录自动创建与字体文件缺失时的自动下载机制 |

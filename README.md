@@ -8,7 +8,7 @@
 
 > **⚠️ 重要提示**：本项目已从 `openclaw-skill-health-report` 更名为 `Health-Mate`，仓库地址已变更为：https://github.com/tankeito/Health-Mate
 
-[![Version](https://img.shields.io/badge/version-1.1.9-blue.svg)](https://github.com/tankeito/Health-Mate/releases)
+[![Version](https://img.shields.io/badge/version-1.1.10-blue.svg)](https://github.com/tankeito/Health-Mate/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ---
@@ -263,6 +263,23 @@ https://your-domain.com/health_report_YYYY-MM-DD.pdf
 
 ---
 
+## 💡 强烈建议：AI 记忆落盘铁律配置
+
+为了确保后端 Python 引擎能够 100% 精准解析健康数据，强烈建议安装此技能的用户，将以下规则补充到您的 AI 助理的 System Prompt 或 soul.md 中，强制规范大模型的本地文件写入格式：
+
+```markdown
+## 💾 记忆落盘铁律 (Memory Write Protocol)
+当把用户的健康记录写入 MEMORY_DIR 的 Markdown 文件时，**必须强制执行格式翻译**，绝对禁止原样照抄！落盘格式必须 100% 满足以下规则：
+
+1. **强制预估时间**：所有 `###` 级餐次或时段标题后，必须带有具体或预估时间。格式：`### 早餐（约 08:30）`。
+2. **饮食强制热量估算**：食物必须用无序列表 `- ` 记录，且**必须包含 ` → ` 符号和估算热量**。格式：`- 中式快餐 1 份 → 约 600kcal`。
+3. **饮水强制双行**：饮水记录块**只能包含两行**核心数据。格式：第一行 `- 饮水量：XXXml`，第二行 `- 累计：XXXml/2000ml`（分母为目标值）。
+4. **运动强制明细**：非步数运动标题必须带类型（如 `### 下午骑行（约 17:17）`），内容包含距离、时间或消耗。步数格式严格为 `- 总步数：XXXX 步`。
+5. **占位符**：当日全无数据的独立模块，保留 `##` 标题并在下方写 `（待记录）`。
+```
+
+---
+
 ## ⚙️ 配置说明
 
 ### 环境变量（必填/可选）
@@ -410,6 +427,7 @@ health_report/
 
 | 版本 | 日期 | 更新内容 |
 |------|------|---------|
+| **v1.1.10** | 2026-03-16 | 🧠 AI 核心链路升级：在文档中引入《记忆落盘铁律 (Memory Write Protocol)》，指导用户规范大模型 Markdown 输出格式，从源头消除乱序与数据丢失 Bug |
 | **v1.1.9** | 2026-03-15 | 🚀 全局可视化重构：引入 matplotlib 绘制营养环形图、饮水堆叠柱状图及运动双轨进度条；全局统一 SaaS 级无边框排版；增强正则引擎容错率；脱敏文档配置示例 |
 | **v1.1.8** | 2026-03-15 | 🎨 视觉与体验重构：引入 matplotlib 生成中文化营养环形图；全局表格统一升级为无边框 SaaS 扁平化布局；PDF 文件名支持精确到秒的时间戳 |
 | **v1.1.7** | 2026-03-15 | ✅ 强化字体加载：增加 assets 目录自动创建与字体文件缺失时的自动下载机制 |
