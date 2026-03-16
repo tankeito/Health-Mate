@@ -290,8 +290,8 @@ https://your-domain.com/health_report_YYYY-MM-DD.pdf
 | `TAVILY_API_KEY` | ❌ 否 | Tavily 搜索 API 密钥（用于 AI 搜索菜谱） | `tvly-dev-xxx` |
 | `DINGTALK_WEBHOOK` | ❌ 否 | 钉钉机器人 Webhook（可选，不配置则不推送） | `https://oapi.dingtalk.com/robot/send?access_token=xxx` |
 | `FEISHU_WEBHOOK` | ❌ 否 | 飞书机器人 Webhook（可选，不配置则不推送） | `https://open.feishu.cn/open-apis/bot/v2/hook/xxx` |
-| `TELEGRAM_BOT_TOKEN` | ❌ 否 | Telegram Bot Token（可选，不配置则不推送） | `8667974729:AAFIc3RyuADM-B-J_KYZEVX5hoYsNrd5SQE` |
-| `TELEGRAM_CHAT_ID` | ❌ 否 | Telegram Chat ID（可选，不配置则不推送） | `5868448763` |
+| `TELEGRAM_BOT_TOKEN` | ❌ 否 | Telegram Bot Token（可选，不配置则不推送） | `YOUR_BOT_TOKEN_HERE` |
+| `TELEGRAM_CHAT_ID` | ❌ 否 | Telegram Chat ID（可选，不配置则不推送） | `YOUR_CHAT_ID_HERE` |
 | `REPORT_WEB_DIR` | ❌ 否 | PDF 报表存放的本地目录（不配置则保存在 reports 目录） | `/var/www/html/report` |
 | `REPORT_BASE_URL` | ❌ 否 | PDF 报告对外下载域名（如不推送可留空） | `` |
 
