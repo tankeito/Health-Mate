@@ -673,7 +673,7 @@ def generate_text_report(health_data, config, date):
     fat_min, fat_max = standards.get('fat_min_g', 40), standards.get('fat_max_g', 50)
     fiber_min = standards.get('fiber_min_g', 25)
     
-    report = f"""✅ **晚间数据已记录！**
+    report = f"""📊 **{date} 健康报告**
 
 ### 🌟 {date} 今日综合评分
 

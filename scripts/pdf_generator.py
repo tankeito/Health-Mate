@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-PDF 报告生成器（现代 SaaS 高颜值版 v1.1.9 - 图表字体与统一步长版）
-- 优化：饮水图表堆叠数值移至柱体外部并采用黑色字体，彻底解决白色看不清的问题
-- 优化：运动条形图强制采用统一长条，内部嵌入“公里/时长”，外部尾随“卡路里”
+PDF 报告生成器（现代 SaaS 高颜值版 v1.1.10 - 动态刻度与高对比度字体版）
+- 优化：饮水图表 Y 轴刻度动态自适应，根据当日最大饮水量自动计算步长和上限，避免图表空旷。
+- 优化：运动条形图内部文字（如公里数/时长）颜色由白色改为深色，提升浅色背景下的可读性。
 - 保留：全局原版排版、空行、注释及基础逻辑
 """
 
@@ -114,7 +114,7 @@ def create_nutrition_chart(nutrition):
     except: return None
 
 def create_water_chart(water_records, target_ml):
-    """饮水图表：修复堆叠文字显示问题，全部外挂为黑色字体，刻度更精细"""
+    """饮水图表：修复堆叠文字显示问题，全部外挂为黑色字体，刻度动态自适应"""
     if not MATPLOTLIB_AVAILABLE or not water_records: return None
     try:
         my_font = get_font_prop()
@@ -169,7 +169,6 @@ def create_water_chart(water_records, target_ml):
                 color = colors_stack[i % 2]
                 bars = ax2.bar(bin_pos, amt, bottom=current_bottom, color=color, width=1.2, alpha=0.9, edgecolor='w', linewidth=0.5)
                 
-                # [1.1.9 修复] 无论是否堆叠，数字全部显示在柱子外部并采用深色字体
                 if len(amounts) == 1:
                     t_bar = ax2.text(bin_pos, current_bottom + amt + 15, f"{amt}", ha='center', va='bottom', fontsize=8, color=C_TEXT_MAIN_STR)
                 else:
@@ -190,11 +189,22 @@ def create_water_chart(water_records, target_ml):
         ax2.spines['left'].set_color(C_BORDER_STR)
         ax2.spines['bottom'].set_color(C_BORDER_STR)
         
-        ax2.set_yticks(range(100, 2200, 200))
+        # [1.1.10 修复] 动态计算 Y 轴上限和刻度步长
+        if max_y == 0:
+            y_limit = 500
+            step = 100
+        else:
+            y_limit = int(max_y * 1.2) # 留出 20% 顶部空间
+            # 根据最大值动态决定步长，避免刻度过密或过疏
+            step = 100 if max_y < 800 else 200
+            
+        # 确保刻度覆盖到 y_limit，但不强制顶满整个 y_limit 的空间，使得最上面的数字不至于太贴边
+        ax2.set_yticks(range(step, y_limit + step, step))
+        ax2.set_ylim(0, max_y + (step if max_y < 800 else max_y * 0.3)) # 动态设置可视区域上限
+        
         ax2.tick_params(axis='y', labelleft=True, colors=C_TEXT_MUTED_STR, labelsize=8)
         ax2.tick_params(axis='x', colors=C_TEXT_MUTED_STR)
         ax2.yaxis.grid(True, linestyle='--', alpha=0.4, color=C_BORDER_STR)
-        ax2.set_ylim(0, 2200)
         
         if my_font:
             for label in ax2.get_xticklabels(): label.set_fontproperties(my_font)
@@ -209,7 +219,7 @@ def create_water_chart(water_records, target_ml):
         return None
 
 def create_exercise_chart(exercise_data, steps, step_target=8000):
-    """[1.1.9 修复] 运动条形图全部长度统一。内部写详情，尾端写热量，高度自适应。"""
+    """运动条形图全部长度统一。内部写详情，尾端写热量，高度自适应。"""
     if not MATPLOTLIB_AVAILABLE: return None
     try:
         my_font = get_font_prop()
@@ -263,11 +273,11 @@ def create_exercise_chart(exercise_data, steps, step_target=8000):
                 text_str = f"{int(cal)} / {int(tgt)} 步"
                 t_val = ax.text(max_bg * 1.05, i, text_str, ha='left', va='center', fontsize=9, color=C_TEXT_MUTED_STR, zorder=3)
             else:
-                # [核心修复] 所有运动长条填满全局长度
+                # 所有运动长条填满全局长度
                 ax.plot([0, max_bg], [i, i], color=chart_color, linewidth=12, solid_capstyle='round', zorder=1)
-                # 内部嵌入公里/时长（白字粗体）
+                # [1.1.10 修复] 内部嵌入公里/时长，颜色改为深色以提升可读性
                 if in_txt:
-                    t_in = ax.text(max_bg * 0.02, i, in_txt, ha='left', va='center', fontsize=9, color='white', fontweight='bold', zorder=3)
+                    t_in = ax.text(max_bg * 0.02, i, in_txt, ha='left', va='center', fontsize=9, color=C_TEXT_MAIN_STR, fontweight='bold', zorder=3)
                     if my_font: t_in.set_fontproperties(my_font)
                 # 外部尾随热量（灰字）
                 text_str = f"{int(cal)} kcal"
@@ -306,7 +316,7 @@ def generate_pdf_report(data, profile, scores, nutrition, macros, risks, plan, o
     font_name = register_chinese_font()
     footer_text = f"{profile.get('condition', '健康')}专属健康管理 - Health-Mate"
     
-    doc = SimpleDocTemplate(output_path, pagesize=A4, rightMargin=2*cm, leftMargin=2*cm, topMargin=2*cm, bottomMargin=2*cm)
+    doc = SimpleDocTemplate(output_path, pagesize=A4, rightMargin=2*cm, leftMargin=2*cm, topMargin=2*cm, bottomMargin=2*cm, title="健康日报")
     styles = getSampleStyleSheet()
     title_style = ParagraphStyle('CustomTitle', parent=styles['Heading1'], fontSize=20, textColor=C_PRIMARY, spaceAfter=10, alignment=TA_CENTER, fontName=font_name)
     heading_style = ParagraphStyle('CustomHeading', parent=styles['Heading2'], fontSize=13, textColor=C_PRIMARY, spaceBefore=15, spaceAfter=10, fontName=font_name)

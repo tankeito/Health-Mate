@@ -1,7 +1,7 @@
 #!/bin/bash
-# 专业版每日健康报告脚本
-# 功能：读取健康记录文件，生成综合评分报告并发送到多通道
-# 执行频率：每天 22:00
+# 专业版每周健康报告脚本
+# 功能：读取上周健康记录文件，生成周报并发送到多通道
+# 执行频率：每周一 09:00（自动抓取上周日至周六的完整数据）
 # 配置：从 config/ 目录的 .env 文件读取
 
 # 获取脚本所在目录（scripts/）
@@ -30,20 +30,35 @@ export TZ=Asia/Shanghai
 CURRENT_DATE=$(date +"%Y-%m-%d")
 CURRENT_TIME=$(date +"%H:%M:%S")
 
+# ========== 核心区别：计算上周日的日期（作为周报锚点） ==========
+# 如果是周一执行，昨天就是周日，直接用昨天
+# 如果是其他时间执行，计算最近一个周日
+TARGET_DATE=$(python3 -c "
+from datetime import datetime, timedelta
+yesterday = datetime.now() - timedelta(days=1)
+# 找到最近一个周日（weekday() 返回 6 表示周日）
+days_since_sunday = yesterday.weekday()
+if days_since_sunday == 6:
+    # 昨天就是周日
+    target = yesterday
+else:
+    # 计算到最近一个周日需要往前推几天
+    days_back = (days_since_sunday + 1) % 7
+    target = yesterday - timedelta(days=days_back)
+print(target.strftime('%Y-%m-%d'))
+")
+# =================================================================
+
 MEMORY_DIR="${MEMORY_DIR:-/root/.openclaw/workspace/memory}"
-TODAY_FILE="${MEMORY_DIR}/${CURRENT_DATE}.md"
-LOG_FILE="${LOG_FILE:-${LOGS_DIR}/health_report_pro.log}"
+LOG_FILE="${LOG_FILE:-${LOGS_DIR}/weekly_health_report_pro.log}"
 
 echo "========================================" >> "$LOG_FILE"
-echo "执行时间：${CURRENT_DATE} ${CURRENT_TIME}" >> "$LOG_FILE"
+echo "周报执行时间：${CURRENT_DATE} ${CURRENT_TIME}" >> "$LOG_FILE"
+echo "周报覆盖周期：以 ${TARGET_DATE} 为锚点的一周" >> "$LOG_FILE"
 
-if [ ! -f "$TODAY_FILE" ]; then
-    echo "错误：文件不存在 - ${TODAY_FILE}" >> "$LOG_FILE"
-    exit 1
-fi
-
-# 调用专业版 Python 脚本
-result=$(python3 "${SCRIPT_DIR}/health_report_pro.py" "$TODAY_FILE" "$CURRENT_DATE" 2>&1)
+# 调用专业版周报 Python 脚本
+echo "正在生成周报..." >> "$LOG_FILE"
+result=$(python3 "${SCRIPT_DIR}/weekly_report_pro.py" "$TARGET_DATE" 2>&1)
 
 echo "$result" >> "$LOG_FILE"
 
@@ -52,7 +67,7 @@ text_report=$(echo "$result" | sed -n '/=== TEXT_REPORT_START ===/,/=== TEXT_REP
 pdf_url=$(echo "$result" | grep "=== PDF_URL ===" -A 1 | tail -1)
 
 if [ -z "$text_report" ] || [ -z "$pdf_url" ]; then
-    echo "❌ 报告生成失败" >> "$LOG_FILE"
+    echo "❌ 周报生成失败" >> "$LOG_FILE"
     exit 1
 fi
 
@@ -66,14 +81,20 @@ import os
 text_report = '''${text_report}'''
 pdf_url = '${pdf_url}'
 current_date = '${CURRENT_DATE}'
+target_date = '${TARGET_DATE}'
 
-# 统一消息内容
+# 周报统一消息内容
 message_text = text_report + """
 
 ━━━━━━━━━━━━━━━━━━
 
-📄 PDF 完整报告
-[点击下载]( """ + pdf_url + """ )"""
+📄 PDF 完整周报
+[点击下载]( """ + pdf_url + """ )
+
+---
+📅 报告周期：以 """ + target_date + """ 为锚点的完整一周
+🤖 生成时间：""" + current_date + """
+"""
 
 # 配置（从环境变量读取）
 DINGTALK_WEBHOOK = os.environ.get('DINGTALK_WEBHOOK', '')
@@ -84,7 +105,7 @@ TG_CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID', '')
 def send_dingtalk():
     if not DINGTALK_WEBHOOK: return '➖'  # 增加非空判断
     try:
-        # 修复：钉钉 text 类型使用 {"text": {"content": "..."}} 格式
+        # 钉钉 text 类型使用 {"text": {"content": "..."}} 格式
         data = json.dumps({
             'msgtype': 'text',
             'text': {
@@ -134,7 +155,7 @@ ding_result = send_dingtalk()
 feishu_result = send_feishu()
 tg_result = send_telegram()
 
-print(f"健康报告已发送 [钉钉:{ding_result} 飞书:{feishu_result} Telegram:{tg_result}]")
+print(f"周报已发送 [钉钉:{ding_result} 飞书:{feishu_result} Telegram:{tg_result}]")
 PYTHON_SCRIPT
 
 echo "========================================" >> "$LOG_FILE"

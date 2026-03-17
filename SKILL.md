@@ -1,7 +1,7 @@
 ---
 name: health-mate
 display_name: Health-Mate
-version: 1.1.9
+version: 1.1.11
 type: python/app
 install: pip install -r requirements.txt
 capabilities:
@@ -21,10 +21,11 @@ env:
   REPORT_WEB_DIR: PDF 报表存放的本地 Web 目录（可选）
   REPORT_BASE_URL: PDF 报告对外下载域名（可选）
   REPORT_TIME: 每日推送时间（可选，默认 22）
+  WEEKLY_REPORT_TIME: 每周健康周报推送时间（可选，默认每周一 09:00）
 ---
 # Health-Mate - 个人健康助手
 
-> **版本**：1.1.10 | **适用**：OpenClaw AI 助理
+> **版本**：1.1.11 | **适用**：OpenClaw AI 助理
 > 
 > **Personal Health Assistant - A native skill exclusively designed for OpenClaw**
 > 
@@ -50,9 +51,10 @@ env:
 Health-Mate 是一款**个人健康助手 (Personal Health Assistant)**，使 AI 助理能够：
 1. **自然语言配置** - 用户无需编辑 JSON，对话即可完成健康档案配置
 2. **数据录入引导** - 主动引导用户记录体重、饮食、饮水、运动数据
-3. **健康报告生成** - 自动生成专业健康报告和 PDF
+3. **健康报告生成** - 自动生成专业日报和周报 PDF
 4. **多端推送** - 支持钉钉/飞书/Telegram 三通道推送（可选配置）
 5. **AI 健康点评** - 基于大模型生成个性化健康建议
+6. **📅 独立周报复盘系统**（新增） - 每周自动推送上周健康大复盘，包含智能手表级三环概览图、营养素环形图与趋势折线图
 
 ---
 
@@ -97,11 +99,17 @@ Health-Mate 是一款**个人健康助手 (Personal Health Assistant)**，使 AI
 - water_target_ml: 每日饮水目标（毫升，数字，默认 2000）
 - step_target: 每日步数目标（数字，默认 8000）
 - report_time: 每日报告推送时间（小时，默认 22）
+- weekly_report_day: 周报推送星期几（数字 1-7，默认 1 即周一）
+- weekly_report_time: 周报推送时间（字符串，默认 "09:00"）
 - condition: 病理类型（胆结石/糖尿病/高血压/健身减脂）
 - dietary_dislike: 不吃的食物（数组）
 - dietary_allergies: 过敏食物（数组）
 - activity_level: 活动系数（1.2-1.9，默认 1.2）
 ```
+
+**周报时间配置引导话术**：
+- "您希望每周几、几点接收健康周报？（默认每周一早上 09:00）"
+- "帮我配置健康报告，每天晚上 10 点发日报，每周一早上 9 点发周报。"
 
 ### 交互流程
 
@@ -536,6 +544,7 @@ TELEGRAM_CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID', '')
 
 | 版本 | 日期 | 更新内容 |
 |------|------|---------|
+| **v1.1.11** | 2026-03-17 | 📅 推出独立周报复盘系统：新增智能手表级三环概览图、营养素环形图与趋势折线图；新增定时周报推送机制；完善 NLP 初始配置中的周报时间引导 |
 | **v1.1.10** | 2026-03-16 | 🧠 AI 核心链路升级：在文档中引入《记忆落盘铁律 (Memory Write Protocol)》，指导用户规范大模型 Markdown 输出格式，从源头消除乱序与数据丢失 Bug |
 | **v1.1.9** | 2026-03-15 | 🚀 全局可视化重构：引入 matplotlib 绘制营养环形图、饮水堆叠柱状图及运动双轨进度条；全局统一 SaaS 级无边框排版；增强正则引擎容错率；脱敏文档配置示例 |
 | **v1.1.8** | 2026-03-15 | 🎨 视觉与体验重构：引入 matplotlib 生成中文化营养环形图；全局表格统一升级为无边框 SaaS 扁平化布局；PDF 文件名支持精确到秒的时间戳 |

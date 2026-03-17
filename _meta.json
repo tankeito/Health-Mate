@@ -2,7 +2,7 @@
     "name": "health-mate",
     "display_name": "Health-Mate",
     "type": "python/app",
-    "version": "1.1.9",
+    "version": "1.1.11",
     "description": "Personal Health Assistant - 专业健康报告生成插件。自动读取本地记忆，生成带数据可视化的 PDF 报告，并支持多端推送。",
     "author": "tankeito",
     "email": "tqd354@gmail.com",
@@ -32,7 +32,8 @@
         "TELEGRAM_CHAT_ID": "Telegram 接收者 Chat ID（可选）",
         "REPORT_WEB_DIR": "PDF 报表存放的本地 Web 目录（可选）",
         "REPORT_BASE_URL": "PDF 报告对外下载域名（可选）",
-        "REPORT_TIME": "每日健康报告推送时间（可选，默认 22）"
+        "REPORT_TIME": "每日健康报告推送时间（可选，默认 22）",
+        "WEEKLY_REPORT_TIME": "每周健康周报推送时间（可选，默认每周一 09:00）"
     },
     "commands": [
         {
@@ -48,6 +49,12 @@
             "schedule": "0 22 * * *",
             "action": "daily_report",
             "description": "每日晚间健康报告（22:00）"
+        },
+        {
+            "type": "cron",
+            "schedule": "0 9 * * 1",
+            "action": "weekly_report",
+            "description": "每周健康周报（默认周一 09:00）"
         }
     ],
     "features": [

@@ -8,7 +8,7 @@
 
 > **⚠️ 重要提示**：本项目已从 `openclaw-skill-health-report` 更名为 `Health-Mate`，仓库地址已变更为：https://github.com/tankeito/Health-Mate
 
-[![Version](https://img.shields.io/badge/version-1.1.10-blue.svg)](https://github.com/tankeito/Health-Mate/releases)
+[![Version](https://img.shields.io/badge/version-1.1.11-blue.svg)](https://github.com/tankeito/Health-Mate/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ---
@@ -160,9 +160,22 @@ python3 scripts/health_report_pro.py /root/.openclaw/workspace/memory/2026-03-14
 https://your-domain.com/health_report_2026-03-14.pdf
 ```
 
+### 📅 独立周报复盘系统（新增）
+
+除每日打卡外，Health-Mate 新增**每周健康大复盘**机制：
+
+- **定时推送**：默认每周一 09:00 自动推送上周完整复盘（可通过 NLP 配置自定义）
+- **智能手表级全景可视化**：
+  - 🔄 极坐标三环概览图（饮食/饮水/运动达标率一目了然）
+  - 📈 带渐变底色的体重波动折线图（7 天趋势清晰可见）
+  - 🍽️ 日均宏量营养素环形图（碳水/蛋白质/脂肪高对比度展示）
+- **🧠 AI 深度趋势洞察**：大模型自动聚合分析过去 7 天的散列数据，输出专家级深度复盘与下周精准干预动作
+
+---
+
 ### PDF 报告预览
 
-PDF 报告共 3 页，包含以下内容：
+**日报**（3 页）：
 
 **第 1 页 - 综合评分与健康数据**
 - 📊 综合评分卡片（带星级和百分比）
@@ -180,6 +193,12 @@ PDF 报告共 3 页，包含以下内容：
 - 💧 饮水计划（8 次定时提醒）
 - 🏃 运动建议（具体活动和时长）
 - ⚠️ 特别关注（健康提示）
+
+**周报**（4-5 页，新增）：
+- 📊 周度三环概览图（智能手表风格）
+- 📈 7 天体重/热量/营养素趋势图
+- 🧠 AI 深度周度复盘（300-500 字）
+- 📋 下周精准干预计划
 
 **PDF 下载链接格式**：
 ```
@@ -427,6 +446,7 @@ health_report/
 
 | 版本 | 日期 | 更新内容 |
 |------|------|---------|
+| **v1.1.11** | 2026-03-17 | 📅 推出独立周报复盘系统：新增智能手表级三环概览图、营养素环形图与趋势折线图；新增定时周报推送机制；完善 NLP 初始配置中的周报时间引导 |
 | **v1.1.10** | 2026-03-16 | 🧠 AI 核心链路升级：在文档中引入《记忆落盘铁律 (Memory Write Protocol)》，指导用户规范大模型 Markdown 输出格式，从源头消除乱序与数据丢失 Bug |
 | **v1.1.9** | 2026-03-15 | 🚀 全局可视化重构：引入 matplotlib 绘制营养环形图、饮水堆叠柱状图及运动双轨进度条；全局统一 SaaS 级无边框排版；增强正则引擎容错率；脱敏文档配置示例 |
 | **v1.1.8** | 2026-03-15 | 🎨 视觉与体验重构：引入 matplotlib 生成中文化营养环形图；全局表格统一升级为无边框 SaaS 扁平化布局；PDF 文件名支持精确到秒的时间戳 |
