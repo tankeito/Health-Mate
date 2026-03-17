@@ -207,6 +207,37 @@ https://your-domain.com/health_report_YYYY-MM-DD.pdf
 
 ---
 
+## 📄 报告视觉预览 (Report Previews)
+
+Health-Mate 采用独立渲染引擎，告别简陋的纯文本，为您提供**媲美高级智能手表**的数据可视化分析报告。分为"每日打卡"与"周度复盘"双系统独立运行：
+
+### 🌞 胆结石健康日报 (Daily Report) - 独立 5 页
+日清日结，监控当日每一个健康细节。
+- Page 1: 综合评分与专家点评 - 多维度星级打分、动态 BMI 与基础代谢核算、AI 针对当日行为的数百字深度点评。
+- Page 2: 营养与饮水全景图 - 极简高对比度的宏量营养素（碳水/蛋白质/脂肪）环形摄入核算图，以及 24 小时饮水刻度堆叠柱状图。
+- Page 3-4: 三餐明细与运动目标 - 包含具体份量和热量估算的三餐无边框明细表，以及带目标刻度的"双轨制"运动/步数圆角进度条。
+- Page 5: 风险预警与次日行动 - 基于当日异常指标的红色警报，以及 AI 动态生成的次日饮食/饮水/运动干预清单。
+
+> 示例图展示区：
+> ![日报预览 -1](https://github.com/user-attachments/assets/46e7ede9-c526-4c69-86ce-65bf8cb60291)
+> ![日报预览 -2](https://github.com/user-attachments/assets/0c86b5aa-f6e9-4e54-93e4-f846b2475266)
+> ![日报预览 -3](https://github.com/user-attachments/assets/f70b3ec3-ff05-4ae0-a17e-4d0dc3ba83ad)
+> ![日报预览 -4](https://github.com/user-attachments/assets/ab375c06-edd9-4345-b3f1-4f32d3bf7264)
+> ![日报预览 -5](https://github.com/user-attachments/assets/cf81722a-a82b-4afc-afa6-799378b41406)
+
+### 📅 胆结石健康周报 (Weekly Report) - 独立 3 页
+拉长周期看趋势，精准定位核心健康短板（默认每周一自动推送）。
+- Page 1: 核心概览与体重趋势 - 独家渲染的"饮食/饮水/运动"极坐标三环进度图，配合带底部半透明渐变色的体重七日波动折线图。
+- Page 2: 多维趋势柱状图 - 并排对比展示本周每日的热量摄入分布（带目标警戒线）、每日步数/饮水柱状图，以及本周平均营养摄入比重环形图。
+- Page 3: AI 深度复盘与下周干预 - 大模型跨越 7 天散列数据，提取"隐藏的健康危机"，并给出下周的重点攻克方案。
+
+> 示例图展示区：
+> ![周报预览 -1](https://github.com/user-attachments/assets/77060821-c97a-4f4d-b2d1-8061101d0fe9)
+> ![周报预览 -2](https://github.com/user-attachments/assets/fd9168e8-db85-47a0-b54a-41f114345e6c)
+> ![周报预览 -3](https://github.com/user-attachments/assets/c78e6458-41b8-48a0-9ca0-721245b3a063)
+
+---
+
 ## 📝 数据录入（标准化格式）
 
 ### 方式一：对话式录入（推荐）
