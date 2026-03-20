@@ -6,22 +6,24 @@ type: python/app
 description: "Executable bilingual OpenClaw health-report skill with local Python scripts for markdown parsing, PDF generation, and optional webhook delivery."
 install: pip install -r requirements.txt
 capabilities:
- - file_read
- - file_write
- - pdf_generation
- - http_request
+  - file_read
+  - file_write
+  - pdf_generation
+  - http_request
 metadata:
- clawdbot:
-  requires:
+  clawdbot:
+    requires:
+      env:
+        - MEMORY_DIR
 env:
- MEMORY_DIR: Required. Explicitly set this to the markdown health-memory directory to be read by the skill.
- TAVILY_API_KEY: Optional. Used only for extra recipe and exercise research when generating next-day suggestions.
- DINGTALK_WEBHOOK: Optional. If set, the final report payload can be sent to DingTalk.
- FEISHU_WEBHOOK: Optional. If set, the final report payload can be sent to Feishu.
- TELEGRAM_BOT_TOKEN: Optional. If set together with TELEGRAM_CHAT_ID, the final report payload can be sent to Telegram.
- TELEGRAM_CHAT_ID: Optional. Required only when Telegram delivery is enabled.
- REPORT_WEB_DIR: Optional. Local directory where generated PDFs can be copied for public serving.
- REPORT_BASE_URL: Optional. Public base URL used to build downloadable PDF links.
+  MEMORY_DIR: Required. Explicitly set this to the markdown health-memory directory to be read by the skill.
+  TAVILY_API_KEY: Optional. Used only for extra recipe and exercise research when generating next-day suggestions.
+  DINGTALK_WEBHOOK: Optional. If set, the final report payload can be sent to DingTalk.
+  FEISHU_WEBHOOK: Optional. If set, the final report payload can be sent to Feishu.
+  TELEGRAM_BOT_TOKEN: Optional. If set together with TELEGRAM_CHAT_ID, the final report payload can be sent to Telegram.
+  TELEGRAM_CHAT_ID: Optional. Required only when Telegram delivery is enabled.
+  REPORT_WEB_DIR: Optional. Local directory where generated PDFs can be copied for public serving.
+  REPORT_BASE_URL: Optional. Public base URL used to build downloadable PDF links.
 ---
 
 # Health-Mate

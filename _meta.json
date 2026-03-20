@@ -3,7 +3,7 @@
     "display_name": "Health-Mate",
     "type": "python/app",
     "version": "1.3.1",
-    "description": "Health-Mate is an executable bilingual Chinese/English OpenClaw health-management skill with local Python scripts for strict markdown-memory parsing, PDF generation, and optional webhook delivery. It reads structured health logs from MEMORY_DIR, writes local report assets, and can optionally use Tavily, webhook delivery, or a fallback font download when configured or needed.",
+    "description": "Health-Mate is an executable bilingual Chinese/English OpenClaw health-management skill. SECURITY DISCLOSURE: 1. It requires 'MEMORY_DIR' to be set; if unset, it falls back to reading the default '/root/.openclaw/workspace/memory' path. 2. It writes local reports/logs and may download an open-source TTF font if missing locally. 3. Webhook outbound requests only execute if credentials are user-configured.",
     "author": "tankeito",
     "email": "tqd354@gmail.com",
     "license": "MIT",
