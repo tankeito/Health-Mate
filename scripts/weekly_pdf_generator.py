@@ -1,11 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-周报 PDF 渲染引擎 (weekly_pdf_generator.py) 
-- 修复：为三环概览图添加图例，明确各颜色代表的含义
-- 修复：为生成的 PDF 注入 Title 元数据，解决浏览器标签页显示 (anonymous) 的问题
-- 追加：每日摄入热量柱状趋势图、日均三大营养成分环形图
-"""
+"""Weekly PDF rendering for Health-Mate."""
 
 import os
 import math
@@ -19,18 +14,18 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import cm
 from reportlab.lib.enums import TA_CENTER, TA_LEFT
 
-# 导入复用的字体配置
 from pdf_generator import register_chinese_font, get_font_prop, clean_html_tags
+from i18n import condition_name, format_weight, format_weight_delta, resolve_locale, t, weight_unit
 
 try:
     import matplotlib.pyplot as plt
     import matplotlib.font_manager as fm
-    import matplotlib.patches as mpatches # [1.1.21 修复] 引入 patches 用于自定义图例
-    import matplotlib.patheffects as path_effects # [新增] 引入用于营养图表中心数字的描边特效
+    import matplotlib.patches as mpatches
+    import matplotlib.patheffects as path_effects
     MATPLOTLIB_AVAILABLE = True
 except ImportError:
     MATPLOTLIB_AVAILABLE = False
-    print("⚠️ 未安装 matplotlib，图表功能将被禁用。")
+    print("WARNING: matplotlib is not installed, so weekly charts are disabled.")
 
 C_PRIMARY = "#2563EB"
 C_SUCCESS = "#10B981"
@@ -40,20 +35,19 @@ C_TEXT_MUTED = "#64748B"
 C_BORDER = "#E2E8F0"
 C_BG_HEAD = "#F8FAFC"
 
-# [新增] 营养成分专属颜色
 C_CARB, C_PROTEIN, C_FAT = "#3B82F6", "#10B981", "#F59E0B"
 
-def create_weekly_rings_chart(diet_pct, water_pct, exercise_pct):
-    """复刻智能手表的三环概览图，带图例"""
+def create_weekly_rings_chart(diet_pct, water_pct, exercise_pct, locale):
+    """Create the weekly multi-ring overview chart."""
     if not MATPLOTLIB_AVAILABLE: return None
     try:
+        locale = resolve_locale(locale=locale)
         my_font = get_font_prop()
-        fig, ax = plt.subplots(figsize=(5, 4.5), subplot_kw=dict(polar=True)) # 稍微加宽一点留给图例
+        fig, ax = plt.subplots(figsize=(5, 4.5), subplot_kw=dict(polar=True))
         
         values = [min(1.0, v) for v in [exercise_pct, water_pct, diet_pct]]
         angles = [v * 2 * math.pi for v in values]
         
-        # 内、中、外的颜色 (橙-运动, 绿-饮水, 蓝-饮食)
         ring_colors = [C_WARNING, C_SUCCESS, C_PRIMARY]
         y_positions = [0.8, 1.4, 2.0]  
         
@@ -64,14 +58,12 @@ def create_weekly_rings_chart(diet_pct, water_pct, exercise_pct):
         ax.set_theta_direction(-1)      
         ax.axis('off')                  
         
-        ax.text(0, 0, "本周\n健康概览", ha='center', va='center', fontsize=12, color=C_TEXT_MAIN, fontweight='bold', fontproperties=my_font)
-        
-        # [1.1.21 修复] 添加自定义图例
+        ax.text(0, 0, t(locale, 'weekly_rings_center'), ha='center', va='center', fontsize=12, color=C_TEXT_MAIN, fontweight='bold', fontproperties=my_font)
+
         if my_font:
-            diet_patch = mpatches.Patch(color=C_PRIMARY, label='饮食达标')
-            water_patch = mpatches.Patch(color=C_SUCCESS, label='饮水达标')
-            ex_patch = mpatches.Patch(color=C_WARNING, label='运动达标')
-            # 将图例放在图表右下角区域外侧
+            diet_patch = mpatches.Patch(color=C_PRIMARY, label=t(locale, 'weekly_ring_diet'))
+            water_patch = mpatches.Patch(color=C_SUCCESS, label=t(locale, 'weekly_ring_water'))
+            ex_patch = mpatches.Patch(color=C_WARNING, label=t(locale, 'weekly_ring_exercise'))
             ax.legend(handles=[diet_patch, water_patch, ex_patch], loc='lower right', bbox_to_anchor=(1.3, 0), prop=my_font, frameon=False)
 
         plt.tight_layout()
@@ -80,7 +72,7 @@ def create_weekly_rings_chart(diet_pct, water_pct, exercise_pct):
         plt.close(fig)
         return temp_img.name
     except Exception as e:
-        print(f"⚠️ 三环图生成失败：{e}")
+        print(f"WARNING: weekly ring chart generation failed: {e}")
         return None
 
 def create_trend_line_chart(dates, values, title):
@@ -123,7 +115,7 @@ def create_trend_line_chart(dates, values, title):
         plt.close(fig)
         return temp_img.name
     except Exception as e:
-        print(f"⚠️ 折线图生成失败：{e}")
+        print(f"WARNING: trend line generation failed: {e}")
         return None
 
 def create_bar_trend_chart(dates, values, target, color, title, ylabel):
@@ -136,7 +128,7 @@ def create_bar_trend_chart(dates, values, target, color, title, ylabel):
         
         if target and target > 0:
             ax.axhline(y=target, color=C_WARNING, linestyle='--', alpha=0.8, linewidth=1.5, zorder=1)
-            t_tgt = ax.text(len(dates)-0.5, target, f"目标: {target}", color=C_WARNING, va='bottom', ha='right', fontsize=9)
+            t_tgt = ax.text(len(dates)-0.5, target, f"{target}", color=C_WARNING, va='bottom', ha='right', fontsize=9)
             if my_font: t_tgt.set_fontproperties(my_font)
             
         ax.spines['top'].set_visible(False)
@@ -160,19 +152,20 @@ def create_bar_trend_chart(dates, values, target, color, title, ylabel):
         plt.close(fig)
         return temp_img.name
     except Exception as e:
-        print(f"⚠️ 柱状图生成失败：{e}")
+        print(f"WARNING: bar chart generation failed: {e}")
         return None
 
-# [新增] 专门用于周报的日均营养成分环形图
-def create_weekly_nutrition_chart(calories, protein, fat, carb):
+# Weekly average nutrition donut chart.
+def create_weekly_nutrition_chart(calories, protein, fat, carb, locale):
     if not MATPLOTLIB_AVAILABLE: return None
     try:
+        locale = resolve_locale(locale=locale)
         my_font = get_font_prop()
         carb_kcal, protein_kcal, fat_kcal = carb * 4, protein * 4, fat * 9
         if carb_kcal + protein_kcal + fat_kcal <= 0: return None
         
         fig, ax = plt.subplots(figsize=(5, 3), subplot_kw=dict(aspect="equal"))
-        wedges, texts, autotexts = ax.pie([carb_kcal, protein_kcal, fat_kcal], labels=['碳水化合物', '蛋白质', '脂肪'], colors=[C_CARB, C_PROTEIN, C_FAT], autopct='%1.1f%%', startangle=90, wedgeprops=dict(width=0.4, edgecolor='w'))
+        wedges, texts, autotexts = ax.pie([carb_kcal, protein_kcal, fat_kcal], labels=[t(locale, 'carb'), t(locale, 'protein'), t(locale, 'fat')], colors=[C_CARB, C_PROTEIN, C_FAT], autopct='%1.1f%%', startangle=90, wedgeprops=dict(width=0.4, edgecolor='w'))
         
         for t in texts:
             t.set_color(C_TEXT_MUTED)
@@ -185,7 +178,7 @@ def create_weekly_nutrition_chart(calories, protein, fat, carb):
             at.set_path_effects([path_effects.withStroke(linewidth=2, foreground=C_TEXT_MAIN)])
             if my_font: at.set_fontproperties(my_font)
             
-        t_center = ax.text(0, 0, f"日均摄入\n{int(calories)} kcal", ha='center', va='center', fontsize=10, fontweight='bold', color=C_TEXT_MAIN)
+        t_center = ax.text(0, 0, t(locale, 'weekly_nutrition_center', calories=int(calories)), ha='center', va='center', fontsize=10, fontweight='bold', color=C_TEXT_MAIN)
         if my_font: t_center.set_fontproperties(my_font)
         
         plt.tight_layout()
@@ -194,14 +187,13 @@ def create_weekly_nutrition_chart(calories, protein, fat, carb):
         plt.close(fig)
         return temp_img.name
     except Exception as e:
-        print(f"⚠️ 营养环形图生成失败：{e}")
+        print(f"WARNING: weekly nutrition chart generation failed: {e}")
         return None
 
-def generate_weekly_pdf_report(weekly_data, profile, ai_review, ai_plan, output_path):
+def generate_weekly_pdf_report(weekly_data, profile, ai_review, ai_plan, output_path, locale="zh-CN"):
+    locale = resolve_locale(locale=locale)
     font_name = register_chinese_font()
-    
-    # [1.1.21 修复] 在此处添加 title 属性，解决浏览器预览显示 anonymous 的问题
-    doc = SimpleDocTemplate(output_path, pagesize=A4, rightMargin=2*cm, leftMargin=2*cm, topMargin=2*cm, bottomMargin=2*cm, title="健康周报")
+    doc = SimpleDocTemplate(output_path, pagesize=A4, rightMargin=2*cm, leftMargin=2*cm, topMargin=2*cm, bottomMargin=2*cm, title=t(locale, 'weekly_report_title'))
     styles = getSampleStyleSheet()
     title_style = ParagraphStyle('Title', parent=styles['Heading1'], fontSize=22, textColor=HexColor(C_PRIMARY), spaceAfter=5, alignment=TA_CENTER, fontName=font_name)
     sub_title = ParagraphStyle('SubTitle', parent=styles['Normal'], fontSize=10, textColor=HexColor(C_TEXT_MUTED), spaceAfter=20, alignment=TA_CENTER, fontName=font_name)
@@ -210,32 +202,30 @@ def generate_weekly_pdf_report(weekly_data, profile, ai_review, ai_plan, output_
     
     story = []
     
-    date_range = f"{weekly_data['start_date']} 至 {weekly_data['end_date']}"
-    story.append(Paragraph("<b>胆结石健康周报 (Weekly Report)</b>", title_style))
-    story.append(Paragraph(f"评估周期：{date_range} | 监测人：{profile.get('name', '东东')}", sub_title))
+    story.append(Paragraph(f"<b>{condition_name(locale, profile.get('condition', 'balanced'))} · {t(locale, 'weekly_report_title')}</b>", title_style))
+    story.append(Paragraph(t(locale, 'weekly_period', start_date=weekly_data['start_date'], end_date=weekly_data['end_date'], name=profile.get('name', t(locale, 'default_name'))), sub_title))
     
     temp_images = []
     
-    story.append(Paragraph("一、本周健康指标概览", heading_style))
+    story.append(Paragraph(f"1. {t(locale, 'weekly_overview_title')}", heading_style))
     
     diet_pct = weekly_data['avg_diet_score'] / 100
-    water_pct = sum([1 for w in weekly_data['water_intakes'] if w >= profile.get('water_target', 2000)]) / 7.0
+    water_pct = sum([1 for w in weekly_data['water_intakes'] if w >= profile.get('water_target_ml', 2000)]) / 7.0
     exercise_pct = sum([1 for s in weekly_data['steps'] if s >= profile.get('step_target', 8000)]) / 7.0
     
-    ring_chart = create_weekly_rings_chart(diet_pct, water_pct, exercise_pct)
+    ring_chart = create_weekly_rings_chart(diet_pct, water_pct, exercise_pct, locale)
     if ring_chart:
         temp_images.append(ring_chart)
-        # 因为加了图例，图表稍微变宽了一点，所以宽度这里从 7cm 调整为 8cm 保证不被拉伸变形
         img = Image(ring_chart, width=8*cm, height=7*cm)
         img.hAlign = 'CENTER'
         story.append(img)
         
     summary_data = [
-        ["维度", "本周平均/累计", "健康状态"],
-        ["平均体重", f"{weekly_data['avg_weight']*2:.1f}斤", "稳定" if weekly_data['weight_change'] == 0 else ("下降" if weekly_data['weight_change'] < 0 else "上升")],
-        ["日均摄入", f"{weekly_data['avg_calories']:.0f} kcal", "正常"],
-        ["日均饮水", f"{sum(weekly_data['water_intakes'])/7:.0f} ml", "达标" if sum(weekly_data['water_intakes'])/7 >= 2000 else "未达标"],
-        ["日均步数", f"{sum(weekly_data['steps'])/7:.0f} 步", "活跃" if sum(weekly_data['steps'])/7 >= 8000 else "偏低"]
+        [t(locale, 'dimension'), t(locale, 'value'), t(locale, 'health_status')],
+        [t(locale, 'average_weight'), format_weight(locale, weekly_data['avg_weight']), t(locale, 'stable') if weekly_data['weight_change'] == 0 else (t(locale, 'down') if weekly_data['weight_change'] < 0 else t(locale, 'up'))],
+        [t(locale, 'average_calories'), f"{weekly_data['avg_calories']:.0f} kcal", t(locale, 'normal')],
+        [t(locale, 'average_water'), f"{sum(weekly_data['water_intakes'])/7:.0f} ml", t(locale, 'achieved') if sum(weekly_data['water_intakes'])/7 >= profile.get('water_target_ml', 2000) else t(locale, 'under_target')],
+        [t(locale, 'average_steps'), f"{sum(weekly_data['steps'])/7:.0f}", t(locale, 'active') if sum(weekly_data['steps'])/7 >= 8000 else t(locale, 'low')]
     ]
     table_style = [
         ('BACKGROUND', (0, 0), (-1, 0), HexColor(C_BG_HEAD)),
@@ -247,35 +237,34 @@ def generate_weekly_pdf_report(weekly_data, profile, ai_review, ai_plan, output_
         ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
         ('LINEBELOW', (0, 0), (-1, -1), 0.5, HexColor(C_BORDER)),
     ]
-    t = Table(summary_data, colWidths=[4.5*cm, 5*cm, 4.5*cm])
-    t.setStyle(TableStyle(table_style))
-    story.append(t)
+    summary_table = Table(summary_data, colWidths=[4.5*cm, 5*cm, 4.5*cm])
+    summary_table.setStyle(TableStyle(table_style))
+    story.append(summary_table)
     story.append(Spacer(1, 0.5*cm))
     
-    story.append(Paragraph("二、核心趋势分析", heading_style))
+    story.append(Paragraph(f"2. {t(locale, 'weekly_trend_title')}", heading_style))
     
     short_dates = [d[5:] for d in weekly_data['dates']] 
     
-    weight_chart = create_trend_line_chart(short_dates, [w*2 if w else None for w in weekly_data['weights']], "本周体重波动趋势 (斤)")
+    weight_values = [w * 2 if w else None for w in weekly_data['weights']] if locale == "zh-CN" else weekly_data['weights']
+    weight_chart = create_trend_line_chart(short_dates, weight_values, t(locale, 'weight_trend_title', unit=weight_unit(locale)))
     if weight_chart:
         temp_images.append(weight_chart)
         img = Image(weight_chart, width=14*cm, height=5.25*cm)
         story.append(img)
         story.append(Spacer(1, 0.3*cm))
         
-    # [新增] 饮食热量柱状图
-    bmr_val = (10*(profile.get('current_weight_kg', 65)) + 6.25*profile.get('height_cm',172) - 5*profile.get('age',34) + (5 if profile.get('gender')=='男' else -161))
+    bmr_val = (10*(profile.get('current_weight_kg', 65)) + 6.25*profile.get('height_cm',172) - 5*profile.get('age',34) + (5 if str(profile.get('gender', 'male')).lower() == 'male' else -161))
     tdee_val = int(bmr_val * profile.get('activity_level', 1.2))
     
-    cal_chart = create_bar_trend_chart(short_dates, weekly_data['calories'], tdee_val, C_WARNING, "本周每日摄入热量 (kcal)", "热量")
+    cal_chart = create_bar_trend_chart(short_dates, weekly_data['calories'], tdee_val, C_WARNING, t(locale, 'calorie_trend_title'), t(locale, 'calories'))
     if cal_chart:
         temp_images.append(cal_chart)
         img = Image(cal_chart, width=14*cm, height=5.25*cm)
         story.append(img)
         story.append(Spacer(1, 0.3*cm))
         
-    # [新增] 营养成分环形图 (日均)
-    nutri_chart = create_weekly_nutrition_chart(weekly_data['avg_calories'], weekly_data['avg_protein'], weekly_data['avg_fat'], weekly_data['avg_carb'])
+    nutri_chart = create_weekly_nutrition_chart(weekly_data['avg_calories'], weekly_data['avg_protein'], weekly_data['avg_fat'], weekly_data['avg_carb'], locale)
     if nutri_chart:
         temp_images.append(nutri_chart)
         img = Image(nutri_chart, width=10*cm, height=6*cm)
@@ -283,27 +272,27 @@ def generate_weekly_pdf_report(weekly_data, profile, ai_review, ai_plan, output_
         story.append(img)
         story.append(Spacer(1, 0.3*cm))
         
-    step_chart = create_bar_trend_chart(short_dates, weekly_data['steps'], profile.get('step_target', 8000), C_PRIMARY, "本周每日步数分布 (步)", "步数")
+    step_chart = create_bar_trend_chart(short_dates, weekly_data['steps'], profile.get('step_target', 8000), C_PRIMARY, t(locale, 'step_trend_title'), t(locale, 'average_steps'))
     if step_chart:
         temp_images.append(step_chart)
         img = Image(step_chart, width=14*cm, height=5.25*cm)
         story.append(img)
         story.append(Spacer(1, 0.3*cm))
         
-    water_chart = create_bar_trend_chart(short_dates, weekly_data['water_intakes'], 2000, C_SUCCESS, "本周每日饮水量分布 (ml)", "饮水量")
+    water_chart = create_bar_trend_chart(short_dates, weekly_data['water_intakes'], profile.get('water_target_ml', 2000), C_SUCCESS, t(locale, 'water_trend_title'), t(locale, 'average_water'))
     if water_chart:
         temp_images.append(water_chart)
         img = Image(water_chart, width=14*cm, height=5.25*cm)
         story.append(img)
         story.append(Spacer(1, 0.3*cm))
         
-    story.append(Paragraph("三、专家 AI 深度复盘", heading_style))
+    story.append(Paragraph(f"3. {t(locale, 'weekly_ai_review_title')}", heading_style))
     for para in ai_review.split('\n'):
         if para.strip() and not para.startswith('['):
             story.append(Paragraph(clean_html_tags(para), normal_style))
             story.append(Spacer(1, 0.1*cm))
             
-    story.append(Paragraph("四、下周干预方案", heading_style))
+    story.append(Paragraph(f"4. {t(locale, 'weekly_next_plan_title')}", heading_style))
     for para in ai_plan.split('\n'):
         if para.strip() and not para.startswith('['):
             if para.startswith('-') or para.startswith('*') or para.startswith('1.'):
@@ -316,4 +305,4 @@ def generate_weekly_pdf_report(weekly_data, profile, ai_review, ai_plan, output_
     for img in temp_images:
         try: os.remove(img)
         except: pass
-    print(f"✅ 专属健康周报已生成：{output_path}")
+    print(f"Weekly PDF generated: {output_path}")

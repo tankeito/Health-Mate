@@ -1,5 +1,5 @@
 {
-    "_comment": "PDF 报告样式配置文件 - 修改此处自定义报告外观",
+    "_comment": "PDF style configuration. Edit this file if you want to customize the report appearance.",
     "_version": "1.0",
     
     "page": {

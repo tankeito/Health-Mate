@@ -1,12 +1,11 @@
-# OpenClaw Health Report Skill - Python Dependencies
-# 安装：pip install -r requirements.txt
+# Install with: pip install -r requirements.txt
 
-# PDF 生成
+# PDF rendering
 reportlab>=4.0.0
-Pillow>=10.0.0
+pillow>=10.0.0
 
-# 数据可视化
-matplotlib>=3.7.0
+# Data visualization
+matplotlib>=3.0.0
 
-# 可选依赖（用于高级功能）
-# requests>=2.31.0  # HTTP 请求（如需网络功能）
+# Optional networking helper
+# requests>=2.31.0

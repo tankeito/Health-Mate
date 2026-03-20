@@ -1,459 +1,396 @@
-# 🏥 Health-Mate - 个人健康助手
+# Health-Mate
 
-> **5 分钟上手 | 一键生成 | 多端推送**
-> 
-> **Personal Health Assistant - A native skill exclusively designed for OpenClaw**
-> 
-> **本技能为 OpenClaw 原生设计的专属健康插件**
+> OpenClaw skill for bilingual health tracking, strict memory logging, localized daily and weekly PDF reports, and optional webhook delivery.
+>
+> 面向 OpenClaw 的健康管理 skill，支持中英双语、严格记忆落盘协议、本地日报/周报 PDF 生成，以及可选的 webhook 推送。
 
-> **⚠️ 重要提示**：本项目已从 `openclaw-skill-health-report` 更名为 `Health-Mate`，仓库地址已变更为：https://github.com/tankeito/Health-Mate
+[![Version](https://img.shields.io/badge/version-1.3.0-blue.svg)](https://github.com/tankeito/Health-Mate/releases)
+[![Python](https://img.shields.io/badge/python-3.8%2B-green.svg)](https://www.python.org/)
+[![OpenClaw](https://img.shields.io/badge/OpenClaw-compatible-black.svg)](https://github.com/tankeito/Health-Mate)
 
-[![Version](https://img.shields.io/badge/version-1.2.0-blue.svg)](https://github.com/tankeito/Health-Mate/releases)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+## ✨ Highlights / 核心亮点
 
----
+- `zh-CN` and `en-US` are both supported end-to-end, including config prompts, markdown parsing, text reports, PDF reports, and delivery messages.
+- 全链路支持中文与英文，包括初始化配置、Markdown 解析、文字报告、PDF 报告和推送文案。
 
-## ⚠️ 隐私与数据外发警告 (Privacy & Data Export Warning)
+- Canonical config values now prefer English ids such as `gallstones`, `diabetes`, `hypertension`, `fat_loss`, and `balanced`, while legacy Chinese values remain compatible.
+- 配置层优先使用英文规范值，同时继续兼容旧版中文配置。
 
-**本技能运行时，需要读取用户本地配置的 `MEMORY_DIR` 目录下的健康记录文件。根据用户配置，生成的健康报告将通过 Webhook 自动发送至外部平台（钉钉/飞书/Telegram）。**
+- The parsing engine accepts both Chinese and English memory files, but each record block should stay in one language only.
+- 解析器同时支持中文和英文记忆文件，但单个记录块必须保持单语，不要中英混写。
 
-**安全建议**：
-- ✅ 请确保您完全信任所配置的 Webhook 接收端
-- ✅ 建议在沙箱或隔离环境中使用
-- ✅ 谨慎配置您的私有环境变量（Webhook Token、API Key 等）
-- ✅ 定期检查 Webhook 访问日志，确保无异常调用
+- The Memory Write Protocol is strict by design so LLM outputs stay machine-readable and report generation stays stable.
+- 记忆落盘协议采用强约束设计，目标是让 LLM 写出的文件可稳定解析，避免日报/周报生成失败。
 
----
+- Reports are generated locally first. External delivery only happens if DingTalk, Feishu, or Telegram is configured by the user.
+- 报告优先在本地生成；只有用户显式配置了钉钉、飞书或 Telegram 时才会向外发送。
 
-## 🚀 快速开始（3 步上手）
+## 🆕 What Changed In v1.3.0 / 1.3.0 更新内容
 
-### 步骤 1：一键安装
+- Added a shared language-pack architecture and removed scattered hard-coded UI/report strings from the main scripts.
+- 新增统一语言包架构，主脚本中散落的中文展示文本已收口到共享语言层。
 
-```bash
-# 进入 OpenClaw 工作区
-cd ~/.openclaw/workspace/skills
+- Added bilingual parsing for meals, hydration, exercise, steps, symptoms, and custom monitoring sections.
+- 新增中英双语解析能力，覆盖饮食、饮水、运动、步数、症状及自定义监测模块。
 
-# 克隆插件
-git clone git@github.com:tankeito/Health-Mate.git health-mate
+- Strengthened the Memory Write Protocol with bilingual templates and stricter formatting rules for `MEMORY_DIR`.
+- 强化 `MEMORY_DIR` 的记忆落盘协议，补充了中英双语模板和更严格的结构约束。
 
-# 安装依赖
-pip install -r health-mate/requirements.txt
-```
+- Updated `README.md`, `SKILL.md`, `_meta.json`, config examples, and shell runners for the bilingual release.
+- 更新了 `README.md`、`SKILL.md`、`_meta.json`、示例配置与 Shell 入口脚本，使其与双语版本保持一致。
 
-### 步骤 2：初始化配置
+## 🔒 Privacy And Delivery Warning / 隐私与数据外发提醒
 
-```bash
-# 进入插件目录
-cd health_report
+- `MEMORY_DIR` contains personal health records. Treat it as sensitive data.
+- `MEMORY_DIR` 中存放的是个人健康记录，请按敏感数据对待。
 
-# 运行初始化脚本（交互式问答）
-python3 scripts/init_config.py
-```
+- Generated reports may be sent to external services if a webhook is configured.
+- 如果配置了 webhook，生成的报告可能会被发送到外部服务。
 
-**脚本会自动询问**：
-```
-👋 欢迎使用 Health-Mate 健康报告系统！
+- Recommended safeguards:
+- 推荐安全措施：
 
-1️⃣  您的姓名或昵称？
-   > 张三
+- Only use webhook receivers you fully trust.
+- 只使用你完全信任的 webhook 接收端。
 
-2️⃣  性别和年龄？
-   > 男，30 岁
+- Run in a sandbox or isolated environment when possible.
+- 尽量在沙箱或隔离环境中运行。
 
-3️⃣  身高（cm）和当前体重（kg）？
-   > 175, 70
+- Protect API keys, bot tokens, and webhook URLs carefully.
+- 妥善保护 API Key、Bot Token 和 webhook URL。
 
-4️⃣  目标体重（kg）？
-   > 65
+- Review delivery logs periodically.
+- 定期检查推送日志。
 
-5️⃣  健康状况？（胆结石/糖尿病/高血压/健身减脂）
-   > 胆结石
+## 🚀 Quick Start / 快速开始
 
-6️⃣  每日饮水目标（ml）？
-   > 2000
-
-7️⃣  每日运动目标（步数）？
-   > 8000
-
-8️⃣  有没有不吃/过敏的食物？
-   > 海鲜
-
-✅ 配置完成！配置文件已保存到 config/user_config.json
-```
-
-### 步骤 3：测试运行
+### 1. Clone And Install / 克隆与安装
 
 ```bash
-# 生成今日报告
-python3 scripts/health_report_pro.py /root/.openclaw/workspace/memory/2026-03-14.md 2026-03-14
-```
-
----
-
-## 📊 输出示例
-
-### 文字报告（三端推送）
-
-```
-✅ 2026-03-14 健康报告已生成！
-
-🎯 今日综合评分：90.0/100 ⭐⭐⭐⭐
-
-📊 分项汇总
-- 饮食合规性：86.7/100 ⭐⭐⭐⭐（脂肪 38.4g 略低）
-- 饮水完成度：100/100 ⭐⭐⭐⭐⭐
-- 体重管理：80/100 ⭐⭐⭐⭐
-- 症状管理：100/100 ⭐⭐⭐⭐⭐
-- 运动管理：0/100 ⭐
-
-🤖 AI 专属健康点评
-今天你在脂肪管理上表现非常出色！38.4g 的摄入量精准落在安全区间内。
-饮水 2000ml 达标，充分稀释了胆汁浓度。
-
-但必须严肃指出两个健康隐患：
-第一，膳食纤维仅 14.1g，距离 25g 的最低要求差距较大。
-第二，全天零运动，久坐不动会显著降低胆囊排空效率。
-
-📝 今日详情汇总
-
-🥗 进食情况
-- 早餐 (08:06): 清汤牛肉面、脱脂纯牛奶 250ml、鸡蛋蛋白 1 个 - 257kcal
-- 午餐 (12:49): 半碗米饭（约 75g）、凉拌土豆牛肉、煎蛋青菜汤 - 332kcal
-- 加餐 (17:24): 苹果 1 个（约 200g） - 52kcal
-- 晚餐 (19:27): 半碗米饭（约 75g）、豆腐青菜汤、凉拌鸡肉豆干 - 195kcal
-
-💧 饮水情况
-- 晨起：250ml
-- 上午：250ml
-- 中午：250ml
-- 下午：250ml×2
-- 晚上：250ml
-→ 总计：2000ml/2000ml ✅
-
-📈 基础健康数据
-- 身高：175cm
-- 体重：140 斤（70kg）
-- BMI：22.9
-- 基础代谢 (BMR)：1650 kcal
-- 每日消耗 (TDEE)：1980 kcal
-
-📋 次日优化方案
-
-🥗 饮食计划
-- 07:30-08:00 燕麦粥 50g、脱脂牛奶 250ml、水煮蛋蛋白 2 个 等 (450kcal)
-- 12:00-12:30 糙米饭 150g、清蒸鸡胸肉 120g、蒜蓉西兰花 200g 等 (720kcal)
-- 18:30-19:00 蒸红薯 200g、瘦牛肉 100g、清炒青菜 200g 等 (580kcal)
-
-💧 饮水计划
-- 07:00 250ml (晨起空腹温水)
-- 09:30 250ml (工作间隙)
-- ...共 8 次提醒
-
-🏃 运动建议
-- 午餐后 30 分钟 饭后散步 (20-30 分钟)
-- 晚餐后 30 分钟 饭后散步 (20-30 分钟)
-- 工作间隙 办公室拉伸 (5-10 分钟/次)
-
-━━━━━━━━━━━━━━━━━━
-
-📄 PDF 完整报告
-https://your-domain.com/health_report_2026-03-14.pdf
-```
-
-### 📅 独立周报复盘系统（新增）
-
-除每日打卡外，Health-Mate 新增**每周健康大复盘**机制：
-
-- **定时推送**：默认每周一 09:00 自动推送上周完整复盘（可通过 NLP 配置自定义）
-- **智能手表级全景可视化**：
-  - 🔄 极坐标三环概览图（饮食/饮水/运动达标率一目了然）
-  - 📈 带渐变底色的体重波动折线图（7 天趋势清晰可见）
-  - 🍽️ 日均宏量营养素环形图（碳水/蛋白质/脂肪高对比度展示）
-- **🧠 AI 深度趋势洞察**：大模型自动聚合分析过去 7 天的散列数据，输出专家级深度复盘与下周精准干预动作
-
----
-
-## 📄 报告视觉预览 (Report Previews)
-
-Health-Mate 采用独立渲染引擎，告别简陋的纯文本，为您提供**媲美高级智能手表**的数据可视化分析报告。分为"每日打卡"与"周度复盘"双系统独立运行：
-
-### 🌞 专属健康日报 (Daily Report) - 独立 5 页
-日清日结，监控当日每一个健康细节。
-- Page 1: 综合评分与专家点评 - 多维度星级打分、动态 BMI 与基础代谢核算、AI 针对当日行为的数百字深度点评。
-- Page 2: 营养与饮水全景图 - 极简高对比度的宏量营养素（碳水/蛋白质/脂肪）环形摄入核算图，以及 24 小时饮水刻度堆叠柱状图。
-- Page 3-4: 三餐明细与运动目标 - 包含具体份量和热量估算的三餐无边框明细表，以及带目标刻度的"双轨制"运动/步数圆角进度条。
-- Page 5: 风险预警与次日行动 - 基于当日异常指标的红色警报，以及 AI 动态生成的次日饮食/饮水/运动干预清单。
-
-> 示例图展示区：
-> ![日报预览 -1](https://github.com/user-attachments/assets/46e7ede9-c526-4c69-86ce-65bf8cb60291)
-> ![日报预览 -2](https://github.com/user-attachments/assets/0c86b5aa-f6e9-4e54-93e4-f846b2475266)
-> ![日报预览 -3](https://github.com/user-attachments/assets/f70b3ec3-ff05-4ae0-a17e-4d0dc3ba83ad)
-> ![日报预览 -4](https://github.com/user-attachments/assets/ab375c06-edd9-4345-b3f1-4f32d3bf7264)
-> ![日报预览 -5](https://github.com/user-attachments/assets/cf81722a-a82b-4afc-afa6-799378b41406)
-
-### 📅 专属健康周报 (Weekly Report) - 独立 3 页
-拉长周期看趋势，精准定位核心健康短板（默认每周一自动推送）。
-- Page 1: 核心概览与体重趋势 - 独家渲染的"饮食/饮水/运动"极坐标三环进度图，配合带底部半透明渐变色的体重七日波动折线图。
-- Page 2: 多维趋势柱状图 - 并排对比展示本周每日的热量摄入分布（带目标警戒线）、每日步数/饮水柱状图，以及本周平均营养摄入比重环形图。
-- Page 3: AI 深度复盘与下周干预 - 大模型跨越 7 天散列数据，提取"隐藏的健康危机"，并给出下周的重点攻克方案。
-
-> 示例图展示区：
-> ![周报预览 -1](https://github.com/user-attachments/assets/77060821-c97a-4f4d-b2d1-8061101d0fe9)
-> ![周报预览 -2](https://github.com/user-attachments/assets/fd9168e8-db85-47a0-b54a-41f114345e6c)
-> ![周报预览 -3](https://github.com/user-attachments/assets/c78e6458-41b8-48a0-9ca0-721245b3a063)
-
----
-
-## 📝 数据录入（标准化格式）
-
-### 方式一：对话式录入（推荐）
-
-直接告诉机器人你今天的数据：
-
-```
-你：今天早上空腹体重 140 斤
-
-机器人：✅ 体重已记录！2026-03-14 晨起空腹：140 斤
-
-你：早上喝了 250ml 温水
-
-机器人：✅ 饮水已记录！当前进度：250ml/2000ml（12.5%）
-
-你：早餐吃了清汤牛肉面，喝了 250ml 脱脂牛奶，1 个鸡蛋蛋白
-
-机器人：✅ 早餐已记录！估算热量：257kcal
-- 清汤牛肉面：约 180kcal
-- 安佳脱脂纯牛奶 250ml：约 87kcal
-- 鸡蛋蛋白 1 个：约 17kcal
-```
-
-### 方式二：手动编辑 Markdown 文件
-
-在 `~/.openclaw/workspace/memory/YYYY-MM-DD.md` 文件中记录：
-
-```markdown
-# 2026-03-14 健康记录
-
-## 📊 体重记录
-**晨起空腹**：140 斤
-
-## 💧 饮水记录
-### 晨起（约 07:30）
-- 饮水量：250ml
-- 累计：250ml/2000ml（12.5%）
-
-### 上午（约 10:00）
-- 饮水量：250ml
-- 累计：500ml/2000ml（25%）
-
-## 🥗 饮食记录
-### 早餐（08:06）
-- 清汤牛肉面 → 约 180kcal
-- 安佳脱脂纯牛奶 250ml → 约 87kcal
-- 鸡蛋蛋白 1 个 → 约 17kcal
-
-### 午餐（12:49）
-- 半碗米饭（约 75g）→ 约 87kcal
-- 凉拌土豆牛肉 → 约 180kcal
-- 煎蛋青菜汤 → 约 65kcal
-
-### 加餐（17:24）
-- 苹果 1 个（约 200g）→ 约 52kcal
-
-### 晚餐（19:27）
-- 半碗米饭（约 75g）→ 约 87kcal
-- 豆腐青菜汤 → 约 50kcal
-- 凉拌鸡肉豆干 → 约 58kcal
-
-## 🏃 运动记录
-（今日无运动）
-
-## 📝 症状/不适
-（无不适）
-```
-
-**格式说明**：
-- 食物格式：`食物名称 → 约 XXXkcal`（热量可选，系统会自动估算）
-- 饮水格式：记录单次饮水量和累计进度
-- 运动格式：记录类型、时长、消耗热量
-
----
-
-## 💡 强烈建议：AI 记忆落盘铁律配置
-
-为了确保后端 Python 引擎能够 100% 精准解析健康数据，强烈建议安装此技能的用户，将以下规则补充到您的 AI 助理的 System Prompt 或 soul.md 中，强制规范大模型的本地文件写入格式：
-
-```markdown
-## 💾 记忆落盘铁律 (Memory Write Protocol)
-当把用户的健康记录写入 MEMORY_DIR 的 Markdown 文件时，**必须强制执行格式翻译**，绝对禁止原样照抄！落盘格式必须 100% 满足以下规则：
-
-1. **强制预估时间**：所有 `###` 级餐次或时段标题后，必须带有具体或预估时间。格式：`### 早餐（约 08:30）`。
-2. **饮食强制热量估算**：食物必须用无序列表 `- ` 记录，且**必须包含 ` → ` 符号和估算热量**。格式：`- 中式快餐 1 份 → 约 600kcal`。
-3. **饮水强制双行**：饮水记录块**只能包含两行**核心数据。格式：第一行 `- 饮水量：XXXml`，第二行 `- 累计：XXXml/2000ml`（分母为目标值）。
-4. **运动强制明细**：非步数运动标题必须带类型（如 `### 下午骑行（约 17:17）`），内容包含距离、时间或消耗。步数格式严格为 `- 总步数：XXXX 步`。
-5. **占位符**：当日全无数据的独立模块，保留 `##` 标题并在下方写 `（待记录）`。
-```
-
----
-
-## ⚙️ 配置说明
-
-### 环境变量（必填/可选）
-
-| 变量名 | 必填 | 说明 | 示例值 |
-|--------|------|------|--------|
-| `MEMORY_DIR` | ✅ **是** | OpenClaw 记忆文件目录 | `/root/.openclaw/workspace/memory` |
-| `TAVILY_API_KEY` | ❌ 否 | Tavily 搜索 API 密钥（用于 AI 搜索菜谱） | `tvly-dev-xxx` |
-| `DINGTALK_WEBHOOK` | ❌ 否 | 钉钉机器人 Webhook（可选，不配置则不推送） | `https://oapi.dingtalk.com/robot/send?access_token=xxx` |
-| `FEISHU_WEBHOOK` | ❌ 否 | 飞书机器人 Webhook（可选，不配置则不推送） | `https://open.feishu.cn/open-apis/bot/v2/hook/xxx` |
-| `TELEGRAM_BOT_TOKEN` | ❌ 否 | Telegram Bot Token（可选，不配置则不推送） | `YOUR_BOT_TOKEN_HERE` |
-| `TELEGRAM_CHAT_ID` | ❌ 否 | Telegram Chat ID（可选，不配置则不推送） | `YOUR_CHAT_ID_HERE` |
-| `REPORT_WEB_DIR` | ❌ 否 | PDF 报表存放的本地目录（不配置则保存在 reports 目录） | `/var/www/html/report` |
-| `REPORT_BASE_URL` | ❌ 否 | PDF 报告对外下载域名（如不推送可留空） | `` |
-
-**说明**：
-- ✅ **MEMORY_DIR 是必填项**，否则无法读取健康记录
-- ❌ **推送渠道（钉钉/飞书/Telegram）可选**，不配置则仅在本地生成 PDF
-- ❌ **REPORT_BASE_URL 可选**，如不需要外部访问可留空
-
-### 个人健康档案（`config/user_config.json`）
-
-```json
-{
-    "user_profile": {
-        "name": "张三",
-        "gender": "男",
-        "age": 30,
-        "height_cm": 175,
-        "current_weight_kg": 70,
-        "target_weight_kg": 65,
-        "condition": "胆结石",
-        "activity_level": 1.2,
-        "dietary_preferences": {
-            "dislike": ["鱼", "海鲜"],
-            "allergies": ["海鲜"],
-            "favorite_fruits": ["苹果", "香蕉"]
-        },
-        "water_target_ml": 2000,
-        "step_target": 8000
-    },
-    "scoring_weights": {
-        "diet": 0.45,
-        "water": 0.35,
-        "weight": 0.20,
-        "exercise_bonus": 0.10
-    }
-}
-```
-
----
-
-## 🤖 定时任务
-
-### 方式一：初始化配置时设定（推荐）
-
-在运行 `python3 scripts/init_config.py` 时，脚本会询问：
-```
-9️⃣  希望每天几点接收健康报告？（建议 22:00）
-   > 22
-```
-
-脚本会自动为您配置定时任务。
-
-### 方式二：手动配置 Crontab
-
-```bash
-# 编辑 Crontab
-crontab -e
-
-# 添加每日 22:00 推送（可自定义时间）
-0 22 * * * bash /root/.openclaw/workspace/skills/health-mate/scripts/daily_health_report_pro.sh
-```
-
-**时间格式说明**：`分 时 日 月 周 命令`
-- `0 22 * * *` = 每天 22:00 执行
-- `0 8 * * *` = 每天早上 8:00 执行
-- `0 12 * * *` = 每天中午 12:00 执行
-
----
-
-## 🛠️ 故障排查
-
-### 问题 1：配置文件不存在
-
-```bash
-# 运行初始化脚本
-python3 scripts/init_config.py
-```
-
-### 问题 2：依赖库缺失
-
-```bash
+git clone https://github.com/tankeito/Health-Mate.git
+cd Health-Mate
 pip install -r requirements.txt
 ```
 
-### 问题 3：推送失败
+### 2. Prepare Environment Variables / 准备环境变量
+
+Create `config/.env` and fill the values you need.
+
+在 `config/.env` 中填写需要的环境变量。
 
 ```bash
-# 测试 Webhook
-curl -X POST "https://oapi.dingtalk.com/robot/send?access_token=YOUR_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"msgtype":"text","text":{"content":"测试"}}'
+MEMORY_DIR=/path/to/.openclaw/workspace/memory
+
+# Optional delivery channels / 可选推送渠道
+DINGTALK_WEBHOOK=
+FEISHU_WEBHOOK=
+TELEGRAM_BOT_TOKEN=
+TELEGRAM_CHAT_ID=
+
+# Optional public PDF hosting / 可选 PDF 对外访问
+REPORT_WEB_DIR=
+REPORT_BASE_URL=
+
+# Optional search support for richer AI planning / 可选搜索增强
+TAVILY_API_KEY=
 ```
 
-### 问题 4：PDF 中文字体乱码
+### 3. Run The Setup Wizard / 运行初始化向导
 
 ```bash
-# 检查字体文件
-ls -la assets/NotoSansSC-VF.ttf
-
-# 如果不存在，脚本会自动从 GitHub 下载
-# 或者手动下载
-wget https://github.com/tankeito/openclaw-skill-health-report/raw/main/assets/NotoSansSC-VF.ttf -P assets/
+python scripts/init_config.py
 ```
 
----
+The wizard now asks for language first and writes canonical English config ids.
 
-## 📦 项目结构
+新版向导会先询问语言，并把疾病/目标、性别等关键字段写成英文规范值。
 
-```
-health_report/
-├── scripts/                    # 核心代码
-│   ├── health_report_pro.py    # 主脚本（报告生成）
-│   ├── pdf_generator.py        # PDF 生成（支持字体自动下载）
-│   ├── constants.py            # 食物常量库
-│   ├── init_config.py          # 初始化脚本（小白专用）
-│   └── daily_health_report_pro.sh  # 定时任务脚本
-├── config/                     # 配置文件
-│   ├── user_config.json        # 个人健康档案
-│   ├── .env                    # 推送配置
-│   └── user_config.example.json # 配置模板
-├── assets/                     # 资源文件
-│   └── NotoSansSC-VF.ttf       # 中文字体（自动下载）
-├── logs/                       # 日志目录
-├── reports/                    # PDF 报告输出目录
-├── README.md                   # 使用说明（本文件）
-├── SKILL.md                    # 机器人交互说明
-└── requirements.txt            # Python 依赖
+### 4. Generate Reports / 生成报告
+
+Daily report / 日报：
+
+```bash
+python scripts/health_report_pro.py /path/to/memory/2026-03-20.md 2026-03-20
 ```
 
----
+Weekly report / 周报：
 
-## 📞 获取帮助
+```bash
+python scripts/weekly_report_pro.py 2026-03-20
+```
 
-- **GitHub Issues**: https://github.com/tankeito/Health-Mate/issues
-- **作者邮箱**: tqd354@gmail.com
+Shell runners for scheduled jobs / 定时任务入口脚本：
 
----
+```bash
+bash scripts/daily_health_report_pro.sh
+bash scripts/weekly_health_report_pro.sh
+```
 
-## 🔄 版本历史 (Changelog)
+## ⚙️ Configuration / 配置说明
 
-| 版本号 | 更新日期 | 更新内容 |
-| :--- | :--- | :--- |
-| v1.2.0 | 2026-03-20 | 1. 核心：重构病理参数支持动态健康目标（如健身减脂）；<br>2. 新增：支持多语言文档及自定义模块记录；<br>3. 优化：统一极简排版，重写记忆落盘铁律以锁死 LLM 输出；<br>4. 修复：彻底解决 PDF 的 Emoji 方块乱码 (☒) 与解析容错问题。 |
+### Required / 必填
 
----
+- `MEMORY_DIR`
+  The OpenClaw memory directory that stores daily markdown files.
+  OpenClaw 的记忆目录，里面保存按天组织的 Markdown 健康记录。
 
-## 📄 License
+### Optional / 可选
 
-MIT License
+- `DINGTALK_WEBHOOK`
+  Push the final delivery message to DingTalk.
+  将最终推送文案发送到钉钉。
+
+- `FEISHU_WEBHOOK`
+  Push the final delivery message to Feishu.
+  将最终推送文案发送到飞书。
+
+- `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`
+  Push the final delivery message to Telegram.
+  将最终推送文案发送到 Telegram。
+
+- `REPORT_WEB_DIR` and `REPORT_BASE_URL`
+  Copy PDFs to a public directory and generate downloadable URLs.
+  将 PDF 复制到公开目录，并生成可下载链接。
+
+- `TAVILY_API_KEY`
+  Optional search context for richer next-day action plans.
+  为次日计划提供额外搜索上下文，可选。
+
+### User Profile / 用户档案
+
+`config/user_config.json` now prefers these canonical values:
+
+`config/user_config.json` 现在优先使用以下规范值：
+
+- `language`: `zh-CN` or `en-US`
+- `gender`: `male` or `female`
+- `condition`: `gallstones`, `diabetes`, `hypertension`, `fat_loss`, `balanced`
+
+Example / 示例：
+
+```json
+{
+  "language": "zh-CN",
+  "user_profile": {
+    "name": "Alex",
+    "gender": "male",
+    "age": 34,
+    "height_cm": 172,
+    "current_weight_kg": 65.2,
+    "target_weight_kg": 64,
+    "condition": "gallstones",
+    "activity_level": 1.2,
+    "water_target_ml": 2000,
+    "step_target": 8000,
+    "dietary_preferences": {
+      "dislike": ["food-to-avoid-1"],
+      "allergies": ["allergy-1"],
+      "favorite_fruits": ["apple", "banana"]
+    }
+  }
+}
+```
+
+## 🌐 Localization / 多语言设计
+
+- The report locale follows `language` in `user_config.json`.
+- 报告语言由 `user_config.json` 中的 `language` 字段决定。
+
+- Chinese and English memory files are both accepted by the parser.
+- 解析器同时支持中文和英文格式的记忆文件。
+
+- English is the preferred internal canonical layer for config and code, but Chinese remains fully supported for parsing and display.
+- 代码和配置内部优先使用英文规范层，但中文解析与中文展示仍然保持完整支持。
+
+- Do not mix Chinese and English labels inside the same memory block.
+- 不要在同一个记忆块内混用中文与英文字段标签。
+
+## 💾 Memory Write Protocol / 记忆落盘铁律
+
+This protocol should be written into `SKILL.md`. If your OpenClaw runtime supports `soul.md` or a dedicated system prompt, mirror the same protocol there as well.
+
+这份协议应该写入 `SKILL.md`。如果你的 OpenClaw 运行环境支持 `soul.md` 或独立的 system prompt，也建议同步放进去。
+
+Why / 为什么：
+
+- `SKILL.md` is the stable contract for the skill itself.
+- `SKILL.md` 是 skill 自身最稳定的约束载体。
+
+- `soul.md` or the runtime system prompt gives the LLM an extra reminder at generation time.
+- `soul.md` 或运行时 system prompt 能在生成时再次提醒 LLM。
+
+- Using both reduces the chance of malformed memory files.
+- 两处同时约束，可以进一步降低记忆文件写坏的概率。
+
+### Non-Negotiable Rules / 强制规则
+
+1. Meals, hydration blocks, and exercise blocks must use level-3 headings only: `### ...`
+1. 餐次、饮水块、运动块必须使用三级标题：`### ...`
+
+2. Food lines must use the exact arrow format: `- Item portion → approx. XXXkcal`
+2. 饮食行必须严格使用箭头格式：`- 食物 份量 → 约 XXXkcal`
+
+3. Hydration blocks must contain exactly two lines:
+3. 饮水块必须且只能包含两行：
+
+   `- Water intake: XXXml`
+
+   `- Cumulative: XXXml/targetml`
+
+   `- 饮水量：XXXml`
+
+   `- 累计：XXXml/目标ml`
+
+4. Step tracking must use a level-2 heading only:
+4. 步数记录必须单独使用二级标题：
+
+   `## Today Steps`
+
+   `- Total steps: XXXX steps`
+
+   `## 今日步数`
+
+   `- 总步数：XXXX 步`
+
+5. Extra modules such as medication are allowed, but they must stay under level-2 headings and contain raw bullet data only.
+5. 额外模块如用药记录是允许的，但必须放在二级标题下，且内容只能是原始项目符号数据。
+
+6. Never write evaluations, summaries, emojis, or chatty commentary into `MEMORY_DIR`.
+6. 绝对不要把评估、总结、Emoji 或聊天式点评写进 `MEMORY_DIR`。
+
+### Chinese Template / 中文模板
+
+```markdown
+# 2026-03-20 健康记录
+
+### 早餐（约 08:30）
+- 燕麦片 50g → 约 190kcal
+- 脱脂牛奶 250ml → 约 87kcal
+
+### 上午（约 09:45）
+- 饮水量：300ml
+- 累计：300ml/2000ml
+
+### 下午骑行（约 17:17）
+- 距离：10公里
+- 耗时：47分钟
+- 消耗：约 300kcal
+
+## 今日步数
+- 总步数：8500 步
+```
+
+### English Template / 英文模板
+
+```markdown
+# 2026-03-20 Health Log
+
+### Breakfast (around 08:30)
+- Oatmeal 50g → approx. 190kcal
+- Skim milk 250ml → approx. 87kcal
+
+### Morning (around 09:45)
+- Water intake: 300ml
+- Cumulative: 300ml/2000ml
+
+### Afternoon Cycling (around 17:17)
+- Distance: 10km
+- Duration: 47min
+- Burn: approx. 300kcal
+
+## Today Steps
+- Total steps: 8500 steps
+```
+
+## 📊 Report Flow / 报表流程
+
+### Daily Report / 日报
+
+- Parse one markdown memory file from `MEMORY_DIR`.
+- 从 `MEMORY_DIR` 读取单日 Markdown 记录。
+
+- Estimate calories and macronutrients from food entries.
+- 根据食物条目估算热量与宏量营养素。
+
+- Score diet, hydration, weight, symptoms, exercise, and adherence.
+- 对饮食、饮水、体重、症状、运动和依从性进行评分。
+
+- Generate a localized text summary and a localized PDF report.
+- 生成本地化文字摘要与本地化 PDF 报告。
+
+- Build one delivery payload for DingTalk, Feishu, or Telegram.
+- 生成统一推送文案，供钉钉、飞书或 Telegram 使用。
+
+### Weekly Report / 周报
+
+- Aggregate seven days of memory data.
+- 聚合最近七天的记忆数据。
+
+- Compute trends for weight, calories, hydration, and steps.
+- 计算体重、热量、饮水和步数趋势。
+
+- Produce a weekly review, next-week actions, and a weekly PDF.
+- 生成周度复盘、下周行动项以及周报 PDF。
+
+## 🧪 Troubleshooting / 常见排查
+
+- No report is generated:
+  Check that `MEMORY_DIR` exists and contains a markdown file for the requested date.
+- 没有生成报告：
+  先确认 `MEMORY_DIR` 是否存在，并且目标日期的 Markdown 文件已经写入。
+
+- PDF renders but charts are missing:
+  Make sure `matplotlib` is installed and the runtime can write temporary files.
+- PDF 正常但图表缺失：
+  请确认 `matplotlib` 已安装，且运行环境允许写入临时文件。
+
+- Chinese characters render incorrectly in PDF:
+  Keep `assets/NotoSansSC-VF.ttf` available, or allow the script to download it automatically.
+- PDF 中文字体异常：
+  请确保 `assets/NotoSansSC-VF.ttf` 可用，或允许脚本自动下载。
+
+- Delivery fails:
+  Recheck webhook URLs, tokens, chat IDs, and outbound network access.
+- 推送失败：
+  重新检查 webhook 地址、Token、Chat ID 以及出站网络权限。
+
+## 📁 Project Layout / 项目结构
+
+- `scripts/health_report_pro.py`
+  Daily report controller and bilingual parser.
+
+- `scripts/weekly_report_pro.py`
+  Weekly aggregation and weekly delivery pipeline.
+
+- `scripts/pdf_generator.py`
+  Daily PDF renderer.
+
+- `scripts/weekly_pdf_generator.py`
+  Weekly PDF renderer.
+
+- `scripts/i18n.py`
+  Shared language pack, aliases, prompt builders, and locale helpers.
+
+- `scripts/init_config.py`
+  Interactive setup wizard.
+
+- `config/user_config.example.json`
+  English-first sample profile configuration.
+
+- `SKILL.md`
+  Skill metadata and the strict Memory Write Protocol.
+
+## 📌 Notes / 备注
+
+- `SKILL.md` and `_meta.json` are intentionally English-first.
+- `SKILL.md` 与 `_meta.json` 按要求采用英文主描述。
+
+- `README.md` is bilingual by design so both Chinese and overseas users can onboard quickly.
+- `README.md` 刻意做成双语，方便中文用户与海外用户都能快速上手。
+
+- The current release focuses on internationalization and output stability, without changing the main product workflow.
+- 当前版本重点在国际化与输出稳定性，核心功能流程不做大改。
+
+## 📄 License / 许可证
+
+MIT

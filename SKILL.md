@@ -1,9 +1,9 @@
 ---
 name: health-mate
 display_name: Health-Mate
-version: 1.2.0
+version: 1.3.0
 type: python/app
-description: "专业健康报告生成插件。【安全与隐私透明度声明】：1. 数据不出域：仅以只读方式解析 MEMORY_DIR 记录，只有在您主动配置 Webhook 时才会向对应端点推送报告。2. 断网支持：PDF 引擎首次运行会自动下载开源字体，若需纯离线无网络请求运行，请预先放置字体到 assets/ 目录。3. 代理隔离：文档推荐的「记忆落盘铁律 (Prompt)」建议仅在专用的健康助手实例中配置，按需隔离以避免影响全局 Agent 行为。"
+description: "A bilingual OpenClaw health-management skill for strict markdown memory logging, localized daily and weekly PDF reports, and optional webhook delivery."
 install: pip install -r requirements.txt
 capabilities:
  - file_read
@@ -11,84 +11,124 @@ capabilities:
  - http_request
 metadata:
  clawdbot:
- requires:
- env:
- - MEMORY_DIR
-homepage: https://github.com/tankeito/Health-Mate
-repository: https://github.com/tankeito/Health-Mate.git
-source: https://github.com/tankeito/Health-Mate
+  requires:
 env:
- MEMORY_DIR: OpenClaw 记忆文件目录路径（必填，仅执行只读操作）
- TAVILY_API_KEY: Tavily 搜索 API 密钥（可选）
- DINGTALK_WEBHOOK: 钉钉群机器人 Webhook 地址（可选，仅向您信任的端点发数据）
- FEISHU_WEBHOOK: 飞书群机器人 Webhook 地址（可选，仅向您信任的端点发数据）
- TELEGRAM_BOT_TOKEN: Telegram Bot API Token（可选）
- TELEGRAM_CHAT_ID: Telegram 接收者 Chat ID（可选）
- REPORT_WEB_DIR: PDF 报表存放的本地 Web 目录（可选）
- REPORT_BASE_URL: PDF 报告对外下载域名（可选）
- REPORT_TIME: 每日推送时间（可选，默认 22）
- WEEKLY_REPORT_TIME: 每周健康周报推送时间（可选，默认每周一 09:00）
+ MEMORY_DIR: Required. Read-only directory that stores markdown health memories.
+ TAVILY_API_KEY: Optional. Tavily key used for recipe and exercise research.
+ DINGTALK_WEBHOOK: Optional. DingTalk webhook for report delivery.
+ FEISHU_WEBHOOK: Optional. Feishu webhook for report delivery.
+ TELEGRAM_BOT_TOKEN: Optional. Telegram bot token for report delivery.
+ TELEGRAM_CHAT_ID: Optional. Telegram chat id for report delivery.
+ REPORT_WEB_DIR: Optional. Local directory that receives copied PDFs.
+ REPORT_BASE_URL: Optional. Public base URL for PDF links.
 ---
 
-# Health-Mate 个人健康管家 / Personal Health Assistant / 個人の健康アシスタント
+# Health-Mate
 
-> 本技能为 OpenClaw 原生设计的专属健康插件
-> A native skill exclusively designed for OpenClaw
-> OpenClaw 専用に設計されたネイティブ健康管理プラグイン
+Health-Mate is an OpenClaw-native health-management skill for LLM-assisted diet, hydration, exercise, symptom, and weight tracking. Version `1.3.0` introduces an English-first bilingual architecture while preserving full Chinese compatibility for parsing, reporting, and memory logging.
 
-🇨🇳 中文**：Health-Mate 是一款专为 OpenClaw 设计的健康管理插件。通过自然语言对话，自动收集饮食、饮水、运动及体重数据，并一键生成媲美高级智能手表的数据可视化 PDF 报告（支持推送到钉钉/飞书/TG）。
-🇺🇸 **English: Health-Mate automatically collects your diet, water, exercise, and weight data through natural language conversations, generating highly-visualized PDF reports comparable to advanced smartwatches.
-🇯🇵 日本語：自然な会話を通じて、食事、水分補給、運動、体重データを自動的に収集し、スマートウォッチに匹敵する高度に視覚化された PDF レポートを生成します。
+## Command Intent
 
----
+- `/health`
+  Generate the localized daily report for today or for a specified date.
 
-## ⚠️ 隐私与安全声明 (Security & Privacy)
+- `/health summary`
+  Generate the localized weekly review anchored to a specified date.
 
-本插件严格遵守数据安全底线：
-1. 本地只读 (Read-Only)**：插件仅以只读权限扫描 `MEMORY_DIR` 本地健康日志。
-2. **数据不出域 (Local Processing)**：所有分析与 PDF 生成均在本地完成，绝不上传私有数据（除非主动配置 Webhook）。
+## Runtime Principles
 
----
+- `MEMORY_DIR` is a read-only source of structured health records.
+- Report assembly and PDF generation happen locally.
+- Outbound delivery only happens if the user configures DingTalk, Feishu, or Telegram.
+- Config files should prefer canonical English ids such as `gallstones`, `diabetes`, `hypertension`, `fat_loss`, and `balanced`.
+- Chinese legacy values must remain compatible during parsing and report generation.
 
-## 🤖 给 AI 助理的操作指南 (Agent Instructions - Strictly Follow)
+## Agent Behavior
 
-作为接入了 Health-Mate 的 AI 助理，当用户记录日常饮食、运动时，你只需执行**极简互动与数据落盘**；当用户需要看报告时，调用底层指令。
+When this skill is active, the assistant may be warm and expressive in chat, but it must be strict and mechanical when writing files under `MEMORY_DIR`.
 
-### 1. 核心触发指令
-- /health：生成今日数据 PDF 报告。
-- /health summary：生成健康周报复盘。
+- Never write encouragement, analysis, commentary, or summaries into the memory file.
+- Use one language per record block. Chinese and English are both supported, but do not mix field labels inside the same block.
+- If time or calories are uncertain, estimate conservatively, but keep the structure exact.
+- If the user asks for advice, keep the advice in chat. The file should contain only raw structured data.
 
-### 2. 📝 记忆落盘铁律 (Memory Write Protocol - 最高优先级)
-当用户记录饮食、饮水或运动时，你必须将其写入 `MEMORY_DIR` 下的 Markdown 日志中。
-⚠️ 警告：写入文件时，你只是"无情的数据记录仪"。所有的关心、点评和建议只能发在聊天框里，绝对禁止写入 Markdown 文件！**
+## Memory Write Protocol
 
-【标准存储模板示例】（照此抄写，严禁增减多余字段，禁止出现"评估"、"✅"等废话）：
-\```markdown
+This protocol must be written in `SKILL.md`. If the OpenClaw runtime also supports `soul.md` or a dedicated system prompt, mirror the exact same protocol there too. The goal is to constrain the LLM at both the skill layer and the runtime layer.
+
+### Non-Negotiable Rules
+
+1. Meals, hydration blocks, and exercise blocks must use level-3 headings only: `### ...`
+2. Food lines must use the exact arrow format:
+   `- Item portion → approx. XXXkcal`
+3. Hydration blocks must contain exactly two lines:
+   `- Water intake: XXXml`
+   `- Cumulative: XXXml/targetml`
+4. Step tracking must use one level-2 heading only:
+   `## Today Steps`
+   followed by:
+   `- Total steps: XXXX steps`
+5. Extra modules such as medication are allowed, but they must stay under level-2 headings and contain only raw bullet data.
+6. File output must never include evaluation words such as `Assessment`, `Status`, `Summary`, `评估`, `状态`, `总结`, or any emoji.
+7. The memory file must never contain chat-style comments, LLM explanations, or motivational language.
+8. Chinese and English templates are both valid, but the model must not mix them in the same record block.
+
+### Chinese Template
+
+```markdown
 # 2026-03-20 健康记录
 
 ### 早餐（约 08:30）
 - 燕麦片 50g → 约 190kcal
 - 脱脂牛奶 250ml → 约 87kcal
 
-### 上午饮水（约 09:45）
+### 上午（约 09:45）
 - 饮水量：300ml
 - 累计：300ml/2000ml
 
 ### 下午骑行（约 17:17）
-- 距离：10 公里
-- 耗时：47 分钟
+- 距离：10公里
+- 耗时：47分钟
 - 消耗：约 300kcal
 
 ## 今日步数
 - 总步数：8500 步
+```
 
-## 💊 用药记录
-- 胆舒胶囊：1 粒
-\```
+### English Template
 
----
+```markdown
+# 2026-03-20 Health Log
 
-## 🔄 版本历史 (Changelog)
-| 版本号 | 更新日期 | 更新内容 |
-| :--- | :--- | :--- |
-| v1.2.0 | 2026-03-20 | 1. 核心：重构病理参数支持动态健康目标（如健身减脂）；<br>2. 新增：支持多语言文档及自定义模块记录；<br>3. 优化：统一极简排版，重写记忆落盘铁律以锁死 LLM 输出；<br>4. 修复：彻底解决 PDF 的 Emoji 方块乱码 (☒) 与解析容错问题。 |
+### Breakfast (around 08:30)
+- Oatmeal 50g → approx. 190kcal
+- Skim milk 250ml → approx. 87kcal
+
+### Morning (around 09:45)
+- Water intake: 300ml
+- Cumulative: 300ml/2000ml
+
+### Afternoon Cycling (around 17:17)
+- Distance: 10km
+- Duration: 47min
+- Burn: approx. 300kcal
+
+## Today Steps
+- Total steps: 8500 steps
+```
+
+## Bilingual Parsing Rules
+
+- Daily and weekly reports may be generated from either the Chinese template or the English template.
+- File headings and field labels are parsed bilingually.
+- Internal code and config should prefer canonical English values.
+- Chinese display output remains fully supported when `language` is set to `zh-CN`.
+
+## Changelog
+
+### v1.3.0 — 2026-03-20
+
+- Added a shared bilingual language layer for prompts, parsing, PDF rendering, and shell delivery.
+- Added bilingual markdown parsing for meals, hydration, exercise, steps, symptoms, and custom sections.
+- Hardened the Memory Write Protocol with Chinese and English templates and stronger anti-commentary rules.
+- Updated metadata, config examples, and documentation to align with the bilingual release.

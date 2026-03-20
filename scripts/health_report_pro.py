@@ -1,14 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-健康报告生成系统（AI 专业版 v1.2.0 - 动态病理与排版统一版）
-- 恢复：100% 保留原有代码排版与注释
-- 修复：运动正则解析，完美提取“下午骑行（约 17:17）”等非标格式，防止数据丢失
-- 修复：进食时间正则解析，兼容“约”字
-- 优化：引入目标步数参数，供下游 PDF 渲染进度条使用
-- 优化：动态捕获 Markdown 中的自定义模块（如用药记录等），自动推送到报告中
-- 优化：统一三端文本推送的排版，对齐精简版 Markdown 模板，解决乱码符号
-"""
+"""Daily report generator for Health-Mate."""
 
 import sys
 import json
@@ -17,61 +9,74 @@ import os
 import shutil
 import subprocess
 from pathlib import Path
-from datetime import datetime, timedelta
+from datetime import datetime
 
-# ==================== 安全校验：环境变量检查 ====================
+
+def console_print(*args, sep=" ", end="\n", file=sys.stdout, flush=False):
+    """Print safely even when the active terminal encoding cannot render CJK text."""
+    text = sep.join(str(arg) for arg in args) + end
+    try:
+        file.write(text)
+    except UnicodeEncodeError:
+        encoding = getattr(file, "encoding", None) or "utf-8"
+        buffer = getattr(file, "buffer", None)
+        if buffer is not None:
+            buffer.write(text.encode(encoding, errors="replace"))
+        else:
+            file.write(text.encode("ascii", errors="backslashreplace").decode("ascii"))
+    if flush:
+        file.flush()
+
+
+print = console_print
+
+# ==================== Environment validation ====================
 def validate_environment():
-    """启动前强制校验环境变量，确保安全运行"""
+    """Validate required runtime settings before execution."""
     errors = []
     warnings = []
-    
-    # 1. MEMORY_DIR 必填检查
+
     memory_dir = os.environ.get('MEMORY_DIR', '')
     if not memory_dir:
-        errors.append("❌ 错误：MEMORY_DIR 环境变量未配置（必填）")
-        errors.append("   请在 .env 文件中设置 MEMORY_DIR='/path/to/memory'")
+        errors.append(t(None, "env_missing_memory_dir"))
+        errors.append(t(None, "env_set_memory_dir"))
     elif not os.path.exists(memory_dir):
-        errors.append(f"❌ 错误：MEMORY_DIR 目录不存在：{memory_dir}")
+        errors.append(t(None, "env_memory_dir_missing", path=memory_dir))
     elif not os.access(memory_dir, os.R_OK):
-        errors.append(f"❌ 错误：MEMORY_DIR 目录无读取权限：{memory_dir}")
-    
-    # 2. Webhook 配置检查（可选，但需提示）
+        errors.append(t(None, "env_memory_dir_unreadable", path=memory_dir))
+
     webhooks = {
         'DINGTALK_WEBHOOK': os.environ.get('DINGTALK_WEBHOOK', ''),
         'FEISHU_WEBHOOK': os.environ.get('FEISHU_WEBHOOK', ''),
         'TELEGRAM_BOT_TOKEN': os.environ.get('TELEGRAM_BOT_TOKEN', ''),
     }
     configured_webhooks = [k for k, v in webhooks.items() if v]
-    
+
     if not configured_webhooks:
-        warnings.append("⚠️  警告：未配置任何 Webhook，报告将仅在本地生成 PDF")
-        warnings.append("   如需推送，请配置 DINGTALK_WEBHOOK/FEISHU_WEBHOOK/TELEGRAM_*")
-    
-    # 3. 输出检查结果
+        warnings.append(t(None, "env_no_webhooks"))
+        warnings.append(t(None, "env_webhook_hint"))
+
     if warnings:
         print("=" * 60)
-        print("⚠️  安全警告")
+        print(t(None, "security_warning_title"))
         print("=" * 60)
         for w in warnings:
             print(w)
         print("=" * 60)
-    
+
     if errors:
         print("=" * 60)
-        print("❌ 环境校验失败")
+        print(t(None, "env_validation_failed"))
         print("=" * 60)
         for e in errors:
             print(e)
         print("=" * 60)
-        print("\n程序已安全退出。请修复上述问题后重新运行。")
+        print(f"\n{t(None, 'program_exit')}")
         sys.exit(1)
-    
+
     return True
 
-# 执行环境校验
-validate_environment()
-
-# ==================== 路径管理 ====================
+# ==================== Path setup ====================
 SCRIPT_DIR = Path(__file__).parent.resolve()
 PROJECT_ROOT = SCRIPT_DIR.parent.resolve()
 CONFIG_DIR = PROJECT_ROOT / 'config'
@@ -81,14 +86,67 @@ REPORTS_DIR = PROJECT_ROOT / 'reports'
 REPORTS_DIR.mkdir(exist_ok=True)
 sys.path.insert(0, str(SCRIPT_DIR))
 
-from constants import DEFAULT_PORTIONS, FOOD_CALORIES
+from constants import DEFAULT_PORTIONS, FOOD_CALORIES, FOOD_NAME_ALIASES
+from i18n import (
+    CALORIE_BURN_ALIASES,
+    CALORIE_UNIT_PATTERN,
+    CUMULATIVE_ALIASES,
+    DISTANCE_ALIASES,
+    DISTANCE_UNIT_PATTERN,
+    DURATION_ALIASES,
+    EXERCISE_ALIASES,
+    MEAL_ALIASES,
+    MEAL_SKIP_KEYWORDS,
+    MINUTE_UNIT_PATTERN,
+    OVEREATING_PATTERN,
+    PLACEHOLDER_TOKENS,
+    PORTION_UNIT_PATTERN,
+    STEP_LABEL_ALIASES,
+    STEP_UNIT_PATTERN,
+    SYMPTOM_KEYWORDS,
+    SYMPTOM_SECTION_ALIASES,
+    TIME_APPROX_PATTERN,
+    WATER_AMOUNT_ALIASES,
+    WATER_PERIOD_ALIASES,
+    WEIGHT_MORNING_ALIASES,
+    WEIGHT_UNIT_PATTERN,
+    and_more,
+    alias_pattern,
+    build_ai_comment_prompt,
+    build_ai_comment_system_prompt,
+    build_ai_plan_prompt,
+    build_ai_plan_system_prompt,
+    build_condition_tip,
+    build_delivery_message,
+    build_fallback_plan,
+    condition_key,
+    condition_name,
+    convert_weight_to_kg,
+    exercise_key,
+    exercise_name,
+    extract_time_token,
+    format_weight,
+    gender_key,
+    has_excluded_section_keyword,
+    list_separator,
+    localized_exercise_query,
+    localized_recipe_query,
+    meal_key,
+    meal_name,
+    resolve_locale,
+    t,
+    water_period_key,
+    water_period_name,
+    weight_unit,
+)
 from pdf_generator import generate_pdf_report as generate_pdf_report_impl
 
-# ==================== Tavily API 配置 ====================
-# 安全提示：API Key 必须通过环境变量配置，切勿硬编码
+validate_environment()
+
+# ==================== Tavily configuration ====================
 TAVILY_API_KEY = os.environ.get('TAVILY_API_KEY', '')
 
-# ==================== 配置加载 ====================
+# ==================== Config loading ====================
 def load_user_config(config_path=None):
     if config_path is None:
         config_path = CONFIG_DIR / 'user_config.json'
@@ -98,24 +156,46 @@ def load_user_config(config_path=None):
         with open(config_path, 'r', encoding='utf-8') as f:
             return json.load(f)
     except Exception as e:
-        print(f"警告：读取配置文件失败 - {e}", file=sys.stderr)
+        print(t(None, "config_load_failed", error=e), file=sys.stderr)
         return _get_default_config()
 
 def _get_default_config():
     return {
+        "language": "zh-CN",
         "user_profile": {
-            "name": "东东", "gender": "男", "age": 34, "height_cm": 172,
-            "current_weight_kg": 65, "target_weight_kg": 64, "condition": "健身减脂", "activity_level": 1.2,
-            "dietary_preferences": {"dislike": ["鱼", "蛙", "海鲜"], "allergies": ["海鲜"], "favorite_fruits": ["苹果", "耙耙柑", "香蕉", "梨"]}
+            "name": "Demo User",
+            "gender": "male",
+            "age": 34,
+            "height_cm": 172,
+            "current_weight_kg": 65,
+            "target_weight_kg": 64,
+            "condition": "fat_loss",
+            "activity_level": 1.2,
+            "water_target_ml": 2000,
+            "step_target": 8000,
+            "dietary_preferences": {
+                "dislike": ["seafood"],
+                "allergies": ["seafood"],
+                "favorite_fruits": ["apple", "banana", "pear"],
+            },
         },
-        "condition_standards": {"健身减脂": {"fat_min_g": 30, "fat_max_g": 50, "fiber_min_g": 25, "water_min_ml": 2000}},
+        "condition_standards": {
+            "fat_loss": {"fat_min_g": 30, "fat_max_g": 50, "fiber_min_g": 25, "water_min_ml": 2000},
+            "balanced": {"fat_min_g": 40, "fat_max_g": 60, "fiber_min_g": 25, "water_min_ml": 2000},
+        },
         "scoring_weights": {"diet": 0.45, "water": 0.35, "weight": 0.20, "exercise_bonus": 0.10},
         "exercise_standards": {"weekly_target_minutes": 150}
     }
 
 def get_condition_standards(config, condition_name):
     standards = config.get('condition_standards', {})
-    return standards.get(condition_name, standards.get('健身减脂', {}))
+    canonical = condition_key(condition_name)
+    if canonical in standards:
+        return standards[canonical]
+    for key, value in standards.items():
+        if condition_key(key) == canonical:
+            return value
+    return standards.get('fat_loss', standards.get('balanced', {}))
 
 def get_scoring_weights(config):
     weights = config.get('scoring_weights', {'diet': 0.45, 'water': 0.35, 'weight': 0.20})
@@ -127,23 +207,26 @@ def get_exercise_bonus_weight(config):
     weights = config.get('scoring_weights', {})
     return weights.get('exercise_bonus', 0.10)
 
-# ==================== 基础计算 ====================
+# ==================== Core calculations ====================
 def calculate_bmi(weight_kg, height_cm):
     if not weight_kg or not height_cm: return 0
     height_m = height_cm / 100
     return round(weight_kg / (height_m ** 2), 1)
 
 def calculate_bmr(weight_kg, height_cm, age, gender):
-    if gender == '男':
+    if gender_key(gender) == 'male':
         return round(10 * weight_kg + 6.25 * height_cm - 5 * age + 5, 1)
     return round(10 * weight_kg + 6.25 * height_cm - 5 * age - 161, 1)
 
 def calculate_tdee(bmr, activity_level):
     return round(bmr * activity_level, 1)
 
-# ==================== 食物解析 ====================
+# ==================== Food parsing ====================
 def parse_food_entry(entry_text):
     entry = entry_text.strip()
+    alias_key = entry.lower().strip()
+    if alias_key in FOOD_NAME_ALIASES:
+        entry = FOOD_NAME_ALIASES[alias_key]
     for portion_prefix, portion_grams in DEFAULT_PORTIONS.items():
         if entry.startswith(portion_prefix):
             food_name = entry[len(portion_prefix):].strip()
@@ -152,6 +235,9 @@ def parse_food_entry(entry_text):
 
 def estimate_nutrition(food_name, portion_grams, calories_db):
     nutrition = None
+    alias_key = str(food_name or "").lower().strip()
+    if alias_key in FOOD_NAME_ALIASES:
+        food_name = FOOD_NAME_ALIASES[alias_key]
     if food_name in calories_db:
         nutrition = calories_db[food_name]
     else:
@@ -164,7 +250,7 @@ def estimate_nutrition(food_name, portion_grams, calories_db):
     scale = portion_grams / 100.0
     return {k: round(nutrition.get(k, 0) * scale, 1) for k in ['calories', 'protein', 'fat', 'carb', 'fiber']}
 
-# ==================== 评分计算 ====================
+# ==================== Scoring ====================
 def calculate_diet_score(daily_data, standards, scoring_standards):
     diet_weights = scoring_standards.get('diet', {'fat_score_weight': 0.30, 'protein_score_weight': 0.25, 'fiber_score_weight': 0.25, 'avoid_food_penalty': 0.20})
     total_fat = daily_data.get('total_fat', 0)
@@ -192,32 +278,27 @@ def calculate_weight_score(weight_recorded, target_weight, current_weight):
         score += 50 if diff <= 1 else (30 if diff <= 3 else (15 if diff <= 5 else 0))
     return max(0, min(100, score))
 
-# [1.1.9 修复]：追加 steps 参数，使得步数也能计算运动加分
 def calculate_exercise_score(exercise_data, steps, exercise_standards, scoring_standards):
     try:
         exercise_weights = scoring_standards.get('exercise', {'duration_score_weight': 0.40, 'frequency_score_weight': 0.30, 'calorie_score_weight': 0.30, 'daily_calorie_target': 300})
         total_minutes = sum(e.get('duration_min', 0) for e in exercise_data if isinstance(e, dict)) if exercise_data else 0
         daily_target = exercise_standards.get('weekly_target_minutes', 150) / 7
         duration_score = 100 if total_minutes >= daily_target else round((total_minutes / daily_target) * 100, 1) if daily_target > 0 else 0
-        
-        # 如果有运动记录，或者步数大于3000步，频率分即达标
+
         frequency_score = 100 if (exercise_data and len(exercise_data) > 0) or steps > 3000 else 0
-        
+
         total_calories = sum(e.get('calories', 0) for e in exercise_data if isinstance(e, dict)) if exercise_data else 0
-        total_calories += int(steps * 0.035) # 步数转化为热量参与评分
-        
+        total_calories += int(steps * 0.035)
         calorie_target = exercise_weights.get('daily_calorie_target', 300)
         calorie_score = 100 if total_calories >= calorie_target else round((total_calories / calorie_target) * 100, 1) if calorie_target > 0 else 0
-        
         score = duration_score * exercise_weights.get('duration_score_weight', 0.40) + frequency_score * exercise_weights.get('frequency_score_weight', 0.30) + calorie_score * exercise_weights.get('calorie_score_weight', 0.30)
         return max(0, min(100, round(score, 1)))
     except Exception as e:
-        print(f"警告：运动评分计算失败 - {e}", file=sys.stderr)
+        print(t(None, "exercise_score_failed", error=e), file=sys.stderr)
         return 0
 
-# ==================== 核心修复：增强版文件解析 ====================
 def parse_memory_file(file_path):
-    """增强版解析健康记录文件（彻底解决“约”时间与乱序导致数据丢失）"""
+    """Parse one markdown memory file with bilingual heading support."""
     data = {
         'date': '', 'weight_morning': None, 'weight_evening': None,
         'water_records': [], 'meals': [], 'exercise_records': [],
@@ -225,100 +306,102 @@ def parse_memory_file(file_path):
         'water_total': 0, 'water_target': 2000,
         'total_calories': 0, 'total_protein': 0, 'total_fat': 0, 'total_carb': 0, 'total_fiber': 0,
         'steps': 0, 'overeating_factor': 1.0,
-        'custom_sections': {} # 用于容纳动态追加的记录
+        'custom_sections': {}
     }
-    if not os.path.exists(file_path): return data
-    
+    if not os.path.exists(file_path):
+        return data
+
     with open(file_path, 'r', encoding='utf-8') as f:
         content = f.read()
-    
-    # 解析日期
-    date_match = re.search(r'# (\d{4}-\d{2}-\d{2})', content)
-    if date_match: data['date'] = date_match.group(1)
-    
-    # 解析晨起体重
-    weight_match = re.search(r'晨起空腹.*?([\d.]+)\s*斤', content)
-    if weight_match: data['weight_morning'] = float(weight_match.group(1)) / 2
 
-    # 动态捕获用户新加的记录区块 (匹配所有二级标题)
-    blocks = re.finditer(r'^##\s+([^\n]+)\n(.*?)(?=\n##\s|\Z)', content, re.MULTILINE | re.DOTALL)
-    exclude_keywords = ['体重', '饮水', '饮食', '运动', '症状', '不适', '目标']
-    for m in blocks:
-        header_raw = m.group(1).strip()
-        # 排除系统内置的核心区块，捕获附加块
-        if not any(k in header_raw for k in exclude_keywords):
+    date_match = re.search(r'# (\d{4}-\d{2}-\d{2})', content)
+    if date_match:
+        data['date'] = date_match.group(1)
+
+    weight_match = re.search(
+        rf'({alias_pattern(WEIGHT_MORNING_ALIASES)})[^\n:：-]*[：:\-]?\s*([\d.]+)\s*{WEIGHT_UNIT_PATTERN}?',
+        content,
+        re.IGNORECASE,
+    )
+    if weight_match:
+        raw_label = weight_match.group(1)
+        raw_value = float(weight_match.group(2))
+        raw_unit = weight_match.group(3) if weight_match.lastindex and weight_match.lastindex >= 3 else None
+        assume_jin = any(ord(char) > 127 for char in raw_label)
+        unit = raw_unit or (weight_unit("zh-CN") if assume_jin else weight_unit("en-US"))
+        data['weight_morning'] = convert_weight_to_kg(raw_value, unit, assume_jin=assume_jin)
+
+    section_blocks = re.finditer(r'^##\s+([^\n]+)\n(.*?)(?=\n##\s|\Z)', content, re.MULTILINE | re.DOTALL)
+    for match in section_blocks:
+        header_raw = match.group(1).strip()
+        if not has_excluded_section_keyword(header_raw):
             lines = []
-            for line in m.group(2).split('\n'):
-                l = line.strip()
-                # 忽略无意义占位符
-                if l and l not in ['(待记录)', '（待记录）'] and not l.startswith('_'):
-                    lines.append(l)
+            for line in match.group(2).split('\n'):
+                line_value = line.strip()
+                if line_value and line_value not in PLACEHOLDER_TOKENS and not line_value.startswith('_'):
+                    lines.append(line_value)
             if lines:
                 data['custom_sections'][header_raw] = lines
-    
-    # 解析饮水记录
-    water_blocks = re.findall(r'### (晨起|上午|中午|下午|晚上)([^\n]*)\n(?:[^\n]*\n)*?- 饮水量[：:]\s*(\d+)\s*ml\n- 累计[：:]\s*(\d+)\s*ml/\s*(\d+)\s*ml', content)
-    for time_label, title_rest, amount, cum, target in water_blocks:
-        t_match = re.search(r'[\(（](?:约\s*)?([\d:]+)[\)）]', title_rest)
-        exact_time = t_match.group(1) if t_match else ""
+
+    water_header_pattern = alias_pattern(WATER_PERIOD_ALIASES)
+    water_blocks = re.findall(
+        rf'###\s+({water_header_pattern})([^\n]*)\n(?:[^\n]*\n)*?-\s*(?:{alias_pattern(WATER_AMOUNT_ALIASES)})[：:]\s*(\d+)\s*ml\n-\s*(?:{alias_pattern(CUMULATIVE_ALIASES)})[：:]\s*(\d+)\s*ml/\s*(\d+)\s*ml',
+        content,
+        re.IGNORECASE,
+    )
+    for time_label_raw, title_rest, amount, cumulative, target in water_blocks:
+        exact_time = extract_time_token(title_rest)
+        time_key = water_period_key(time_label_raw)
         data['water_records'].append({
-            'time_label': time_label,
-            'exact_time': exact_time,  
-            'time': exact_time or time_label,
+            'time_label': time_key,
+            'exact_time': exact_time,
+            'time': exact_time or time_key,
             'amount_ml': int(amount),
-            'cumulative_ml': int(cum)
+            'cumulative_ml': int(cumulative),
         })
     if water_blocks:
         data['water_total'] = int(water_blocks[-1][3])
         data['water_target'] = int(water_blocks[-1][4])
-    
-    # 解析过饱情况
-    overeating_matches = re.findall(r'(?:吃|感觉).{0,20}?(?:有点饱|过饱|吃撑|吃太饱)', content)
-    data['overeating_factor'] = 1.25 if len(overeating_matches) > 0 else 1.0
-    
-    # 解析症状
-    symptom_keywords = ['右上腹涨', '腹涨', '腹胀', '腹痛', '涨痛', '不舒服', '恶心']
-    found_symptoms = []
-    for kw in symptom_keywords:
-        if kw in content:
-            found_symptoms.append(kw)
-    data['symptom_keywords'] = found_symptoms
-    
-    # 解析饮食记录
-    meal_pattern = r'### (早餐|午餐|晚餐|加餐)[^\n]*'
-    meal_starts = [(m.group(1), m.start(), m.end()) for m in re.finditer(meal_pattern, content)]
-    
-    for i, (meal_type, start, end) in enumerate(meal_starts):
+
+    overeating_matches = re.findall(OVEREATING_PATTERN, content, re.IGNORECASE)
+    data['overeating_factor'] = 1.25 if overeating_matches else 1.0
+
+    data['symptom_keywords'] = [keyword for keyword in SYMPTOM_KEYWORDS if keyword.lower() in content.lower()]
+
+    meal_pattern = rf'###\s+({alias_pattern(MEAL_ALIASES)})[^\n]*'
+    meal_starts = [(match.group(1), match.start(), match.end()) for match in re.finditer(meal_pattern, content, re.IGNORECASE)]
+
+    for index, (meal_type_raw, start, end) in enumerate(meal_starts):
         title_line = content[start:end]
-        time_match = re.search(r'[\(（](?:约\s*)?([\d:]+)[\)）]', title_line)
-        meal_time = time_match.group(1) if time_match else ""
-        
-        next_start = meal_starts[i+1][2] if i+1 < len(meal_starts) else len(content)
-        
-        # 寻找当前小节的严格结束点：遇到下一个 ### 或 ## 立即停止
+        meal_time = extract_time_token(title_line)
+
+        next_start = meal_starts[index + 1][2] if index + 1 < len(meal_starts) else len(content)
         next_boundary = len(content)
         next_hash3 = content.find('\n### ', end)
         next_hash2 = content.find('\n## ', end)
-        if next_hash3 != -1: next_boundary = min(next_boundary, next_hash3)
-        if next_hash2 != -1: next_boundary = min(next_boundary, next_hash2)
+        if next_hash3 != -1:
+            next_boundary = min(next_boundary, next_hash3)
+        if next_hash2 != -1:
+            next_boundary = min(next_boundary, next_hash2)
         if next_boundary < next_start:
             next_start = next_boundary
-            
+
         meal_content = content[end:next_start]
-        
-        meal_overeating = 1.25 if re.search(r'(?:吃|感觉).{0,20}?(?:有点饱|过饱|吃撑)', meal_content) else 1.0
-        
+        meal_overeating = 1.25 if re.search(OVEREATING_PATTERN, meal_content, re.IGNORECASE) else 1.0
         meal_data = {
-            'type': meal_type, 'time': meal_time, 'foods': [], 'food_nutrition': [],
+            'type': meal_key(meal_type_raw),
+            'time': meal_time,
+            'foods': [],
+            'food_nutrition': [],
             'total_calories': 0, 'total_protein': 0, 'total_fat': 0, 'total_carb': 0, 'total_fiber': 0,
             'overeating_factor': meal_overeating,
         }
-        
-        food_lines = meal_content.split('\n')
-        for line in food_lines:
+
+        for line in meal_content.split('\n'):
             line_stripped = line.strip()
             if line_stripped.startswith('-') and '→' in line_stripped:
-                if any(kw in line_stripped for kw in ['总计', '评估', '蛋白质：', '脂肪：', '碳水：', '纤维：', '维生素']):
+                lowered_line = line_stripped.lower()
+                if any(kw.lower() in lowered_line for kw in MEAL_SKIP_KEYWORDS):
                     continue
                 food_match = re.match(r'-\s*(.+?)\s*→', line_stripped)
                 if food_match:
@@ -331,26 +414,37 @@ def parse_memory_file(file_path):
                     meal_data['food_nutrition'].append({'name': food_name, 'portion_grams': portion, **nutrition})
                     for k in ['calories', 'protein', 'fat', 'carb', 'fiber']:
                         meal_data[f'total_{k}'] += nutrition[k]
-        
+
         if meal_data['foods']:
             data['meals'].append(meal_data)
-    
-    # 彻底散列解析运动记录，防名称变化导致捕获失败
-    blocks = re.finditer(r'### ([^\n]+)\n(.*?)(?=\n### |\n## |\Z)', content, re.DOTALL)
-    for m in blocks:
-        title = m.group(1).strip()
-        exercise_content = m.group(2)
+
+    exercise_blocks = re.finditer(r'### ([^\n]+)\n(.*?)(?=\n### |\n## |\Z)', content, re.DOTALL)
+    for match in exercise_blocks:
+        title = match.group(1).strip()
+        exercise_content = match.group(2)
         exercise_type = None
-        for k in ['骑行', '散步', '跑步', '健身', '其他']:
-            if k in title:
-                exercise_type = k
+        lowered_title = title.lower()
+        for canonical, aliases in EXERCISE_ALIASES.items():
+            if any(alias.lower() in lowered_title for alias in aliases):
+                exercise_type = canonical
                 break
-        
+
         if exercise_type:
-            distance_match = re.search(r'(?:距离|公里数).*?[：:]\s*([\d.]+)\s*(?:公里|km)', exercise_content, re.IGNORECASE)
-            duration_match = re.search(r'(?:时间|耗时).*?[：:]\s*(\d+)\s*(?:分|分钟)', exercise_content)
-            calories_match = re.search(r'(?:热量消耗|消耗|总消耗).*?[：:]\s*(\d+)\s*(?:千卡|kcal|卡)', exercise_content, re.IGNORECASE)
-            
+            distance_match = re.search(
+                rf'(?:{alias_pattern(DISTANCE_ALIASES)}).*?[：:]\s*([\d.]+)\s*{DISTANCE_UNIT_PATTERN}',
+                exercise_content,
+                re.IGNORECASE,
+            )
+            duration_match = re.search(
+                rf'(?:{alias_pattern(DURATION_ALIASES)}).*?[：:]\s*(\d+)\s*{MINUTE_UNIT_PATTERN}',
+                exercise_content,
+                re.IGNORECASE,
+            )
+            calories_match = re.search(
+                rf'(?:{alias_pattern(CALORIE_BURN_ALIASES)}).*?[：:]\s*(\d+)\s*{CALORIE_UNIT_PATTERN}',
+                exercise_content,
+                re.IGNORECASE,
+            )
             if duration_match or calories_match:
                 data['exercise_records'].append({
                     'type': exercise_type,
@@ -358,135 +452,126 @@ def parse_memory_file(file_path):
                     'duration_min': int(duration_match.group(1)) if duration_match else 0,
                     'calories': int(calories_match.group(1)) if calories_match else 0,
                 })
-    
-    # 解决步数记录正则匹配失败
-    steps_match = re.search(r'(?:总步数|步数).*?[：:]\s*(\d+)\s*步', content)
-    if steps_match: data['steps'] = int(steps_match.group(1))
-    
-    # 解析症状文本
-    symptom_section = re.search(r'## ?📝 ?症状[^\n]*\n(.*?)(?=\n## |\Z)', content, re.DOTALL)
+
+    steps_match = re.search(
+        rf'(?:{alias_pattern(STEP_LABEL_ALIASES)}).*?[：:]\s*(\d+)\s*{STEP_UNIT_PATTERN}?',
+        content,
+        re.IGNORECASE,
+    )
+    if steps_match:
+        data['steps'] = int(steps_match.group(1))
+
+    symptom_section = re.search(
+        rf'##\s*(?:📝\s*)?(?:{alias_pattern(SYMPTOM_SECTION_ALIASES)})[^\n]*\n(.*?)(?=\n## |\Z)',
+        content,
+        re.IGNORECASE | re.DOTALL,
+    )
     if symptom_section:
         symptom_text = symptom_section.group(1).strip()
-        if symptom_text and '_（无记录）_' not in symptom_text and '（待记录）' not in symptom_text:
+        if symptom_text and not any(token in symptom_text for token in PLACEHOLDER_TOKENS):
             data['symptoms'] = [s.strip() for s in symptom_text.split('\n') if s.strip() and not s.startswith('_')]
-    
-    # 计算总计
+
     data['total_calories'] = sum(m.get('total_calories', 0) for m in data['meals'])
     data['total_protein'] = sum(m.get('total_protein', 0) for m in data['meals'])
     data['total_fat'] = sum(m.get('total_fat', 0) for m in data['meals'])
     data['total_carb'] = sum(m.get('total_carb', 0) for m in data['meals'])
     data['total_fiber'] = sum(m.get('total_fiber', 0) for m in data['meals'])
-    
+
     return data
 
-# ==================== AI 健康点评生成 ====================
+# ==================== AI insight generation ====================
 def generate_ai_comment(health_data, config):
-    """调用大模型生成 AI 专属健康点评"""
+    """Generate an AI insight, with a local fallback when LLM is unavailable."""
+    locale = resolve_locale(config)
     user_profile = config.get('user_profile', {})
-    condition = user_profile.get('condition', '健身减脂')
-    user_name = user_profile.get('name', '用户')
+    condition = user_profile.get('condition', 'fat_loss')
+    user_name = user_profile.get('name', t(locale, 'default_user'))
     standards = get_condition_standards(config, condition)
-    
+
     fat_min, fat_max = standards.get('fat_min_g', 40), standards.get('fat_max_g', 50)
     fiber_min = standards.get('fiber_min_g', 25)
-    
-    condition_tips = {
-        '胆结石': '低脂（{}-{}g/天）、高纤维（≥{}g/天）、规律进食'.format(fat_min, fat_max, fiber_min),
-        '糖尿病': '低糖（<50g/天）、高纤维（≥30g/天）、少食多餐',
-        '高血压': '低盐（<2000mg/天）、高钾、高纤维',
-        '健身减脂': '高蛋白（≥2g/kg）、适量碳水、低脂肪'
+    prompt_context = {
+        'user_name': user_name,
+        'condition_name': condition_name(locale, condition),
+        'diet_principle': build_condition_tip(locale, condition, fat_min, fat_max, fiber_min),
+        'calories': health_data.get('total_calories', 0),
+        'protein': health_data.get('total_protein', 0),
+        'fat': health_data.get('total_fat', 0),
+        'fat_min': fat_min,
+        'fat_max': fat_max,
+        'carb': health_data.get('total_carb', 0),
+        'fiber': health_data.get('total_fiber', 0),
+        'fiber_min': fiber_min,
+        'water_total': health_data.get('water_total', 0),
+        'water_target': health_data.get('water_target', user_profile.get('water_target_ml', 2000)),
+        'exercise_count': len(health_data.get('exercise_records', [])),
+        'steps': health_data.get('steps', 0),
+        'overeating_factor': health_data.get('overeating_factor', 1.0),
+        'symptom_keywords': health_data.get('symptom_keywords', []),
     }
-    diet_principle = condition_tips.get(condition, '均衡饮食')
-    
-    prompt = f"""你是一位专业的私人营养师，专门服务{condition}人群。请根据以下健康数据，生成一段深度健康点评：
-
-【用户档案】
-- 称呼：{user_name}
-- 病理/目标：{condition}
-- 饮食原则：{diet_principle}
-
-【今日数据】
-- 总热量：{health_data.get('total_calories', 0):.0f} kcal
-- 蛋白质：{health_data.get('total_protein', 0):.1f}g
-- 脂肪：{health_data.get('total_fat', 0):.1f}g（推荐：{fat_min}-{fat_max}g）
-- 碳水：{health_data.get('total_carb', 0):.1f}g
-- 膳食纤维：{health_data.get('total_fiber', 0):.1f}g（推荐：≥{fiber_min}g）
-- 饮水：{health_data.get('water_total', 0)}ml（目标：{health_data.get('water_target', 2000)}ml）
-- 运动：{len(health_data.get('exercise_records', []))}次，{health_data.get('steps', 0)}步
-- 过饱系数：{health_data.get('overeating_factor', 1.0)}
-- 症状关键词：{health_data.get('symptom_keywords', [])}
-
-【点评要求】
-1. 语气：专业但温暖，像私人营养师一样既夸奖又提醒
-2. 结构：先肯定做得好的地方，再严肃指出健康隐患
-3. 长度：不少于 150 字
-4. 重点：结合{condition}的目标，指出改进空间
-5. 如有过饱或症状，必须重点警示
-
-请直接输出点评内容，不要加标题或格式："""
+    prompt = build_ai_comment_prompt(locale, prompt_context)
 
     for attempt in range(3):
         try:
             result = subprocess.run(
                 ['openclaw', 'agent', '--local', '--to', '+860000000000', '--message', prompt],
-                capture_output=True, text=True, timeout=90,
-                env={**os.environ, 'SYSTEM_PROMPT': f'你是一位专业的私人营养师，专门针对{condition}情况进行指导。'}
+                capture_output=True,
+                text=True,
+                timeout=90,
+                env={**os.environ, 'SYSTEM_PROMPT': build_ai_comment_system_prompt(locale, condition)},
             )
             if result.returncode == 0 and result.stdout.strip():
                 output = result.stdout.strip()
-                # 清理可能的日志前缀
                 if '[plugins]' in output:
                     lines = output.split('\n')
-                    clean_lines = [l for l in lines if not l.startswith('[plugins]') and not l.startswith('[adp-')]
-                    output = '\n'.join(clean_lines).strip()
+                    output = '\n'.join([line for line in lines if not line.startswith('[plugins]') and not line.startswith('[adp-')]).strip()
                 return output
         except subprocess.TimeoutExpired:
-            print(f"AI 点评生成超时（第{attempt+1}次），重试中...", file=sys.stderr)
+            print(t(locale, "ai_comment_timeout", attempt=attempt + 1), file=sys.stderr)
         except Exception as e:
-            print(f"AI 点评生成失败（第{attempt+1}次）: {e}", file=sys.stderr)
+            print(t(locale, "ai_comment_failed", attempt=attempt + 1, error=e), file=sys.stderr)
         if attempt < 2:
             import time
             time.sleep(2)
-    
-    # 备用方案
+
     comments = []
     fat_val = health_data.get('total_fat', 0)
     if fat_min <= fat_val <= fat_max:
-        comments.append(f"脂肪摄入{fat_val:.1f}g 控制在理想范围内，这对于达成健康目标非常关键！")
+        comments.append(t(locale, "fallback_comment_fat_ok", value=fat_val))
     elif fat_val < fat_min:
-        comments.append(f"脂肪摄入仅{fat_val:.1f}g，略低于推荐值。虽然低脂是好事，但脂肪摄入过低会影响内分泌平衡，建议适量增加健康脂肪。")
+        comments.append(t(locale, "fallback_comment_fat_low", value=fat_val))
     else:
-        comments.append(f"脂肪摄入{fat_val:.1f}g 超标！这会严重影响减脂和健康，明日必须严格控油。")
-    
+        comments.append(t(locale, "fallback_comment_fat_high", value=fat_val))
+
     fiber_val = health_data.get('total_fiber', 0)
     if fiber_val >= fiber_min:
-        comments.append(f"膳食纤维{fiber_val:.1f}g 达标，继续保持！")
+        comments.append(t(locale, "fallback_comment_fiber_ok", value=fiber_val))
     else:
-        comments.append(f"膳食纤维仅{fiber_val:.1f}g，严重不足！纤维能促进肠道健康和代谢，建议明日增加蔬菜、粗粮摄入。")
-    
+        comments.append(t(locale, "fallback_comment_fiber_low", value=fiber_val))
+
     water_val = health_data.get('water_total', 0)
-    water_target = health_data.get('water_target', 2000)
+    water_target = health_data.get('water_target', user_profile.get('water_target_ml', 2000))
     if water_val >= water_target:
-        comments.append(f"饮水{water_val}ml 达标，效果优秀！")
+        comments.append(t(locale, "fallback_comment_water_ok", value=water_val))
     else:
-        comments.append(f"饮水仅{water_val}ml，未达到{water_target}ml 目标。充足饮水能提升代谢效率。")
-    
+        comments.append(t(locale, "fallback_comment_water_low", value=water_val, target=water_target))
+
     steps = health_data.get('steps', 0)
     if steps >= 6000:
-        comments.append(f"今日{steps}步活动量充足，久坐人群的好榜样！")
+        comments.append(t(locale, "fallback_comment_steps_high", value=steps))
     elif steps >= 3000:
-        comments.append(f"今日{steps}步基本达标，但作为久坐人群还可以更多。")
+        comments.append(t(locale, "fallback_comment_steps_mid", value=steps))
     else:
-        comments.append(f"今日仅{steps}步，活动量不足！活动量不足会严重降低日常消耗，建议明日增加散步或骑行。")
-    
+        comments.append(t(locale, "fallback_comment_steps_low", value=steps))
+
     return " ".join(comments)
 
-# ==================== AI 动态次日方案 ====================
+# ==================== AI next-day planning ====================
 def tavily_search(query, max_results=3):
-    """调用 Tavily API 搜索最新信息"""
+    """Call Tavily for external context when the API key is available."""
     import urllib.request
     url = "https://api.tavily.com/search"
-    
+
     for attempt in range(3):
         try:
             data = json.dumps({
@@ -500,303 +585,259 @@ def tavily_search(query, max_results=3):
             result = json.loads(resp.read().decode('utf-8'))
             return result.get('results', [])
         except Exception as e:
-            print(f"Tavily 搜索失败（第{attempt+1}次）: {e}", file=sys.stderr)
+            print(t(None, "tavily_failed", attempt=attempt + 1, error=e), file=sys.stderr)
             if attempt < 2:
                 import time
                 time.sleep(2)
     return []
 
 def generate_ai_plan(health_data, config):
-    """调用大模型生成动态次日方案"""
+    """Generate the next-day plan with bilingual prompts and a local fallback."""
+    locale = resolve_locale(config)
     user_profile = config.get('user_profile', {})
-    condition = user_profile.get('condition', '健身减脂') 
+    condition = user_profile.get('condition', 'fat_loss')
     standards = get_condition_standards(config, condition)
-    
     fat_min, fat_max = standards.get('fat_min_g', 40), standards.get('fat_max_g', 50)
     fiber_min = standards.get('fiber_min_g', 25)
-    
-    # 分析今日短板
+
     shortcomings = []
     fat_val = health_data.get('total_fat', 0)
     fiber_val = health_data.get('total_fiber', 0)
     water_val = health_data.get('water_total', 0)
     steps = health_data.get('steps', 0)
-    
+
     if fat_val < fat_min * 0.8:
-        shortcomings.append('脂肪摄入过低')
+        shortcomings.append(t(locale, "shortcoming_fat_low"))
     elif fat_val > fat_max:
-        shortcomings.append('脂肪摄入超标')
-    
+        shortcomings.append(t(locale, "shortcoming_fat_high"))
     if fiber_val < fiber_min * 0.8:
-        shortcomings.append('膳食纤维不足')
-    
-    if water_val < 1500:
-        shortcomings.append('饮水不足')
-    
+        shortcomings.append(t(locale, "shortcoming_fiber_low"))
+    water_threshold = user_profile.get('water_target_ml', health_data.get('water_target', 2000)) * 0.75
+    if water_val < water_threshold:
+        shortcomings.append(t(locale, "shortcoming_water_low"))
     if steps < 3000:
-        shortcomings.append('缺乏运动')
-    
-    # Tavily 搜索
+        shortcomings.append(t(locale, "shortcoming_exercise_low"))
+
     recipes = []
     exercises = []
-    
-    if '脂肪摄入超标' in shortcomings or '脂肪摄入过低' in shortcomings:
-        recipe_results = tavily_search(f'{condition} 低脂高蛋白快手菜谱 2026', max_results=2)
+
+    if TAVILY_API_KEY and any(item in shortcomings for item in [t(locale, "shortcoming_fat_low"), t(locale, "shortcoming_fat_high")]):
+        recipe_query = localized_recipe_query(locale, condition_name(locale, condition))
+        recipe_results = tavily_search(recipe_query, max_results=2)
         recipes = [r.get('content', '') for r in recipe_results[:2]]
-    
-    if '缺乏运动' in shortcomings:
-        exercise_results = tavily_search(f'久坐人群办公室拉伸动作 {condition}适合的运动 2026', max_results=2)
+
+    if TAVILY_API_KEY and t(locale, "shortcoming_exercise_low") in shortcomings:
+        exercise_query = localized_exercise_query(locale, condition_name(locale, condition))
+        exercise_results = tavily_search(exercise_query, max_results=2)
         exercises = [r.get('content', '') for r in exercise_results[:2]]
-    
-    prompt = f"""你是一位专业的私人营养师，专门服务{condition}人群。请根据以下数据生成明日优化方案：
 
-【用户档案】
-- 称呼：东东
-- 病理/目标：{condition}
-- 饮食原则：低脂（{fat_min}-{fat_max}g/天）、高纤维（≥{fiber_min}g/天）
-- 不爱吃：鱼、蛙、海鲜（过敏）
-- 爱吃水果：苹果、耙耙柑、香蕉、梨
-
-【今日短板】
-{', '.join(shortcomings) if shortcomings else '今日表现完美，继续保持！'}
-
-【搜索参考】（如有）
-菜谱参考：{recipes[:1] if recipes else '无'}
-运动参考：{exercises[:1] if exercises else '无'}
-
-【方案要求及严格 JSON 格式示例】
-必须严格按照以下 JSON 格式输出，数组内必须是包含具体字段的字典对象，绝对不得直接输出纯字符串！
-{{
-    "diet": [
-        {{"time": "08:00-09:00", "meal": "早餐", "menu": "燕麦粥50g等", "calories": 300, "fat": 5, "fiber": 6}}
-    ],
-    "water": [
-        {{"time": "07:00-08:00", "amount": "300ml", "note": "晨起空腹温水，唤醒代谢"}}
-    ],
-    "exercise": [
-        {{"time": "晚餐后", "activity": "散步", "duration": "20分钟", "details": "帮助消化和胆汁排泄"}}
-    ],
-    "notes": [
-        "脂肪调整：今日脂肪偏低，建议适量增加..."
-    ]
-}}
-
-请结合上述格式，直接输出适用于{condition}人群的明日 JSON 方案，绝对不要输出其他多余的文字提示："""
+    preferences = user_profile.get('dietary_preferences', {})
+    prompt = build_ai_plan_prompt(
+        locale,
+        {
+            'user_name': user_profile.get('name', t(locale, 'default_user')),
+            'condition_name': condition_name(locale, condition),
+            'diet_principle': build_condition_tip(locale, condition, fat_min, fat_max, fiber_min),
+            'avoid_foods': ', '.join(preferences.get('dislike', []) + preferences.get('allergies', [])),
+            'favorite_fruits': ', '.join(preferences.get('favorite_fruits', [])),
+            'shortcomings': shortcomings,
+            'recipe_reference': recipes[:1] if recipes else 'none',
+            'exercise_reference': exercises[:1] if exercises else 'none',
+        },
+    )
 
     for attempt in range(3):
         try:
             result = subprocess.run(
                 ['openclaw', 'agent', '--local', '--to', '+860000000000', '--message', prompt],
                 capture_output=True, text=True, timeout=90,
-                env={**os.environ, 'SYSTEM_PROMPT': '你是一位专业的私人营养师。请只输出纯 JSON 对象，绝对不要输出任何 markdown 标记或提示语。'}
+                env={**os.environ, 'SYSTEM_PROMPT': build_ai_plan_system_prompt(locale)}
             )
             if result.returncode == 0 and result.stdout.strip():
                 output = result.stdout.strip()
-                # 清理日志前缀
                 if '[plugins]' in output:
                     lines = output.split('\n')
-                    clean_lines = [l for l in lines if not l.startswith('[plugins]') and not l.startswith('[adp-')]
-                    output = '\n'.join(clean_lines).strip()
-                # 尝试解析 JSON
+                    output = '\n'.join([line for line in lines if not line.startswith('[plugins]') and not line.startswith('[adp-')]).strip()
                 json_match = re.search(r'\{.*\}', output, re.DOTALL)
                 if json_match:
-                    plan = json.loads(json_match.group())
-                    return plan
+                    return json.loads(json_match.group())
         except subprocess.TimeoutExpired:
-            print(f"AI 方案生成超时（第{attempt+1}次），重试中...", file=sys.stderr)
+            print(t(locale, "ai_plan_timeout", attempt=attempt + 1), file=sys.stderr)
         except Exception as e:
-            print(f"AI 方案生成失败（第{attempt+1}次）: {e}", file=sys.stderr)
+            print(t(locale, "ai_plan_failed", attempt=attempt + 1, error=e), file=sys.stderr)
         if attempt < 2:
             import time
             time.sleep(2)
-    
-    # 备用方案
-    plan = {
-        'diet': [
-            '早餐（5 分钟）：燕麦粥 + 煮蛋白 2 个 + 凉拌黄瓜 (300kcal)',
-            '午餐（10 分钟）：米饭 + 卤牛肉 + 白灼青菜 (450kcal)',
-            '晚餐（10 分钟）：杂粮粥 + 凉拌豆腐 + 炒蔬菜 (350kcal)',
-        ],
-        'water': [
-            '⏰ 07:30 晨起温水 300ml', '⏰ 10:00 工作间隙 400ml',
-            '⏰ 14:00 午后 400ml', '⏰ 17:00 下班前 400ml', '⏰ 20:00 晚间 300ml',
-            f'📊 目标总量：2000ml',
-        ],
-        'exercise': [
-            '🚶 早餐后散步 15 分钟（促进胆汁排泄）',
-            '🚶 晚餐后散步 20 分钟（帮助消化）',
-            '💡 本周目标：累计运动 150 分钟',
-        ],
-        'notes': ['今日推荐水果：苹果，耙耙柑，香蕉，梨'],
-    }
-    
+
+    plan = build_fallback_plan(
+        locale,
+        int(user_profile.get('water_target_ml', health_data.get('water_target', 2000))),
+        ', '.join(preferences.get('favorite_fruits', [])),
+    )
     if health_data.get('overeating_factor', 1.0) > 1.0:
-        plan['notes'].append('昨日过饱，今日控制食量，七分饱即可')
-    if '脂肪摄入过低' in shortcomings:
-        plan['notes'].append('昨日脂肪过低，今日适量增加健康脂肪（橄榄油 5-10ml 或坚果 10g）')
-    elif '脂肪摄入超标' in shortcomings:
-        plan['notes'].append('昨日脂肪超标，今日严格控油，避免油炸、红烧')
-    if '膳食纤维不足' in shortcomings:
-        plan['notes'].append('昨日纤维不足，今日增加蔬菜、粗粮摄入')
-    if '缺乏运动' in shortcomings:
-        plan['notes'].append('昨日活动量不足，今日增加散步或骑行')
-    
+        plan['notes'].append(t(locale, "fallback_note_overeat"))
+    if t(locale, "shortcoming_fat_low") in shortcomings:
+        plan['notes'].append(t(locale, "fallback_note_fat_low"))
+    elif t(locale, "shortcoming_fat_high") in shortcomings:
+        plan['notes'].append(t(locale, "fallback_note_fat_high"))
+    if t(locale, "shortcoming_fiber_low") in shortcomings:
+        plan['notes'].append(t(locale, "fallback_note_fiber_low"))
+    if t(locale, "shortcoming_exercise_low") in shortcomings:
+        plan['notes'].append(t(locale, "fallback_note_exercise_low"))
     return plan
 
-# ==================== 文本报告生成（完整版） ====================
 def get_star_string(score):
     stars_count = max(1, min(5, int(score / 20)))
     return "⭐" * stars_count
 
 def generate_text_report(health_data, config, date):
-    """生成完整文本报告（AI 点评 + 动态方案）"""
+    """Generate the localized markdown text report."""
+    locale = resolve_locale(config)
     user_profile = config.get('user_profile', {})
-    condition = user_profile.get('condition', '健身减脂') 
+    condition = user_profile.get('condition', 'fat_loss')
     standards = get_condition_standards(config, condition)
     scoring_weights = get_scoring_weights(config)
     scoring_standards = config.get('scoring_standards', {})
     exercise_standards = config.get('exercise_standards', {})
-    
-    # 计算各项评分
+
     diet_score = calculate_diet_score(health_data, standards, scoring_standards)
     water_score = calculate_water_score(health_data.get('water_total', 0), health_data.get('water_target', 2000))
     weight_score = calculate_weight_score(health_data.get('weight_morning') is not None, user_profile.get('target_weight_kg', 64), health_data.get('weight_morning'))
-    
-    # 将提取出的 steps 传入评分计算中
     exercise_score = calculate_exercise_score(health_data.get('exercise_records', []), health_data.get('steps', 0), exercise_standards, scoring_standards)
-    
-    # 基础分（饮食 + 饮水 + 体重）
     base_score = round(diet_score * scoring_weights.get('diet', 0.45) + water_score * scoring_weights.get('water', 0.35) + weight_score * scoring_weights.get('weight', 0.20), 1)
-    
-    # 运动加分（Bonus，上限 10 分）
     exercise_bonus = round(exercise_score * get_exercise_bonus_weight(config), 1)
     total_score = min(100, round(base_score + exercise_bonus, 1))
-    
-    # 症状扣分
-    symptom_penalty = 0
-    if health_data.get('symptom_keywords'):
-        symptom_penalty = len(health_data['symptom_keywords']) * 20  # 每个症状扣 20 分
+
+    symptom_penalty = len(health_data.get('symptom_keywords', [])) * 20 if health_data.get('symptom_keywords') else 0
     symptom_score = max(0, 100 - symptom_penalty)
-    
-    # 计算 BMI、BMR、TDEE
     weight_kg = health_data.get('weight_morning')
     bmi = calculate_bmi(weight_kg, user_profile.get('height_cm', 172)) if weight_kg else 0
-    bmr = calculate_bmr(weight_kg if weight_kg else 65, user_profile.get('height_cm', 172), user_profile.get('age', 34), user_profile.get('gender', '男')) if weight_kg else 0
-    tdee = calculate_tdee(bmr, user_profile.get('activity_level', 1.2)) if bmr else 0
-    
-    # 生成 AI 点评和方案
+    bmr = calculate_bmr(weight_kg if weight_kg else 65, user_profile.get('height_cm', 172), user_profile.get('age', 34), user_profile.get('gender', 'male')) if weight_kg else 0
     ai_comment = health_data.get('ai_comment', '') or generate_ai_comment(health_data, config)
     ai_plan = health_data.get('plan', {}) or generate_ai_plan(health_data, config)
-    
-    # 生成报告
+
     fat_min, fat_max = standards.get('fat_min_g', 40), standards.get('fat_max_g', 50)
-    fiber_min = standards.get('fiber_min_g', 25)
-    
-    # 文案逻辑判断
-    water_target = health_data.get('water_target', 2000)
-    water_target = water_target if water_target > 0 else 2000 # 防除零
-    water_percent = health_data.get('water_total', 0) * 100 // water_target
-    
-    fat_val = health_data.get('total_fat', 0)
-    if fat_val > fat_max:
-        fat_status = f"⚠ 脂肪摄入超标 ({fat_val:.1f}g)"
-    elif fat_val < fat_min:
-        fat_status = f"⚠ 脂肪摄入过低 ({fat_val:.1f}g)"
-    else:
-        fat_status = f"✅ 脂肪摄入合理"
-        
-    protein_status = "✅ 蛋白质摄入充足" if health_data.get('total_protein', 0) >= 60 else "⚠ 蛋白质不足"
-
-    # 移除导致排版混乱的换行和特定的勾选符号，以保证纯文本展示的美观性
-    compact_ai_comment = re.sub(r'[☑✅]', '', ai_comment).replace('\n', ' ').strip()
-    
-    # 动态渲染附加记录（如用药记录等）
-    custom_text = ""
-    for header, items in health_data.get('custom_sections', {}).items():
-        custom_text += f"\n**📌 {header}**\n" + '\n'.join([f"{item}" for item in items]) + "\n"
-
-    report = f"""📊 **{date} 健康报告**
-### 🌟 {date} 今日综合评分
-🎯 **总分：{get_star_string(total_score)} {total_score}/100**（基础分{base_score:.1f} + 运动加分{exercise_bonus:.1f}）
----
-📊 **分项汇总**
-* **饮食合规性** {get_star_string(diet_score)} {diet_score}/100
-  {fat_status} | {protein_status}
-* **饮水完成度** {get_star_string(water_score)} {water_score}/100
-  {health_data.get('water_total', 0)}ml/{water_target}ml，{water_percent}% 完成度
-* **体重管理** {get_star_string(weight_score)} {weight_score}/100
-  晨起空腹：{(health_data.get('weight_morning') or 0) * 2:.1f}斤，BMI：{bmi:.1f}
-* **症状管理** {get_star_string(symptom_score)} {symptom_score}/100
-  {'✅ 无不适症状' if not health_data.get('symptom_keywords') else '⚠ ' + '；'.join(health_data.get('symptom_keywords', []))}
-* **运动管理** {get_star_string(exercise_score)} {exercise_score}/100
-  {generate_exercise_summary(health_data)}
-* **健康依从性** {get_star_string(100 if len(health_data.get('meals', [])) >= 3 else 50)} {100 if len(health_data.get('meals', [])) >= 3 else 50}/100
-  完成{len(health_data.get('meals', []))}餐，饮水{'达标' if health_data.get('water_total', 0) >= water_target else '未达标'}
----
-### 🤖 AI点评
-{compact_ai_comment}
----
-### 📝 今日详情汇总
-**🥗 进食情况**
-{generate_meal_summary(health_data)}
-
-**💧 饮水情况**
-{generate_water_summary(health_data)}
-
-**🏃 运动情况**
-{generate_exercise_detail(health_data)}{custom_text}
----
-### 📋 次日优化方案（AI 动态生成）
-
-{generate_plan_text(ai_plan)}"""
-    return report
-
-def generate_meal_summary(health_data):
-    meals = health_data.get('meals', [])
-    if not meals: return '无记录'
-    lines = []
-    for meal in meals:
-        foods = '、'.join(meal.get('foods', []))
-        lines.append(f"{meal.get('type', '')}({meal.get('time', '')}): {foods} - {meal.get('total_calories', 0):.0f}kcal")
-    return '\n'.join(lines)
-
-def generate_water_summary(health_data):
     water_target = health_data.get('water_target', 2000)
     water_target = water_target if water_target > 0 else 2000
-    return f"总计：{health_data.get('water_total', 0)}ml/{water_target}ml"
+    water_percent = int(health_data.get('water_total', 0) * 100 // water_target)
 
-def generate_exercise_summary(health_data):
+    fat_val = health_data.get('total_fat', 0)
+    if fat_val > fat_max:
+        fat_status = t(locale, "fat_high", value=fat_val)
+    elif fat_val < fat_min:
+        fat_status = t(locale, "fat_low", value=fat_val)
+    else:
+        fat_status = t(locale, "fat_in_range")
+    protein_status = t(locale, "protein_ok") if health_data.get('total_protein', 0) >= 60 else t(locale, "protein_low")
+
+    compact_ai_comment = re.sub(r'[☑✅]', '', ai_comment).replace('\n', ' ').strip()
+    adherence_raw = 100 if len(health_data.get('meals', [])) >= 3 else 50
+    symptom_text = t(locale, "no_symptoms") if not health_data.get('symptom_keywords') else t(locale, "symptoms_prefix", symptoms='; '.join(health_data.get('symptom_keywords', [])))
+
+    custom_text = ""
+    for header, items in health_data.get('custom_sections', {}).items():
+        custom_text += f"\n**{header}**\n" + '\n'.join(items) + "\n"
+
+    report = f"""## {t(locale, 'daily_report_heading', date=date)}
+### {t(locale, 'overall_score_title', date=date)}
+**{t(locale, 'score_total_label')}: {get_star_string(total_score)} {total_score}/100** ({t(locale, 'base_score_label')} {base_score:.1f} + {t(locale, 'exercise_bonus_label')} {exercise_bonus:.1f})
+
+### {t(locale, 'item_summary_title')}
+- {t(locale, 'diet_label')}: {get_star_string(diet_score)} {diet_score}/100
+  {fat_status} | {protein_status}
+- {t(locale, 'water_label')}: {get_star_string(water_score)} {water_score}/100
+  {t(locale, 'completion_status', current=health_data.get('water_total', 0), target=water_target, percent=water_percent)}
+- {t(locale, 'weight_label')}: {get_star_string(weight_score)} {weight_score}/100
+  {t(locale, 'weight_status', weight=format_weight(locale, health_data.get('weight_morning')), bmi=bmi)}
+- {t(locale, 'symptom_label')}: {get_star_string(symptom_score)} {symptom_score}/100
+  {symptom_text}
+- {t(locale, 'exercise_label')}: {get_star_string(exercise_score)} {exercise_score}/100
+  {generate_exercise_summary(health_data, locale)}
+- {t(locale, 'adherence_label')}: {get_star_string(adherence_raw)} {adherence_raw}/100
+  {t(locale, 'adherence_status', meals=len(health_data.get('meals', [])), water_status=t(locale, 'water_goal_met') if health_data.get('water_total', 0) >= water_target else t(locale, 'water_goal_not_met'))}
+
+### {t(locale, 'ai_comment_title')}
+{compact_ai_comment}
+
+### {t(locale, 'details_title')}
+**{t(locale, 'meal_section')}**
+{generate_meal_summary(health_data, locale)}
+
+**{t(locale, 'water_section')}**
+{generate_water_summary(health_data, locale)}
+
+**{t(locale, 'exercise_section')}**
+{generate_exercise_detail(health_data, locale)}{custom_text}
+
+### {t(locale, 'next_day_plan_title')}
+{generate_plan_text(ai_plan, locale)}"""
+    return report
+
+
+def generate_meal_summary(health_data, locale):
+    meals = health_data.get('meals', [])
+    if not meals:
+        return t(locale, 'no_record')
+    lines = []
+    for meal in meals:
+        foods = list_separator(locale).join(meal.get('foods', []))
+        time_suffix = f" ({meal.get('time', '')})" if meal.get('time') else ""
+        lines.append(f"{meal_name(locale, meal.get('type', ''))}{time_suffix}: {foods} - {meal.get('total_calories', 0):.0f}kcal")
+    return '\n'.join(lines)
+
+
+def generate_water_summary(health_data, locale):
+    water_target = health_data.get('water_target', 2000)
+    water_target = water_target if water_target > 0 else 2000
+    return t(locale, 'completion_status', current=health_data.get('water_total', 0), target=water_target, percent=int(health_data.get('water_total', 0) * 100 // water_target))
+
+
+def generate_exercise_summary(health_data, locale):
     exercises = health_data.get('exercise_records', [])
     steps = health_data.get('steps', 0)
-    if not exercises and steps == 0: return '无记录'
+    if not exercises and steps == 0:
+        return t(locale, 'no_record')
     parts = []
     for e in exercises:
-        if e.get('type') == '骑行':
-            parts.append(f"骑行：{e.get('distance_km', 0)}km/{e.get('duration_min', 0)}分钟")
+        exercise_label = exercise_name(locale, e.get('type'))
+        details = []
+        if e.get('distance_km', 0) > 0:
+            details.append(t(locale, 'distance_unit_km', value=e.get('distance_km', 0)))
+        if e.get('duration_min', 0) > 0:
+            details.append(t(locale, 'minutes_unit', value=e.get('duration_min', 0)))
+        if e.get('calories', 0) > 0:
+            details.append(t(locale, 'calories_unit', value=e.get('calories', 0)))
+        parts.append(f"{exercise_label}: {' / '.join(details)}")
     if steps > 0:
-        parts.append(f"步数：{steps}步")
-    return '；'.join(parts) if parts else '无记录'
+        parts.append(f"{t(locale, 'today_steps')}: {t(locale, 'steps_unit', value=steps)}")
+    return '; '.join(parts) if parts else t(locale, 'no_record')
 
-def generate_exercise_detail(health_data):
+
+def generate_exercise_detail(health_data, locale):
     exercises = health_data.get('exercise_records', [])
     steps = health_data.get('steps', 0)
-    if not exercises and steps == 0: return '无记录'
+    if not exercises and steps == 0:
+        return t(locale, 'no_record')
     lines = []
-    cycling = [e for e in exercises if e.get('type') == '骑行']
-    if cycling:
-        total_km = sum(e.get('distance_km', 0) for e in cycling)
-        total_min = sum(e.get('duration_min', 0) for e in cycling)
-        lines.append(f"骑行：{total_km:.2f}km/{total_min:.1f}分钟")
+    for exercise in exercises:
+        details = []
+        if exercise.get('distance_km', 0) > 0:
+            details.append(t(locale, 'distance_unit_km', value=exercise.get('distance_km', 0)))
+        if exercise.get('duration_min', 0) > 0:
+            details.append(t(locale, 'minutes_unit', value=exercise.get('duration_min', 0)))
+        if exercise.get('calories', 0) > 0:
+            details.append(t(locale, 'calories_unit', value=exercise.get('calories', 0)))
+        lines.append(f"{exercise_name(locale, exercise.get('type'))}: {' / '.join(details)}")
     if steps > 0:
-        lines.append(f"步数：{steps}步")
-    return '\n'.join(lines) if lines else '无详细记录'
+        lines.append(f"{t(locale, 'today_steps')}: {t(locale, 'steps_unit', value=steps)}")
+    return '\n'.join(lines) if lines else t(locale, 'no_detail_record')
 
-def generate_plan_text(plan):
-    """处理 AI 返回的 JSON 对象数组格式（增强通用性，兼容不同大模型）"""
+
+def generate_plan_text(plan, locale):
+    """Render the next-day plan in localized markdown."""
     lines = []
-    
     if plan.get('diet'):
-        lines.append('**🥗 饮食计划**')
+        lines.append(f"**{t(locale, 'diet_plan')}**")
         for item in plan.get('diet', []):
             if isinstance(item, dict):
                 meal = item.get('meal', item.get('meal_name', ''))
@@ -805,9 +846,9 @@ def generate_plan_text(plan):
                 if not menu:
                     items = item.get('items', [])
                     if items:
-                        menu = '、'.join(str(i) for i in items[:3])  
+                        menu = list_separator(locale).join(str(i) for i in items[:3])
                         if len(items) > 3:
-                            menu += ' 等'
+                            menu += f" {and_more(locale)}"
                 if not menu:
                     menu = item.get('dishes', item.get('menu_detail', item.get('food', item.get('content', ''))))
                 calories = item.get('calories', item.get('kcal', ''))
@@ -815,8 +856,10 @@ def generate_plan_text(plan):
                 fiber = item.get('fiber', item.get('fiber_g', ''))
                 if menu:
                     nutrition = f"({calories}kcal"
-                    if fat: nutrition += f", 脂肪{fat}g"
-                    if fiber: nutrition += f", 纤维{fiber}g"
+                    if fat:
+                        nutrition += f", {t(locale, 'fat')}{fat}g"
+                    if fiber:
+                        nutrition += f", {t(locale, 'fiber')}{fiber}g"
                     nutrition += ")"
                     lines.append(f"* {time} {menu} {nutrition}")
                 elif meal and time:
@@ -826,9 +869,8 @@ def generate_plan_text(plan):
             else:
                 lines.append(f'* {item}')
         lines.append('')
-    
     if plan.get('water'):
-        lines.append('**💧 饮水计划**')
+        lines.append(f"**{t(locale, 'water_plan')}**")
         for item in plan.get('water', []):
             if isinstance(item, dict):
                 time = item.get('time', item.get('period', ''))
@@ -836,13 +878,12 @@ def generate_plan_text(plan):
                 if amount and not any(unit in str(amount) for unit in ['ml', 'L']):
                     amount = f"{amount}ml"
                 note = item.get('note', item.get('tip', item.get('remark', '')))
-                lines.append(f"* ⏰ {time} {amount} ({note})")
+                lines.append(f"* {time} {amount} ({note})")
             else:
                 lines.append(f'* {item}')
         lines.append('')
-    
     if plan.get('exercise'):
-        lines.append('**🏃 运动建议**')
+        lines.append(f"**{t(locale, 'exercise_plan')}**")
         for item in plan.get('exercise', []):
             if isinstance(item, dict):
                 time = item.get('time', item.get('time_range', item.get('period', '')))
@@ -860,54 +901,40 @@ def generate_plan_text(plan):
             else:
                 lines.append(f'* {item}')
         lines.append('')
-    
     if plan.get('notes'):
-        lines.append('**⚠ 特别关注**')
+        lines.append(f"**{t(locale, 'special_attention')}**")
         for item in plan.get('notes', []):
             lines.append(f'* {item}')
-    
     return '\n'.join(lines).strip()
 
-# ==================== PDF 报告生成（完整数据） ====================
 def generate_report(memory_file, date):
-    """主报告生成函数（AI 点评 + 动态方案 + 完整数据）"""
+    """Generate the localized text report and PDF path."""
     config = load_user_config()
+    locale = resolve_locale(config)
     user_profile = config.get('user_profile', {})
-    
-    # [1.1.9 修复 4]：确保 profile 中包含 target 供下游图表读取
     if 'step_target' not in user_profile:
         user_profile['step_target'] = 8000
-        
-    condition = user_profile.get('condition', '健身减脂') 
+
+    condition = user_profile.get('condition', 'fat_loss')
     standards = get_condition_standards(config, condition)
     scoring_standards = config.get('scoring_standards', {})
     exercise_standards = config.get('exercise_standards', {})
-    
-    # 解析健康记录
+
     health_data = parse_memory_file(memory_file)
-    
-    # 计算各项评分
     diet_score = calculate_diet_score(health_data, standards, scoring_standards)
     water_score = calculate_water_score(health_data.get('water_total', 0), health_data.get('water_target', 2000))
     weight_score = calculate_weight_score(health_data.get('weight_morning') is not None, user_profile.get('target_weight_kg', 64), health_data.get('weight_morning'))
     exercise_score = calculate_exercise_score(health_data.get('exercise_records', []), health_data.get('steps', 0), exercise_standards, scoring_standards)
-    
-    # 基础分 + 运动加分
     scoring_weights = get_scoring_weights(config)
     base_score = round(diet_score * scoring_weights.get('diet', 0.45) + water_score * scoring_weights.get('water', 0.35) + weight_score * scoring_weights.get('weight', 0.20), 1)
     exercise_bonus = round(exercise_score * get_exercise_bonus_weight(config), 1)
     total_score = min(100, round(base_score + exercise_bonus, 1))
-    
-    # 生成 AI 点评和方案
+
     ai_comment = generate_ai_comment(health_data, config)
     ai_plan = generate_ai_plan(health_data, config)
-    
     health_data['ai_comment'] = ai_comment
     health_data['plan'] = ai_plan
-    
-    # 准备 PDF 数据
     bmi = calculate_bmi(health_data.get('weight_morning'), user_profile.get('height_cm', 172)) if health_data.get('weight_morning') else 0
-    
     pdf_scores_dict = {
         'diet': {'raw': diet_score, 'stars': get_star_string(diet_score)},
         'water': {'raw': water_score, 'stars': get_star_string(water_score)},
@@ -918,9 +945,8 @@ def generate_report(memory_file, date):
         'total': total_score,
         'total_stars': get_star_string(total_score)
     }
-    
-    # 计算 macros
-    tdee = calculate_tdee(calculate_bmr(health_data.get('weight_morning') or 65, user_profile.get('height_cm', 172), user_profile.get('age', 34), user_profile.get('gender', '男')), user_profile.get('activity_level', 1.2))
+
+    tdee = calculate_tdee(calculate_bmr(health_data.get('weight_morning') or 65, user_profile.get('height_cm', 172), user_profile.get('age', 34), user_profile.get('gender', 'male')), user_profile.get('activity_level', 1.2))
     macros = {
         'protein_p': 15, 'fat_p': 25, 'carb_p': 60,
         'protein_g': round(user_profile.get('current_weight_kg', 65) * 1.2),
@@ -928,21 +954,18 @@ def generate_report(memory_file, date):
         'carb_g': round(tdee * 0.60 / 4),
         'fiber_min_g': standards.get('fiber_min_g', 25)
     }
-    
-    # 获取当前精确到秒的时间戳，格式为 YYYYMMDDHHMMSS
+
     timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-    # 生成带时间戳的新文件名
     pdf_filename = f"health_report_{timestamp}.pdf"
-    
     local_pdf_path = str(REPORTS_DIR / pdf_filename)
     web_dir = os.environ.get("REPORT_WEB_DIR", "")
     base_url = os.environ.get("REPORT_BASE_URL", "").rstrip('/')
-    
-    # 生成 PDF（传入真实数据）
+
     try:
         generate_pdf_report_impl(
             data=health_data,
             profile=user_profile,
+            locale=locale,
             scores=pdf_scores_dict,
             nutrition={
                 'calories': health_data.get('total_calories', 0),
@@ -958,51 +981,55 @@ def generate_report(memory_file, date):
             water_records=health_data.get('water_records', []),
             meals=health_data.get('meals', []),
             exercise_data=health_data.get('exercise_records', []),
-            ai_comment=ai_comment,  # 传递 AI 点评到 PDF
-            custom_sections=health_data.get('custom_sections', {}) # 传递自定义模块到 PDF
+            ai_comment=ai_comment,
+            custom_sections=health_data.get('custom_sections', {})
         )
-        
-        # 复制到 Web 目录并生成下载链接
         if web_dir and os.path.exists(web_dir) and base_url:
-            # 有公网域名配置，生成下载链接
             web_pdf_path = os.path.join(web_dir, pdf_filename)
             shutil.copy2(local_pdf_path, web_pdf_path)
             pdf_url = f"{base_url}/{pdf_filename}"
-            print(f"✅ PDF 已复制到 Web 目录：{web_pdf_path}", file=sys.stderr)
-            print(f"🔗 下载链接：{pdf_url}", file=sys.stderr)
+            print(t(locale, "pdf_copied", path=web_pdf_path), file=sys.stderr)
+            print(t(locale, "pdf_download_url", url=pdf_url), file=sys.stderr)
         else:
-            # 无公网域名配置，仅提供本地文件路径
-            print(f"ℹ️  未配置公网域名，PDF 仅保存在本地", file=sys.stderr)
-            print(f"📁 本地路径：{local_pdf_path}", file=sys.stderr)
-            pdf_url = local_pdf_path  # 返回本地路径
+            print(t(locale, "pdf_saved_local"), file=sys.stderr)
+            print(t(locale, "pdf_local_path", path=local_pdf_path), file=sys.stderr)
+            pdf_url = local_pdf_path
     except Exception as e:
-        print(f"❌ PDF 生成失败 - {e}", file=sys.stderr)
+        print(t(locale, "pdf_generation_failed", error=e), file=sys.stderr)
         import traceback
         traceback.print_exc()
         pdf_url = local_pdf_path
-    
-    # 生成文本报告
+
     text_report = generate_text_report(health_data, config, date)
-    
-    return text_report, pdf_url
+    delivery_message = build_delivery_message(
+        locale=locale,
+        body=text_report,
+        pdf_url=pdf_url,
+        report_kind="daily",
+        generated_at=datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+    )
+    return text_report, pdf_url, delivery_message
 
 if __name__ == '__main__':
     if len(sys.argv) < 3:
-        print("用法：python3 health_report_pro.py <memory_file> <date>")
+        print("Usage: python3 health_report_pro.py <memory_file> <date>")
         sys.exit(1)
-    
+
     memory_file = sys.argv[1]
     date = sys.argv[2]
-    
+
     try:
-        text_report, pdf_url = generate_report(memory_file, date)
+        text_report, pdf_url, delivery_message = generate_report(memory_file, date)
         print("=== TEXT_REPORT_START ===")
         print(text_report)
         print("=== TEXT_REPORT_END ===")
         print("=== PDF_URL ===")
         print(pdf_url)
+        print("=== DELIVERY_MESSAGE_START ===")
+        print(delivery_message)
+        print("=== DELIVERY_MESSAGE_END ===")
     except Exception as e:
-        print(f"错误：{e}", file=sys.stderr)
+        print(f"ERROR: {e}", file=sys.stderr)
         import traceback
         traceback.print_exc()
         sys.exit(1)

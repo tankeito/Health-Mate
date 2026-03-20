@@ -2,8 +2,8 @@
     "name": "health-mate",
     "display_name": "Health-Mate",
     "type": "python/app",
-    "version": "1.2.0",
-    "description": "Personal Health Assistant - 专业健康报告生成插件。【安全与隐私透明度声明】：1. 隐私可控：插件严格以「只读(Read-Only)」方式读取 MEMORY_DIR。仅当您主动配置 Webhook 环境变量时，才会触发外部 HTTP POST 请求，绝不向未授权的第三方泄露数据。2. 离线能力：生成 PDF 缺失字体时会尝试从 GitHub raw 下载，如需杜绝一切意外的运行时网络请求，请将字体手动预置于 assets/ 目录下。3. Prompt 隔离建议：文档中提及的「记忆写入协议」会改变 Agent 行为，建议仅在独立的健康管理沙盒/子代理中应用，非强制全局使用。",
+    "version": "1.3.0",
+    "description": "Health-Mate is a bilingual Chinese/English OpenClaw health-management skill for LLM-assisted diet, hydration, exercise, symptom, and weight tracking. It parses strict memory files from MEMORY_DIR, generates localized daily and weekly PDF reports, and can optionally deliver them through DingTalk, Feishu, or Telegram.",
     "author": "tankeito",
     "email": "tqd354@gmail.com",
     "license": "MIT",
@@ -24,44 +24,42 @@
         "http_request"
     ],
     "env": {
-        "MEMORY_DIR": "OpenClaw 记忆文件目录路径（必填，仅限读取本地健康记录）",
-        "TAVILY_API_KEY": "Tavily 搜索 API 密钥（可选，仅用于获取最新健康建议）",
-        "DINGTALK_WEBHOOK": "钉钉群机器人 Webhook 地址（可选，私有化部署推流）",
-        "FEISHU_WEBHOOK": "飞书群机器人 Webhook 地址（可选，私有化部署推流）",
-        "TELEGRAM_BOT_TOKEN": "Telegram Bot API Token（可选，私有化部署推流）",
-        "TELEGRAM_CHAT_ID": "Telegram 接收者 Chat ID（可选）",
-        "REPORT_WEB_DIR": "PDF 报表存放的本地 Web 目录（可选）",
-        "REPORT_BASE_URL": "PDF 报告对外下载域名（可选）",
-        "REPORT_TIME": "每日健康报告推送时间（可选，默认 22）",
-        "WEEKLY_REPORT_TIME": "每周健康周报推送时间（可选，默认每周一 09:00）"
+        "MEMORY_DIR": "Required. The OpenClaw memory directory that stores daily markdown health logs.",
+        "TAVILY_API_KEY": "Optional. Tavily API key for recipe and exercise research used in next-day suggestions.",
+        "DINGTALK_WEBHOOK": "Optional. DingTalk bot webhook for outbound report delivery.",
+        "FEISHU_WEBHOOK": "Optional. Feishu bot webhook for outbound report delivery.",
+        "TELEGRAM_BOT_TOKEN": "Optional. Telegram bot token for outbound report delivery.",
+        "TELEGRAM_CHAT_ID": "Optional. Telegram chat ID for outbound report delivery.",
+        "REPORT_WEB_DIR": "Optional. Local web directory where generated PDFs should be copied.",
+        "REPORT_BASE_URL": "Optional. Public base URL used to build downloadable PDF links."
     },
     "commands": [
         {
             "trigger": "/health",
-            "description": "生成今日健康报告",
+            "description": "Generate the localized daily Health-Mate report.",
             "usage": "/health [date]",
             "example": "/health 2026-03-15"
-        }
-    ],
-    "triggers": [
-        {
-            "type": "cron",
-            "schedule": "0 22 * * *",
-            "action": "daily_report",
-            "description": "每日晚间健康报告（22:00）"
         },
         {
-            "type": "cron",
-            "schedule": "0 9 * * 1",
-            "action": "weekly_report",
-            "description": "每周健康周报（默认周一 09:00）"
+            "trigger": "/health summary",
+            "description": "Generate the localized weekly Health-Mate review.",
+            "usage": "/health summary [date]",
+            "example": "/health summary 2026-03-15"
         }
     ],
     "features": [
-        "多维度健康评分与风险预警",
-        "Matplotlib 全景数据可视化图表",
-        "SaaS 级扁平化排版 PDF 导出",
-        "多通道自动化隐私推送 (基于本地环境)"
+        "Bilingual Chinese/English parsing, prompts, and report generation",
+        "Strict memory-write protocol for reliable markdown parsing",
+        "Localized daily and weekly PDF reports with charts and LLM-generated commentary",
+        "Optional push delivery through DingTalk, Feishu, and Telegram"
     ],
-    "tags": ["health", "fitness", "diet", "report", "wellness", "openclaw", "privacy-safe"]
+    "tags": [
+        "health",
+        "wellness",
+        "diet",
+        "hydration",
+        "fitness",
+        "openclaw",
+        "bilingual"
+    ]
 }
