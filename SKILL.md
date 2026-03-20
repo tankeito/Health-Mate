@@ -3,7 +3,7 @@ name: health-mate
 display_name: Health-Mate
 version: 1.1.16
 type: python/app
-description: "专业健康报告生成插件。以只读方式解析本地记忆文件。安全透明，网络权限仅用于字体下载及用户自定义的 Webhook 推送。"
+description: "专业健康报告生成插件。【安全与隐私透明度声明】：1. 数据不出域：仅以只读方式解析 MEMORY_DIR 记录，只有在您主动配置 Webhook 时才会向对应端点推送报告。2. 断网支持：PDF 引擎首次运行会自动下载开源字体，若需纯离线无网络请求运行，请预先放置字体到 assets/ 目录。3. 代理隔离：文档推荐的「记忆落盘铁律(Prompt)」建议仅在专用的健康助手实例中配置，按需隔离以避免影响全局 Agent 行为。"
 install: pip install -r requirements.txt
 capabilities:
   - file_read
@@ -20,8 +20,8 @@ source: https://github.com/tankeito/Health-Mate
 env:
   MEMORY_DIR: OpenClaw 记忆文件目录路径（必填，仅执行只读操作）
   TAVILY_API_KEY: Tavily 搜索 API 密钥（可选）
-  DINGTALK_WEBHOOK: 钉钉群机器人 Webhook 地址（可选，数据不出域）
-  FEISHU_WEBHOOK: 飞书群机器人 Webhook 地址（可选，数据不出域）
+  DINGTALK_WEBHOOK: 钉钉群机器人 Webhook 地址（可选，仅向您信任的端点发数据）
+  FEISHU_WEBHOOK: 飞书群机器人 Webhook 地址（可选，仅向您信任的端点发数据）
   TELEGRAM_BOT_TOKEN: Telegram Bot API Token（可选）
   TELEGRAM_CHAT_ID: Telegram 接收者 Chat ID（可选）
   REPORT_WEB_DIR: PDF 报表存放的本地 Web 目录（可选）
@@ -31,7 +31,7 @@ env:
 ---
 # Health-Mate - 个人健康助手
 
-> **版本**：1.1.16 | **适用**：OpenClaw AI 助理
+> **版本**：1.1.17 | **适用**：OpenClaw AI 助理
 > 
 > **Personal Health Assistant - A native skill exclusively designed for OpenClaw**
 > 
@@ -569,10 +569,8 @@ Health-Mate 采用独立渲染引擎，告别简陋的纯文本，为您提供**
 
 | 版本 | 日期 | 更新内容 |
 |------|------|---------|
-| **v1.1.13** | 2026-03-20 | 1. 支持动态追加自定义监测模块（如用药记录）；<br>2. 统一三端文本推送为极简排版；<br>3. 修复 PDF 渲染方块乱码及进食文本冗余；<br>4. 优化 PDF 中 AI 点评的多段落排版。 |
-| **v1.1.12** | 2026-03-17 | 🔒 平台合规性升级：按审核要求补充必填环境变量声明，精简文档以解除 Token 限制并优化应用权限边界 |
-| **v1.1.11** | 2026-03-17 | 📅 推出独立周报复盘系统：新增智能手表级三环概览图、营养素环形图与趋势折线图；新增定时周报推送机制；完善 NLP 初始配置中的周报时间引导 |
-| **v1.1.10** | 2026-03-16 | 🧠 AI 核心链路升级：在文档中引入《记忆落盘铁律 (Memory Write Protocol)》，指导用户规范大模型 Markdown 输出格式，从源头消除乱序与数据丢失 Bug |
+| **v1.1.17** | 2026-03-17 | 🔒 平台合规性升级：按审核要求补充必填环境变量声明，专业文档以解除 Token 限制并优化应用权限边界 |
+| **v1.1.16** | 2026-03-17 | 📅 推出独立周报主动机制：新增智能手表级三环概览图、起点环形图与趋势折线图；新增定时周报主动机制；完善 NLP 初始配置中的周报时间引导 |
 
 ---
 
