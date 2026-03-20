@@ -6,7 +6,7 @@
 > 
 > *将日常健康习惯转化为可执行的洞察。精准追踪营养、饮水、运动与体重变化。生成 AI 驱动的专业 PDF 报告—所有数据 100% 私有，完全本地运行。*
 
-[![Version](https://img.shields.io/badge/version-1.3.0-blue.svg)](https://github.com/tankeito/Health-Mate/releases)
+[![Version](https://img.shields.io/badge/version-1.3.1-blue.svg)](https://github.com/tankeito/Health-Mate/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![OpenClaw](https://img.shields.io/badge/OpenClaw-Skill-green.svg)](https://openclaw.ai)
 
@@ -131,26 +131,29 @@ python3 scripts/health_report_pro.py /root/.openclaw/workspace/memory/2026-03-20
 
 ## 📝 记忆落盘铁律
 
-**Health-Mate 强制执行严格的健康日志 Markdown 结构。AI 助理必须以机械方式写入数据—文件中禁止出现鼓励语、分析点评、Emoji。**
+**Health-Mate 强制执行严格的健康日志 Markdown 结构。写入 `MEMORY_DIR` 时，AI 助理必须像“无情的数据记录仪”一样工作。点评与建议只能出现在聊天框里，绝不能写入文件。**
 
 ### 强制规则
 
-1. **餐次/饮水/运动** 必须且只能使用三级标题：`### ...`
+1. **餐次/饮水/运动** 必须且只能使用带时间的三级标题：`### 标签（约 HH:MM）` 或 `### Label (around HH:MM)`
 2. **食物行** 必须使用标准箭头格式：`- 食物 份量 → 约 XXXkcal`
-3. **饮水块** 必须且只能包含两行：
+3. **饮水块** 必须且只能包含两行，不能额外追加任何状态或说明：
    ```
-   - 饮水量：XXXml
-   - 累计：XXXml/目标 ml
+   - 饮水量：XXml
+   - 累计：XXml/目标ml
    ```
-4. **步数记录** 必须且只能使用一个二级标题：
+4. **单次运动** 必须使用带运动类型的三级标题，例如 `### 下午骑行（约 17:17）`，其下只列距离、耗时、消耗
+5. **步数记录** 必须且只能使用一个二级标题：
    ```
    ## 今日步数
    - 总步数：XXXX 步
    ```
-5. **扩展模块**（如用药记录）允许使用二级标题，但仅包含原始列表数据
-6. **禁止出现** `评估 `、`状态`、`总结`、`Assessment`、`Status`、`Summary` 或任何 Emoji
-7. **禁止聊天式评论**、LLM 解释或激励性语言出现在文件中
-8. **单块单语言**—中文和英文均有效，但同一块内禁止混用
+6. **扩展模块**（如用药记录）允许使用二级标题，但仅包含原始列表数据
+7. **禁止出现** `评估`、`状态`、`总结`、`Assessment`、`Status`、`Summary` 或任何 Emoji
+8. **禁止聊天式评论**、LLM 解释、鼓励性语言或模板外字段出现在文件中
+9. **单块单语言**：中文和英文均有效，但同一块内禁止混用
+
+建议将同一份协议同时写入 `soul.md` 与 `SKILL.md`，确保运行时提示与技能说明完全一致。
 
 ### 中文模板（标准格式）
 
@@ -278,6 +281,12 @@ health-mate/
 ---
 
 ## 🔄 版本历史
+
+### v1.3.1 — 2026-03-20
+
+- 🔐 **协议同步**：将 `README`、`SKILL.md` 与 `soul.md` 的记忆落盘规则同步为同一强约束版本
+- 🧾 **解析安全**：明确饮水块只能有两行，禁止在模板外追加状态、点评或说明字段
+- 🏷️ **版本更新**：文档与技能元数据统一升级到 `1.3.1`
 
 ### v1.3.0 — 2026-03-20
 

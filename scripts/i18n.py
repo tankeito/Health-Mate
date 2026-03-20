@@ -844,6 +844,21 @@ def strip_approximate_phrase(value: str) -> str:
     return re.sub(r"[(（]$", "", text).strip()
 
 
+def strip_parenthetical_details(value: str) -> str:
+    text = str(value or "")
+    text = re.sub(r"\s*[（(][^（）()]*[)）]\s*", " ", text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def markdown_to_plain_text(text: str) -> str:
+    plain = str(text or "").replace("\r\n", "\n")
+    plain = re.sub(r"(?m)^\s*#{1,6}\s*", "", plain)
+    plain = plain.replace("**", "")
+    plain = re.sub(r"\[(.*?)\]\((.*?)\)", r"\1: \2", plain)
+    plain = re.sub(r"(?m)^\*\s+", "• ", plain)
+    return plain.strip()
+
+
 def weight_unit(locale: Optional[str]) -> str:
     return "斤" if resolve_locale(locale=locale) == "zh-CN" else "kg"
 
@@ -1094,7 +1109,8 @@ def build_delivery_message(
     end_date: Optional[str] = None,
 ) -> str:
     pdf_label = t(locale, "delivery_daily_pdf" if report_kind == "daily" else "delivery_weekly_pdf")
-    lines = [body.strip(), "", "━━━━━━━━━━━━━━━━━━", "", pdf_label, f"[{t(locale, 'delivery_download')}]({pdf_url})"]
+    body_text = markdown_to_plain_text(body)
+    lines = [body_text, "", "━━━━━━━━━━━━━━━━━━", "", pdf_label, pdf_url]
     if report_kind == "weekly" and start_date and end_date:
         lines.extend(["", "---", t(locale, "delivery_period", start_date=start_date, end_date=end_date)])
     if generated_at:

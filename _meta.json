@@ -2,8 +2,8 @@
     "name": "health-mate",
     "display_name": "Health-Mate",
     "type": "python/app",
-    "version": "1.3.0",
-    "description": "Health-Mate is a bilingual Chinese/English OpenClaw health-management skill for LLM-assisted diet, hydration, exercise, symptom, and weight tracking. It parses strict memory files from MEMORY_DIR, generates localized daily and weekly PDF reports, and can optionally deliver them through DingTalk, Feishu, or Telegram.",
+    "version": "1.3.1",
+    "description": "Health-Mate is an executable bilingual Chinese/English OpenClaw health-management skill with local Python scripts for strict markdown-memory parsing, PDF generation, and optional webhook delivery. It reads structured health logs from MEMORY_DIR, writes local report assets, and can optionally use Tavily, webhook delivery, or a fallback font download when configured or needed.",
     "author": "tankeito",
     "email": "tqd354@gmail.com",
     "license": "MIT",
@@ -20,17 +20,18 @@
     ],
     "capabilities": [
         "file_read",
+        "file_write",
         "pdf_generation",
         "http_request"
     ],
     "env": {
-        "MEMORY_DIR": "Required. The OpenClaw memory directory that stores daily markdown health logs.",
-        "TAVILY_API_KEY": "Optional. Tavily API key for recipe and exercise research used in next-day suggestions.",
-        "DINGTALK_WEBHOOK": "Optional. DingTalk bot webhook for outbound report delivery.",
-        "FEISHU_WEBHOOK": "Optional. Feishu bot webhook for outbound report delivery.",
-        "TELEGRAM_BOT_TOKEN": "Optional. Telegram bot token for outbound report delivery.",
-        "TELEGRAM_CHAT_ID": "Optional. Telegram chat ID for outbound report delivery.",
-        "REPORT_WEB_DIR": "Optional. Local web directory where generated PDFs should be copied.",
+        "MEMORY_DIR": "Required. Explicitly set this to the markdown health-memory directory that the skill should read. Production deployment should not rely on wrapper-script fallback paths.",
+        "TAVILY_API_KEY": "Optional. Used only for extra recipe and exercise research during next-day planning.",
+        "DINGTALK_WEBHOOK": "Optional. If set, the final report payload can be sent to DingTalk.",
+        "FEISHU_WEBHOOK": "Optional. If set, the final report payload can be sent to Feishu.",
+        "TELEGRAM_BOT_TOKEN": "Optional. If set together with TELEGRAM_CHAT_ID, the final report payload can be sent to Telegram.",
+        "TELEGRAM_CHAT_ID": "Optional. Required only when Telegram delivery is enabled.",
+        "REPORT_WEB_DIR": "Optional. Local directory where generated PDFs can be copied for public serving.",
         "REPORT_BASE_URL": "Optional. Public base URL used to build downloadable PDF links."
     },
     "commands": [
@@ -48,10 +49,11 @@
         }
     ],
     "features": [
+        "Executable local Python scripts and shell runners, not an instruction-only prompt bundle",
         "Bilingual Chinese/English parsing, prompts, and report generation",
         "Strict memory-write protocol for reliable markdown parsing",
-        "Localized daily and weekly PDF reports with charts and LLM-generated commentary",
-        "Optional push delivery through DingTalk, Feishu, and Telegram"
+        "Localized daily and weekly PDF reports with charts and fallback-safe report generation",
+        "Optional outbound network behavior limited to Tavily, webhook delivery, and fallback font download when needed"
     ],
     "tags": [
         "health",
@@ -60,6 +62,9 @@
         "hydration",
         "fitness",
         "openclaw",
-        "bilingual"
+        "bilingual",
+        "pdf",
+        "webhook",
+        "local-files"
     ]
 }

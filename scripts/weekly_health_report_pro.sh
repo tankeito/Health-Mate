@@ -87,11 +87,31 @@ def send_telegram():
     if not TG_BOT_TOKEN or not TG_CHAT_ID:
         return 'skip'
     try:
-        data = json.dumps({'chat_id': TG_CHAT_ID, 'text': message_text, 'parse_mode': 'Markdown'}).encode('utf-8')
-        req = urllib.request.Request(f'https://api.telegram.org/bot{TG_BOT_TOKEN}/sendMessage', data=data, headers={'Content-Type': 'application/json'})
-        resp = urllib.request.urlopen(req, timeout=10)
-        result = json.load(resp)
-        return 'ok' if result.get('ok') else 'fail'
+        def chunk_message(text, limit=3500):
+            if len(text) <= limit:
+                return [text]
+            chunks, current, current_len = [], [], 0
+            for paragraph in text.splitlines():
+                addition = len(paragraph) + 1
+                if current and current_len + addition > limit:
+                    chunks.append('\\n'.join(current).strip())
+                    current = [paragraph]
+                    current_len = addition
+                else:
+                    current.append(paragraph)
+                    current_len += addition
+            if current:
+                chunks.append('\\n'.join(current).strip())
+            return [chunk for chunk in chunks if chunk]
+
+        for index, chunk in enumerate(chunk_message(message_text), start=1):
+            data = json.dumps({'chat_id': TG_CHAT_ID, 'text': chunk, 'disable_web_page_preview': True}).encode('utf-8')
+            req = urllib.request.Request(f'https://api.telegram.org/bot{TG_BOT_TOKEN}/sendMessage', data=data, headers={'Content-Type': 'application/json'})
+            resp = urllib.request.urlopen(req, timeout=10)
+            result = json.load(resp)
+            if not result.get('ok'):
+                return f"fail:chunk{index}:{result.get('description', 'unknown')}"
+        return 'ok'
     except Exception as error:
         return f'fail:{error}'
 

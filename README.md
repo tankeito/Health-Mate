@@ -6,7 +6,7 @@ English | [中文](README_ZH.md)
 > 
 > *Transform daily health habits into actionable insights. Track nutrition, hydration, exercise, and weight with precision. Generate stunning PDF reports powered by AI analysis—all while keeping your data 100% private and local.*
 
-[![Version](https://img.shields.io/badge/version-1.3.0-blue.svg)](https://github.com/tankeito/Health-Mate/releases)
+[![Version](https://img.shields.io/badge/version-1.3.1-blue.svg)](https://github.com/tankeito/Health-Mate/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![OpenClaw](https://img.shields.io/badge/OpenClaw-Skill-green.svg)](https://openclaw.ai)
 
@@ -131,26 +131,29 @@ python3 scripts/health_report_pro.py /root/.openclaw/workspace/memory/2026-03-20
 
 ## 📝 Memory Write Protocol
 
-**Health-Mate enforces a strict markdown structure for health logs. The AI assistant must write data mechanically—no encouragement, no analysis, no emoji in the file.**
+**Health-Mate enforces a strict markdown structure for health logs. When writing into `MEMORY_DIR`, the AI assistant must behave like a mechanical recorder. Commentary and suggestions belong in chat only, never in the file.**
 
 ### Non-Negotiable Rules
 
-1. **Meals, hydration, and exercise** must use level-3 headings only: `### ...`
+1. **Meals, hydration, and exercise** must and may only use level-3 headings with time markers: `### Label (around HH:MM)` or `### 标签（约 HH:MM）`
 2. **Food lines** must use the exact arrow format: `- Item portion → approx. XXXkcal`
-3. **Hydration blocks** must contain exactly two lines:
+3. **Hydration blocks** must contain exactly two lines and nothing else:
    ```
    - Water intake: XXXml
    - Cumulative: XXXml/targetml
    ```
-4. **Step tracking** must use one level-2 heading only:
+4. **Single exercise records** must use an exercise-specific level-3 heading such as `### Afternoon Cycling (around 17:17)` and then list distance, duration, and burn only
+5. **Step tracking** must use one level-2 heading only:
    ```
    ## Today Steps
    - Total steps: XXXX steps
    ```
-5. **Extra modules** (e.g., medication) are allowed under level-2 headings with raw bullet data only
-6. **Never include** evaluation words like `Assessment`, `Status`, `Summary`, `评估`, `状态`, `总结`, or any emoji
-7. **No chat-style comments**, LLM explanations, or motivational language in the file
-8. **One language per block**—Chinese and English are both valid, but do not mix within the same block
+6. **Extra modules** (e.g., medication) are allowed under level-2 headings with raw bullet data only
+7. **Never include** evaluation words like `Assessment`, `Status`, `Summary`, `评估`, `状态`, `总结`, or any emoji
+8. **No chat-style comments**, LLM explanations, motivational language, or extra fields outside the template
+9. **One language per block**—Chinese and English are both valid, but do not mix within the same block
+
+The same protocol should be mirrored in `soul.md` so the OpenClaw runtime prompt and `SKILL.md` stay aligned.
 
 ### English Template (Required Format)
 
@@ -278,6 +281,12 @@ The following files **must never be committed** to public repositories:
 ---
 
 ## 🔄 Changelog
+
+### v1.3.1 — 2026-03-20
+
+- 🔐 **Protocol Sync**: Synced `README`, `SKILL.md`, and `soul.md` memory-write rules to the same strict structure
+- 🧾 **Parser Safety**: Clarified that hydration blocks must contain exactly two lines and no extra commentary fields
+- 🏷️ **Release Update**: Bumped documentation and package metadata to version `1.3.1`
 
 ### v1.3.0 — 2026-03-20
 

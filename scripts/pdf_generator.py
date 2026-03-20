@@ -24,6 +24,7 @@ from i18n import (
     meal_name,
     resolve_locale,
     strip_approximate_phrase,
+    strip_parenthetical_details,
     t,
 )
 
@@ -70,6 +71,39 @@ def stars_to_text(stars_str):
     if not stars_str: return ""
     star_count = str(stars_str).count('⭐')
     return f'<font color="{C_WARNING_STR}">{"★" * star_count}</font>' + f'<font color="{C_BORDER_STR}">{"★" * (5 - star_count)}</font>'
+
+
+def simplify_food_name_for_pdf(value):
+    text = strip_parenthetical_details(strip_approximate_phrase(value))
+    return re.sub(r'\s+', ' ', text).strip()
+
+
+def compact_number(value):
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    return value
+
+
+def build_exercise_detail_lines(exercise_data, steps, locale):
+    lines = []
+    for entry in exercise_data or []:
+        label = exercise_name(locale, entry.get('type', 'other'))
+        if entry.get('time'):
+            label = f"{label} ({entry.get('time')})"
+
+        details = []
+        if entry.get('distance_km', 0) > 0:
+            details.append(t(locale, 'distance_unit_km', value=compact_number(entry.get('distance_km', 0))))
+        if entry.get('duration_min', 0) > 0:
+            details.append(t(locale, 'minutes_unit', value=compact_number(entry.get('duration_min', 0))))
+        if entry.get('calories', 0) > 0:
+            details.append(t(locale, 'calories_unit', value=compact_number(entry.get('calories', 0))))
+
+        lines.append(f"{label}: {' / '.join(details)}" if details else label)
+
+    if steps > 0:
+        lines.append(f"{t(locale, 'today_steps')}: {t(locale, 'steps_unit', value=steps)}")
+    return lines
 
 def register_chinese_font():
     try: pdfmetrics.getFont('Chinese'); return 'Chinese'
@@ -471,7 +505,7 @@ def generate_pdf_report(data, profile, scores, nutrition, macros, risks, plan, o
                         name_simple = name_raw
                         portion_display = f"{food.get('portion_grams', 100):.0f}g"
                     
-                    name_simple = strip_approximate_phrase(name_simple)
+                    name_simple = simplify_food_name_for_pdf(name_simple)
                     
                     if len(name_simple) < 2: name_simple = name_raw
                     meal_data.append([clean_html_tags(name_simple), portion_display, f"{food.get('calories', 0):.0f}kcal", f"{food.get('protein', 0):.1f}g", f"{food.get('fat', 0):.1f}g", f"{food.get('carb', 0):.1f}g"])
@@ -498,6 +532,7 @@ def generate_pdf_report(data, profile, scores, nutrition, macros, risks, plan, o
     story.append(Paragraph(f"6. {t(locale, 'daily_exercise_details')}", heading_style))
     steps = data.get("steps", 0)
     step_target = profile.get("step_target", 8000)
+    exercise_lines = build_exercise_detail_lines(exercise_data, steps, locale)
     if exercise_data or steps > 0:
         chart_path_exercise = create_exercise_chart(exercise_data, steps, step_target, locale)
         if chart_path_exercise:
@@ -506,7 +541,13 @@ def generate_pdf_report(data, profile, scores, nutrition, macros, risks, plan, o
             img_ex.hAlign = 'LEFT'
             story.append(img_ex)
             story.append(Spacer(1, 0.2*cm))
-            
+
+        for line in exercise_lines:
+            story.append(Paragraph(clean_html_tags(line), normal_style))
+        if exercise_lines:
+            story.append(Spacer(1, 0.2*cm))
+        elif not chart_path_exercise:
+            story.append(Paragraph(f"<font color='#64748B'>{t(locale, 'no_exercise_today')}</font>", normal_style))
     else:
         story.append(Paragraph(f"<font color='#64748B'>{t(locale, 'no_exercise_today')}</font>", normal_style))
     story.append(Spacer(1, 0.4*cm))
@@ -519,7 +560,8 @@ def generate_pdf_report(data, profile, scores, nutrition, macros, risks, plan, o
         for header, items in custom_sections.items():
             story.append(Paragraph(f"<b>{header}</b>", ParagraphStyle('Sub', parent=normal_style, textColor=C_TEXT_MAIN, spaceAfter=4)))
             for item in items:
-                story.append(Paragraph(f"<font color='{C_PRIMARY_STR}'>■</font> {clean_html_tags(item)}", normal_style))
+                item_text = re.sub(r'^\s*[-*]\s*', '', str(item or '')).strip()
+                story.append(Paragraph(f"- {clean_html_tags(item_text)}", normal_style))
             story.append(Spacer(1, 0.3*cm))
     
     story.append(Paragraph(f"{section_idx}. {t(locale, 'risk_alerts')}", heading_style))

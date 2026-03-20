@@ -134,6 +134,7 @@ from i18n import (
     meal_key,
     meal_name,
     resolve_locale,
+    strip_parenthetical_details,
     t,
     water_period_key,
     water_period_name,
@@ -222,29 +223,147 @@ def calculate_tdee(bmr, activity_level):
     return round(bmr * activity_level, 1)
 
 # ==================== Food parsing ====================
-def parse_food_entry(entry_text):
-    entry = entry_text.strip()
-    alias_key = entry.lower().strip()
-    if alias_key in FOOD_NAME_ALIASES:
-        entry = FOOD_NAME_ALIASES[alias_key]
-    for portion_prefix, portion_grams in DEFAULT_PORTIONS.items():
-        if entry.startswith(portion_prefix):
-            food_name = entry[len(portion_prefix):].strip()
-            return food_name if food_name else portion_prefix, portion_grams
-    return entry, 100
+SERVING_NUMBER_PATTERN = r"(?:半|一|二|三|四|五|六|七|八|九|十|两|\d+(?:\.\d+)?)"
+SERVING_UNIT_PATTERN = r"(?:大个|小个|个|根|碗|份|杯|片|盒|盘|串|勺|块|张|slice|cup|serving|piece)"
+COUNTABLE_UNIT_PATTERN = r"(?:个|根|碗|份|杯|片|盒|盘|串|勺|块|张|slice|cup|serving|piece)"
+DECLARED_CALORIE_PATTERN = rf'→\s*(?:约\s*|approx\.?\s*)?(\d+(?:\.\d+)?)\s*{CALORIE_UNIT_PATTERN}'
 
-def estimate_nutrition(food_name, portion_grams, calories_db):
-    nutrition = None
-    alias_key = str(food_name or "").lower().strip()
+
+def strip_serving_descriptors(value):
+    text = strip_parenthetical_details(value)
+    text = re.sub(rf'^\s*{SERVING_NUMBER_PATTERN}\s*{SERVING_UNIT_PATTERN}\s*', '', text, flags=re.IGNORECASE)
+    text = re.sub(rf'\s*{SERVING_NUMBER_PATTERN}\s*{SERVING_UNIT_PATTERN}\s*$', '', text, flags=re.IGNORECASE)
+    text = re.sub(r'\s+\d+(?:\.\d+)?\s*(?:g|ml)\s*$', '', text, flags=re.IGNORECASE)
+    return re.sub(r'\s+', ' ', text).strip()
+
+
+def normalize_food_name(value):
+    text = re.sub(r'\s+', ' ', str(value or '')).strip()
+    alias_key = text.lower()
     if alias_key in FOOD_NAME_ALIASES:
-        food_name = FOOD_NAME_ALIASES[alias_key]
-    if food_name in calories_db:
-        nutrition = calories_db[food_name]
+        return FOOD_NAME_ALIASES[alias_key]
+
+    best_target = None
+    best_len = 0
+    for alias, target in FOOD_NAME_ALIASES.items():
+        if alias == alias_key or alias in alias_key or alias_key in alias:
+            if len(alias) > best_len:
+                best_target = target
+                best_len = len(alias)
+    return best_target or text
+
+
+def extract_explicit_portion(entry_text):
+    entry = str(entry_text or "")
+    for paren_content in re.findall(r'[（(]([^（）()]*)[)）]', entry):
+        if '+' in paren_content or '＋' in paren_content:
+            continue
+        match = re.search(r'(\d+(?:\.\d+)?)\s*(ml|g)\b', paren_content, re.IGNORECASE)
+        if match:
+            return float(match.group(1))
+
+    trailing = re.search(r'(\d+(?:\.\d+)?)\s*(ml|g)\b', strip_parenthetical_details(entry), re.IGNORECASE)
+    if trailing:
+        return float(trailing.group(1))
+    return None
+
+
+def lookup_default_unit_portion(food_name):
+    canonical_name = normalize_food_name(strip_serving_descriptors(food_name))
+    best_match = None
+    for portion_key, grams in DEFAULT_PORTIONS.items():
+        base_name = normalize_food_name(strip_serving_descriptors(portion_key))
+        if not base_name:
+            continue
+        if base_name == canonical_name or base_name in canonical_name or canonical_name in base_name:
+            if best_match is None or len(base_name) > best_match[0]:
+                best_match = (len(base_name), grams)
+    return best_match[1] if best_match else None
+
+
+def extract_declared_calories(line_text):
+    match = re.search(DECLARED_CALORIE_PATTERN, str(line_text or ""), re.IGNORECASE)
+    return round(float(match.group(1)), 1) if match else None
+
+
+def parse_food_entry(entry_text):
+    entry = re.split(r'\s*→', str(entry_text or '').strip())[0].strip()
+    explicit_portion = extract_explicit_portion(entry)
+    entry_without_notes = re.sub(r'[（(][^（）()]*[)）]', '', entry).strip()
+    entry_without_notes = re.sub(r'\s+', ' ', entry_without_notes)
+
+    alias_key = entry_without_notes.lower().strip()
+    if alias_key in FOOD_NAME_ALIASES:
+        entry_without_notes = FOOD_NAME_ALIASES[alias_key]
+
+    for portion_prefix, portion_grams in DEFAULT_PORTIONS.items():
+        if entry_without_notes.startswith(portion_prefix):
+            food_name = entry_without_notes[len(portion_prefix):].strip()
+            food_name = normalize_food_name(strip_serving_descriptors(food_name or portion_prefix))
+            return food_name, explicit_portion or portion_grams
+
+    food_name = normalize_food_name(strip_serving_descriptors(entry_without_notes))
+
+    if explicit_portion:
+        return food_name or normalize_food_name(entry_without_notes), explicit_portion
+
+    count_match = re.search(rf'(.+?)\s*(\d+(?:\.\d+)?)\s*{COUNTABLE_UNIT_PATTERN}\s*$', entry_without_notes, re.IGNORECASE)
+    if count_match:
+        counted_name = normalize_food_name(strip_serving_descriptors(count_match.group(1)))
+        per_unit_grams = lookup_default_unit_portion(counted_name)
+        if per_unit_grams:
+            return counted_name, round(float(count_match.group(2)) * per_unit_grams, 1)
+
+    return food_name or normalize_food_name(entry_without_notes), 100
+
+
+def estimate_composite_nutrition(food_name, calories_db):
+    text = str(food_name or "")
+    match = re.search(r'[（(]([^（）()]*)[)）]', text)
+    if not match:
+        return None
+
+    ingredient_text = match.group(1)
+    if '+' not in ingredient_text and '＋' not in ingredient_text:
+        return None
+
+    total = {'calories': 0.0, 'protein': 0.0, 'fat': 0.0, 'carb': 0.0, 'fiber': 0.0}
+    matched_items = 0
+    for part in re.split(r'[+＋]', ingredient_text):
+        item_match = re.search(r'(.+?)\s*(\d+(?:\.\d+)?)\s*(g|ml)\b', part.strip(), re.IGNORECASE)
+        if not item_match:
+            continue
+        item_name = normalize_food_name(strip_serving_descriptors(item_match.group(1)))
+        item_portion = float(item_match.group(2))
+        item_nutrition = estimate_nutrition(item_name, item_portion, calories_db, allow_composite=False)
+        if not item_nutrition:
+            continue
+        matched_items += 1
+        for key in total:
+            total[key] += item_nutrition.get(key, 0)
+
+    if matched_items >= 2:
+        return {key: round(value, 1) for key, value in total.items()}
+    return None
+
+
+def estimate_nutrition(food_name, portion_grams, calories_db, allow_composite=True):
+    if allow_composite:
+        composite_nutrition = estimate_composite_nutrition(food_name, calories_db)
+        if composite_nutrition:
+            return composite_nutrition
+
+    nutrition = None
+    lookup_name = normalize_food_name(strip_serving_descriptors(food_name))
+    if lookup_name in calories_db:
+        nutrition = calories_db[lookup_name]
     else:
+        candidate_matches = []
         for db_name, db_nutrition in calories_db.items():
-            if db_name in food_name or food_name in db_name:
-                nutrition = db_nutrition
-                break
+            if db_name in lookup_name or lookup_name in db_name:
+                candidate_matches.append((len(db_name), db_nutrition))
+        if candidate_matches:
+            nutrition = max(candidate_matches, key=lambda item: item[0])[1]
     if nutrition is None:
         nutrition = {"calories": 100, "protein": 10, "fat": 5, "carb": 10, "fiber": 2}
     scale = portion_grams / 100.0
@@ -343,25 +462,52 @@ def parse_memory_file(file_path):
             if lines:
                 data['custom_sections'][header_raw] = lines
 
-    water_header_pattern = alias_pattern(WATER_PERIOD_ALIASES)
-    water_blocks = re.findall(
-        rf'###\s+({water_header_pattern})([^\n]*)\n(?:[^\n]*\n)*?-\s*(?:{alias_pattern(WATER_AMOUNT_ALIASES)})[：:]\s*(\d+)\s*ml\n-\s*(?:{alias_pattern(CUMULATIVE_ALIASES)})[：:]\s*(\d+)\s*ml/\s*(\d+)\s*ml',
-        content,
-        re.IGNORECASE,
-    )
-    for time_label_raw, title_rest, amount, cumulative, target in water_blocks:
-        exact_time = extract_time_token(title_rest)
-        time_key = water_period_key(time_label_raw)
+    water_heading_aliases = {
+        re.sub(r'[\s（）():：\-]', '', alias.lower()): canonical
+        for canonical, aliases in WATER_PERIOD_ALIASES.items()
+        for alias in aliases
+    }
+    level3_blocks = list(re.finditer(r'^###\s+([^\n]+)\n(.*?)(?=^###\s|^##\s|\Z)', content, re.MULTILINE | re.DOTALL))
+    for match in level3_blocks:
+        title = match.group(1).strip()
+        title_without_time = re.sub(TIME_APPROX_PATTERN, '', title, flags=re.IGNORECASE)
+        title_key = re.sub(r'[\s（）():：\-]', '', title_without_time.lower())
+        water_key = water_heading_aliases.get(title_key)
+        if not water_key:
+            continue
+
+        water_content = match.group(2)
+        amount_match = re.search(
+            rf'-\s*(?:{alias_pattern(WATER_AMOUNT_ALIASES)})[：:]\s*(\d+)\s*ml',
+            water_content,
+            re.IGNORECASE,
+        )
+        cumulative_match = re.search(
+            rf'-\s*(?:{alias_pattern(CUMULATIVE_ALIASES)})[：:]\s*(\d+)\s*ml/\s*(\d+)\s*ml',
+            water_content,
+            re.IGNORECASE,
+        )
+        if not amount_match or not cumulative_match:
+            continue
+
+        exact_time = extract_time_token(title)
         data['water_records'].append({
-            'time_label': time_key,
+            'time_label': water_key,
             'exact_time': exact_time,
-            'time': exact_time or time_key,
-            'amount_ml': int(amount),
-            'cumulative_ml': int(cumulative),
+            'time': exact_time or water_key,
+            'amount_ml': int(amount_match.group(1)),
+            'cumulative_ml': int(cumulative_match.group(1)),
         })
-    if water_blocks:
-        data['water_total'] = int(water_blocks[-1][3])
-        data['water_target'] = int(water_blocks[-1][4])
+
+    if data['water_records']:
+        data['water_total'] = data['water_records'][-1]['cumulative_ml']
+        last_match = re.search(
+            rf'-\s*(?:{alias_pattern(CUMULATIVE_ALIASES)})[：:]\s*\d+\s*ml/\s*(\d+)\s*ml',
+            content,
+            re.IGNORECASE,
+        )
+        if last_match:
+            data['water_target'] = int(last_match.group(1))
 
     overeating_matches = re.findall(OVEREATING_PATTERN, content, re.IGNORECASE)
     data['overeating_factor'] = 1.25 if overeating_matches else 1.0
@@ -406,10 +552,13 @@ def parse_memory_file(file_path):
                 food_match = re.match(r'-\s*(.+?)\s*→', line_stripped)
                 if food_match:
                     food_name = food_match.group(1).strip()
-                    food_name_clean, portion = parse_food_entry(food_name)
-                    nutrition = estimate_nutrition(food_name_clean, portion, FOOD_CALORIES)
+                    _, portion = parse_food_entry(food_name)
+                    nutrition = estimate_nutrition(food_name, portion, FOOD_CALORIES)
                     if meal_overeating > 1.0:
                         nutrition = {k: v * meal_overeating for k, v in nutrition.items()}
+                    declared_calories = extract_declared_calories(line_stripped)
+                    if declared_calories is not None:
+                        nutrition['calories'] = declared_calories
                     meal_data['foods'].append(food_name)
                     meal_data['food_nutrition'].append({'name': food_name, 'portion_grams': portion, **nutrition})
                     for k in ['calories', 'protein', 'fat', 'carb', 'fiber']:
@@ -441,16 +590,17 @@ def parse_memory_file(file_path):
                 re.IGNORECASE,
             )
             calories_match = re.search(
-                rf'(?:{alias_pattern(CALORIE_BURN_ALIASES)}).*?[：:]\s*(\d+)\s*{CALORIE_UNIT_PATTERN}',
+                rf'(?:{alias_pattern(CALORIE_BURN_ALIASES)}).*?[：:]\s*(?:约\s*|approx\.?\s*)?(\d+(?:\.\d+)?)\s*{CALORIE_UNIT_PATTERN}',
                 exercise_content,
                 re.IGNORECASE,
             )
             if duration_match or calories_match:
                 data['exercise_records'].append({
                     'type': exercise_type,
+                    'time': extract_time_token(title),
                     'distance_km': float(distance_match.group(1)) if distance_match else 0,
                     'duration_min': int(duration_match.group(1)) if duration_match else 0,
-                    'calories': int(calories_match.group(1)) if calories_match else 0,
+                    'calories': round(float(calories_match.group(1)), 1) if calories_match else 0,
                 })
 
     steps_match = re.search(
@@ -690,6 +840,40 @@ def get_star_string(score):
     stars_count = max(1, min(5, int(score / 20)))
     return "⭐" * stars_count
 
+
+TEXT_REPORT_ICONS = {
+    'daily_report_heading': '📄',
+    'overall_score_title': '🏆',
+    'item_summary_title': '📊',
+    'diet_label': '🥗',
+    'water_label': '💧',
+    'weight_label': '⚖️',
+    'symptom_label': '🩺',
+    'exercise_label': '🚴',
+    'adherence_label': '✅',
+    'ai_comment_title': '🤖',
+    'details_title': '📋',
+    'meal_section': '🍽️',
+    'water_section': '🥤',
+    'exercise_section': '🏃',
+    'next_day_plan_title': '🎯',
+    'diet_plan': '🍱',
+    'water_plan': '💧',
+    'exercise_plan': '🏋️',
+    'special_attention': '📌',
+}
+
+
+def with_text_icon(key, text):
+    icon = TEXT_REPORT_ICONS.get(key, '')
+    return f"{icon} {text}".strip() if icon else text
+
+
+def compact_number(value):
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    return value
+
 def generate_text_report(health_data, config, date):
     """Generate the localized markdown text report."""
     locale = resolve_locale(config)
@@ -738,38 +922,38 @@ def generate_text_report(health_data, config, date):
     for header, items in health_data.get('custom_sections', {}).items():
         custom_text += f"\n**{header}**\n" + '\n'.join(items) + "\n"
 
-    report = f"""## {t(locale, 'daily_report_heading', date=date)}
-### {t(locale, 'overall_score_title', date=date)}
+    report = f"""## {with_text_icon('daily_report_heading', t(locale, 'daily_report_heading', date=date))}
+### {with_text_icon('overall_score_title', t(locale, 'overall_score_title', date=date))}
 **{t(locale, 'score_total_label')}: {get_star_string(total_score)} {total_score}/100** ({t(locale, 'base_score_label')} {base_score:.1f} + {t(locale, 'exercise_bonus_label')} {exercise_bonus:.1f})
 
-### {t(locale, 'item_summary_title')}
-- {t(locale, 'diet_label')}: {get_star_string(diet_score)} {diet_score}/100
+### {with_text_icon('item_summary_title', t(locale, 'item_summary_title'))}
+- {with_text_icon('diet_label', t(locale, 'diet_label'))}: {get_star_string(diet_score)} {diet_score}/100
   {fat_status} | {protein_status}
-- {t(locale, 'water_label')}: {get_star_string(water_score)} {water_score}/100
+- {with_text_icon('water_label', t(locale, 'water_label'))}: {get_star_string(water_score)} {water_score}/100
   {t(locale, 'completion_status', current=health_data.get('water_total', 0), target=water_target, percent=water_percent)}
-- {t(locale, 'weight_label')}: {get_star_string(weight_score)} {weight_score}/100
+- {with_text_icon('weight_label', t(locale, 'weight_label'))}: {get_star_string(weight_score)} {weight_score}/100
   {t(locale, 'weight_status', weight=format_weight(locale, health_data.get('weight_morning')), bmi=bmi)}
-- {t(locale, 'symptom_label')}: {get_star_string(symptom_score)} {symptom_score}/100
+- {with_text_icon('symptom_label', t(locale, 'symptom_label'))}: {get_star_string(symptom_score)} {symptom_score}/100
   {symptom_text}
-- {t(locale, 'exercise_label')}: {get_star_string(exercise_score)} {exercise_score}/100
+- {with_text_icon('exercise_label', t(locale, 'exercise_label'))}: {get_star_string(exercise_score)} {exercise_score}/100
   {generate_exercise_summary(health_data, locale)}
-- {t(locale, 'adherence_label')}: {get_star_string(adherence_raw)} {adherence_raw}/100
+- {with_text_icon('adherence_label', t(locale, 'adherence_label'))}: {get_star_string(adherence_raw)} {adherence_raw}/100
   {t(locale, 'adherence_status', meals=len(health_data.get('meals', [])), water_status=t(locale, 'water_goal_met') if health_data.get('water_total', 0) >= water_target else t(locale, 'water_goal_not_met'))}
 
-### {t(locale, 'ai_comment_title')}
+### {with_text_icon('ai_comment_title', t(locale, 'ai_comment_title'))}
 {compact_ai_comment}
 
-### {t(locale, 'details_title')}
-**{t(locale, 'meal_section')}**
+### {with_text_icon('details_title', t(locale, 'details_title'))}
+**{with_text_icon('meal_section', t(locale, 'meal_section'))}**
 {generate_meal_summary(health_data, locale)}
 
-**{t(locale, 'water_section')}**
+**{with_text_icon('water_section', t(locale, 'water_section'))}**
 {generate_water_summary(health_data, locale)}
 
-**{t(locale, 'exercise_section')}**
+**{with_text_icon('exercise_section', t(locale, 'exercise_section'))}**
 {generate_exercise_detail(health_data, locale)}{custom_text}
 
-### {t(locale, 'next_day_plan_title')}
+### {with_text_icon('next_day_plan_title', t(locale, 'next_day_plan_title'))}
 {generate_plan_text(ai_plan, locale)}"""
     return report
 
@@ -800,13 +984,15 @@ def generate_exercise_summary(health_data, locale):
     parts = []
     for e in exercises:
         exercise_label = exercise_name(locale, e.get('type'))
+        if e.get('time'):
+            exercise_label = f"{exercise_label} ({e.get('time')})"
         details = []
         if e.get('distance_km', 0) > 0:
-            details.append(t(locale, 'distance_unit_km', value=e.get('distance_km', 0)))
+            details.append(t(locale, 'distance_unit_km', value=compact_number(e.get('distance_km', 0))))
         if e.get('duration_min', 0) > 0:
-            details.append(t(locale, 'minutes_unit', value=e.get('duration_min', 0)))
+            details.append(t(locale, 'minutes_unit', value=compact_number(e.get('duration_min', 0))))
         if e.get('calories', 0) > 0:
-            details.append(t(locale, 'calories_unit', value=e.get('calories', 0)))
+            details.append(t(locale, 'calories_unit', value=compact_number(e.get('calories', 0))))
         parts.append(f"{exercise_label}: {' / '.join(details)}")
     if steps > 0:
         parts.append(f"{t(locale, 'today_steps')}: {t(locale, 'steps_unit', value=steps)}")
@@ -820,14 +1006,17 @@ def generate_exercise_detail(health_data, locale):
         return t(locale, 'no_record')
     lines = []
     for exercise in exercises:
+        exercise_label = exercise_name(locale, exercise.get('type'))
+        if exercise.get('time'):
+            exercise_label = f"{exercise_label} ({exercise.get('time')})"
         details = []
         if exercise.get('distance_km', 0) > 0:
-            details.append(t(locale, 'distance_unit_km', value=exercise.get('distance_km', 0)))
+            details.append(t(locale, 'distance_unit_km', value=compact_number(exercise.get('distance_km', 0))))
         if exercise.get('duration_min', 0) > 0:
-            details.append(t(locale, 'minutes_unit', value=exercise.get('duration_min', 0)))
+            details.append(t(locale, 'minutes_unit', value=compact_number(exercise.get('duration_min', 0))))
         if exercise.get('calories', 0) > 0:
-            details.append(t(locale, 'calories_unit', value=exercise.get('calories', 0)))
-        lines.append(f"{exercise_name(locale, exercise.get('type'))}: {' / '.join(details)}")
+            details.append(t(locale, 'calories_unit', value=compact_number(exercise.get('calories', 0))))
+        lines.append(f"{exercise_label}: {' / '.join(details)}")
     if steps > 0:
         lines.append(f"{t(locale, 'today_steps')}: {t(locale, 'steps_unit', value=steps)}")
     return '\n'.join(lines) if lines else t(locale, 'no_detail_record')
@@ -837,7 +1026,7 @@ def generate_plan_text(plan, locale):
     """Render the next-day plan in localized markdown."""
     lines = []
     if plan.get('diet'):
-        lines.append(f"**{t(locale, 'diet_plan')}**")
+        lines.append(f"**{with_text_icon('diet_plan', t(locale, 'diet_plan'))}**")
         for item in plan.get('diet', []):
             if isinstance(item, dict):
                 meal = item.get('meal', item.get('meal_name', ''))
@@ -870,7 +1059,7 @@ def generate_plan_text(plan, locale):
                 lines.append(f'* {item}')
         lines.append('')
     if plan.get('water'):
-        lines.append(f"**{t(locale, 'water_plan')}**")
+        lines.append(f"**{with_text_icon('water_plan', t(locale, 'water_plan'))}**")
         for item in plan.get('water', []):
             if isinstance(item, dict):
                 time = item.get('time', item.get('period', ''))
@@ -883,7 +1072,7 @@ def generate_plan_text(plan, locale):
                 lines.append(f'* {item}')
         lines.append('')
     if plan.get('exercise'):
-        lines.append(f"**{t(locale, 'exercise_plan')}**")
+        lines.append(f"**{with_text_icon('exercise_plan', t(locale, 'exercise_plan'))}**")
         for item in plan.get('exercise', []):
             if isinstance(item, dict):
                 time = item.get('time', item.get('time_range', item.get('period', '')))
@@ -902,7 +1091,7 @@ def generate_plan_text(plan, locale):
                 lines.append(f'* {item}')
         lines.append('')
     if plan.get('notes'):
-        lines.append(f"**{t(locale, 'special_attention')}**")
+        lines.append(f"**{with_text_icon('special_attention', t(locale, 'special_attention'))}**")
         for item in plan.get('notes', []):
             lines.append(f'* {item}')
     return '\n'.join(lines).strip()
