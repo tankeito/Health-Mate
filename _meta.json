@@ -3,7 +3,7 @@
     "display_name": "Health-Mate",
     "type": "python/app",
     "version": "1.1.13",
-    "description": "Personal Health Assistant - 专业健康报告生成插件。自动读取本地记忆，生成带数据可视化的 PDF 报告，并支持多端推送。",
+    "description": "Personal Health Assistant - 专业健康报告生成插件。【安全声明】：本插件仅以「只读(Read-Only)」方式读取 MEMORY_DIR 目录下的健康数据。运行时涉及的网络请求仅用于首次自动下载缺失的开源中文字体，以及向用户配置的 Webhook 发送报告。绝不收集或上传任何隐私数据至第三方服务器。",
     "author": "tankeito",
     "email": "tqd354@gmail.com",
     "license": "MIT",
@@ -24,11 +24,11 @@
         "http_request"
     ],
     "env": {
-        "MEMORY_DIR": "OpenClaw 记忆文件目录路径（必填，用于读取健康记录）",
-        "TAVILY_API_KEY": "Tavily 搜索 API 密钥（可选）",
-        "DINGTALK_WEBHOOK": "钉钉群机器人 Webhook 地址（可选）",
-        "FEISHU_WEBHOOK": "飞书群机器人 Webhook 地址（可选）",
-        "TELEGRAM_BOT_TOKEN": "Telegram Bot API Token（可选）",
+        "MEMORY_DIR": "OpenClaw 记忆文件目录路径（必填，仅限读取本地健康记录）",
+        "TAVILY_API_KEY": "Tavily 搜索 API 密钥（可选，仅用于获取最新健康建议）",
+        "DINGTALK_WEBHOOK": "钉钉群机器人 Webhook 地址（可选，私有化部署推流）",
+        "FEISHU_WEBHOOK": "飞书群机器人 Webhook 地址（可选，私有化部署推流）",
+        "TELEGRAM_BOT_TOKEN": "Telegram Bot API Token（可选，私有化部署推流）",
         "TELEGRAM_CHAT_ID": "Telegram 接收者 Chat ID（可选）",
         "REPORT_WEB_DIR": "PDF 报表存放的本地 Web 目录（可选）",
         "REPORT_BASE_URL": "PDF 报告对外下载域名（可选）",
@@ -61,7 +61,7 @@
         "多维度健康评分与风险预警",
         "Matplotlib 全景数据可视化图表",
         "SaaS 级扁平化排版 PDF 导出",
-        "多通道自动化推送"
+        "多通道自动化隐私推送 (基于本地环境)"
     ],
-    "tags": ["health", "fitness", "diet", "report", "wellness", "openclaw"]
+    "tags": ["health", "fitness", "diet", "report", "wellness", "openclaw", "privacy-safe"]
 }

@@ -8,7 +8,7 @@
 
 > **⚠️ 重要提示**：本项目已从 `openclaw-skill-health-report` 更名为 `Health-Mate`，仓库地址已变更为：https://github.com/tankeito/Health-Mate
 
-[![Version](https://img.shields.io/badge/version-1.1.13-blue.svg)](https://github.com/tankeito/Health-Mate/releases)
+[![Version](https://img.shields.io/badge/version-1.1.14-blue.svg)](https://github.com/tankeito/Health-Mate/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ---
@@ -443,6 +443,7 @@ health_report/
 
 | 版本 | 日期 | 更新内容 |
 |------|------|---------|
+| **v1.1.14** | 2026-03-20 | 🔒 安全合规升级：补充安全审核声明，明确「只读 (Read-Only)」数据权限、网络权限边界（仅用于字体下载及用户配置 Webhook 推送）、隐私数据保护承诺绝不上传第三方服务器；优化环境变量描述增强透明度。 |
 | **v1.1.13** | 2026-03-20 | 1. 支持动态追加自定义监测模块（如用药记录）；<br>2. 统一三端文本推送为极简排版；<br>3. 修复 PDF 渲染方块乱码及进食文本冗余；<br>4. 优化 PDF 中 AI 点评的多段落排版。 |
 | **v1.1.12** | 2026-03-17 | 🔒 平台合规性升级：按审核要求补充必填环境变量声明，精简文档以解除 Token 限制并优化应用权限边界 |
 | **v1.1.11** | 2026-03-17 | 📅 推出独立周报复盘系统：新增智能手表级三环概览图、营养素环形图与趋势折线图；新增定时周报推送机制；完善 NLP 初始配置中的周报时间引导 |

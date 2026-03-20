@@ -3,6 +3,7 @@ name: health-mate
 display_name: Health-Mate
 version: 1.1.13
 type: python/app
+description: "专业健康报告生成插件。以只读方式解析本地记忆文件。安全透明，网络权限仅用于字体下载及用户自定义的 Webhook 推送。"
 install: pip install -r requirements.txt
 capabilities:
   - file_read
@@ -17,10 +18,10 @@ homepage: https://github.com/tankeito/Health-Mate
 repository: https://github.com/tankeito/Health-Mate.git
 source: https://github.com/tankeito/Health-Mate
 env:
-  MEMORY_DIR: OpenClaw 记忆文件目录路径（必填）
+  MEMORY_DIR: OpenClaw 记忆文件目录路径（必填，仅执行只读操作）
   TAVILY_API_KEY: Tavily 搜索 API 密钥（可选）
-  DINGTALK_WEBHOOK: 钉钉群机器人 Webhook 地址（可选）
-  FEISHU_WEBHOOK: 飞书群机器人 Webhook 地址（可选）
+  DINGTALK_WEBHOOK: 钉钉群机器人 Webhook 地址（可选，数据不出域）
+  FEISHU_WEBHOOK: 飞书群机器人 Webhook 地址（可选，数据不出域）
   TELEGRAM_BOT_TOKEN: Telegram Bot API Token（可选）
   TELEGRAM_CHAT_ID: Telegram 接收者 Chat ID（可选）
   REPORT_WEB_DIR: PDF 报表存放的本地 Web 目录（可选）
