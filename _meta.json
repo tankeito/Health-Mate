@@ -2,7 +2,7 @@
     "name": "health-mate",
     "display_name": "Health-Mate",
     "type": "python/app",
-    "version": "1.1.13",
+    "version": "1.1.15",
     "description": "Personal Health Assistant - 专业健康报告生成插件。【安全声明】：本插件仅以「只读(Read-Only)」方式读取 MEMORY_DIR 目录下的健康数据。运行时涉及的网络请求仅用于首次自动下载缺失的开源中文字体，以及向用户配置的 Webhook 发送报告。绝不收集或上传任何隐私数据至第三方服务器。",
     "author": "tankeito",
     "email": "tqd354@gmail.com",

@@ -1,7 +1,7 @@
 ---
 name: health-mate
 display_name: Health-Mate
-version: 1.1.13
+version: 1.1.15
 type: python/app
 description: "专业健康报告生成插件。以只读方式解析本地记忆文件。安全透明，网络权限仅用于字体下载及用户自定义的 Webhook 推送。"
 install: pip install -r requirements.txt
