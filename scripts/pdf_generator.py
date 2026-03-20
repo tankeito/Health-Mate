@@ -321,7 +321,8 @@ def generate_pdf_report(data, profile, scores, nutrition, macros, risks, plan, o
 
     story = []
     
-    story.append(Paragraph("<b>胆结石健康日报</b>", title_style))
+    condition_title = profile.get('condition', '健康')
+    story.append(Paragraph(f"<b>{condition_title}健康日报</b>", title_style))
     story.append(Paragraph(f"<font color='#64748B'>{data['date']} | 监测人：{profile.get('name', '默认用户')}</font>", ParagraphStyle('Date', parent=normal_style, alignment=TA_CENTER)))
     story.append(Spacer(1, 0.5*cm))
     

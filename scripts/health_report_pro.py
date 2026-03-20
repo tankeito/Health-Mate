@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-健康报告生成系统（AI 专业版 v1.1.13 - 最小差分与排版统一版）
+健康报告生成系统（AI 专业版 v1.2.0 - 动态病理与排版统一版）
 - 恢复：100% 保留原有代码排版与注释
 - 修复：运动正则解析，完美提取“下午骑行（约 17:17）”等非标格式，防止数据丢失
 - 修复：进食时间正则解析，兼容“约”字
 - 优化：引入目标步数参数，供下游 PDF 渲染进度条使用
-- 优化：[1.1.13 新增] 动态捕获 Markdown 中的自定义模块（如用药记录等），自动推送到报告中
-- 优化：[1.1.13 新增] 统一三端文本推送的排版，对齐精简版 Markdown 模板，解决乱码符号
+- 优化：动态捕获 Markdown 中的自定义模块（如用药记录等），自动推送到报告中
+- 优化：统一三端文本推送的排版，对齐精简版 Markdown 模板，解决乱码符号
 """
 
 import sys
@@ -105,17 +105,17 @@ def _get_default_config():
     return {
         "user_profile": {
             "name": "东东", "gender": "男", "age": 34, "height_cm": 172,
-            "current_weight_kg": 65, "target_weight_kg": 64, "condition": "胆结石", "activity_level": 1.2,
+            "current_weight_kg": 65, "target_weight_kg": 64, "condition": "健身减脂", "activity_level": 1.2,
             "dietary_preferences": {"dislike": ["鱼", "蛙", "海鲜"], "allergies": ["海鲜"], "favorite_fruits": ["苹果", "耙耙柑", "香蕉", "梨"]}
         },
-        "condition_standards": {"胆结石": {"fat_min_g": 40, "fat_max_g": 50, "fiber_min_g": 25, "water_min_ml": 2000}},
+        "condition_standards": {"健身减脂": {"fat_min_g": 30, "fat_max_g": 50, "fiber_min_g": 25, "water_min_ml": 2000}},
         "scoring_weights": {"diet": 0.45, "water": 0.35, "weight": 0.20, "exercise_bonus": 0.10},
         "exercise_standards": {"weekly_target_minutes": 150}
     }
 
 def get_condition_standards(config, condition_name):
     standards = config.get('condition_standards', {})
-    return standards.get(condition_name, standards.get('胆结石', {}))
+    return standards.get(condition_name, standards.get('健身减脂', {}))
 
 def get_scoring_weights(config):
     weights = config.get('scoring_weights', {'diet': 0.45, 'water': 0.35, 'weight': 0.20})
@@ -225,7 +225,7 @@ def parse_memory_file(file_path):
         'water_total': 0, 'water_target': 2000,
         'total_calories': 0, 'total_protein': 0, 'total_fat': 0, 'total_carb': 0, 'total_fiber': 0,
         'steps': 0, 'overeating_factor': 1.0,
-        'custom_sections': {} # 【1.1.13新增】用于容纳动态追加的记录（如用药）
+        'custom_sections': {} # 用于容纳动态追加的记录
     }
     if not os.path.exists(file_path): return data
     
@@ -240,7 +240,7 @@ def parse_memory_file(file_path):
     weight_match = re.search(r'晨起空腹.*?([\d.]+)\s*斤', content)
     if weight_match: data['weight_morning'] = float(weight_match.group(1)) / 2
 
-    # 【1.1.13 新增】动态捕获用户新加的记录区块 (匹配所有二级标题)
+    # 动态捕获用户新加的记录区块 (匹配所有二级标题)
     blocks = re.finditer(r'^##\s+([^\n]+)\n(.*?)(?=\n##\s|\Z)', content, re.MULTILINE | re.DOTALL)
     exclude_keywords = ['体重', '饮水', '饮食', '运动', '症状', '不适', '目标']
     for m in blocks:
@@ -335,7 +335,7 @@ def parse_memory_file(file_path):
         if meal_data['foods']:
             data['meals'].append(meal_data)
     
-    # [1.1.9 修复]：彻底散列解析运动记录，防“下午骑行”名称变化导致捕获失败
+    # 彻底散列解析运动记录，防名称变化导致捕获失败
     blocks = re.finditer(r'### ([^\n]+)\n(.*?)(?=\n### |\n## |\Z)', content, re.DOTALL)
     for m in blocks:
         title = m.group(1).strip()
@@ -359,7 +359,7 @@ def parse_memory_file(file_path):
                     'calories': int(calories_match.group(1)) if calories_match else 0,
                 })
     
-    # [1.1.9 修复]：解决步数记录正则匹配失败
+    # 解决步数记录正则匹配失败
     steps_match = re.search(r'(?:总步数|步数).*?[：:]\s*(\d+)\s*步', content)
     if steps_match: data['steps'] = int(steps_match.group(1))
     
@@ -383,7 +383,7 @@ def parse_memory_file(file_path):
 def generate_ai_comment(health_data, config):
     """调用大模型生成 AI 专属健康点评"""
     user_profile = config.get('user_profile', {})
-    condition = user_profile.get('condition', '胆结石')
+    condition = user_profile.get('condition', '健身减脂')
     user_name = user_profile.get('name', '用户')
     standards = get_condition_standards(config, condition)
     
@@ -398,11 +398,11 @@ def generate_ai_comment(health_data, config):
     }
     diet_principle = condition_tips.get(condition, '均衡饮食')
     
-    prompt = f"""你是一位专业的私人营养师，专门服务{condition}患者。请根据以下健康数据，生成一段深度健康点评：
+    prompt = f"""你是一位专业的私人营养师，专门服务{condition}人群。请根据以下健康数据，生成一段深度健康点评：
 
 【用户档案】
 - 称呼：{user_name}
-- 病理：{condition}
+- 病理/目标：{condition}
 - 饮食原则：{diet_principle}
 
 【今日数据】
@@ -420,7 +420,7 @@ def generate_ai_comment(health_data, config):
 1. 语气：专业但温暖，像私人营养师一样既夸奖又提醒
 2. 结构：先肯定做得好的地方，再严肃指出健康隐患
 3. 长度：不少于 150 字
-4. 重点：结合胆结石病理，强调脂肪控制和胆汁排泄
+4. 重点：结合{condition}的目标，指出改进空间
 5. 如有过饱或症状，必须重点警示
 
 请直接输出点评内容，不要加标题或格式："""
@@ -430,7 +430,7 @@ def generate_ai_comment(health_data, config):
             result = subprocess.run(
                 ['openclaw', 'agent', '--local', '--to', '+860000000000', '--message', prompt],
                 capture_output=True, text=True, timeout=90,
-                env={**os.environ, 'SYSTEM_PROMPT': '你是一位专业的私人营养师，专门服务胆结石患者。'}
+                env={**os.environ, 'SYSTEM_PROMPT': f'你是一位专业的私人营养师，专门针对{condition}情况进行指导。'}
             )
             if result.returncode == 0 and result.stdout.strip():
                 output = result.stdout.strip()
@@ -452,24 +452,24 @@ def generate_ai_comment(health_data, config):
     comments = []
     fat_val = health_data.get('total_fat', 0)
     if fat_min <= fat_val <= fat_max:
-        comments.append(f"脂肪摄入{fat_val:.1f}g 控制在理想范围内，这对胆结石患者非常关键！")
+        comments.append(f"脂肪摄入{fat_val:.1f}g 控制在理想范围内，这对于达成健康目标非常关键！")
     elif fat_val < fat_min:
-        comments.append(f"脂肪摄入仅{fat_val:.1f}g，略低于推荐值。虽然低脂是好事，但完全无脂可能导致胆汁淤积，建议适量增加健康脂肪（如橄榄油 5ml）。")
+        comments.append(f"脂肪摄入仅{fat_val:.1f}g，略低于推荐值。虽然低脂是好事，但脂肪摄入过低会影响内分泌平衡，建议适量增加健康脂肪。")
     else:
-        comments.append(f"脂肪摄入{fat_val:.1f}g 超标！这是胆结石患者的大忌，可能诱发胆绞痛，明日必须严格控油。")
+        comments.append(f"脂肪摄入{fat_val:.1f}g 超标！这会严重影响减脂和健康，明日必须严格控油。")
     
     fiber_val = health_data.get('total_fiber', 0)
     if fiber_val >= fiber_min:
-        comments.append(f"膳食纤维{fiber_val:.1f}g 达标，有助于胆汁排泄，继续保持！")
+        comments.append(f"膳食纤维{fiber_val:.1f}g 达标，继续保持！")
     else:
-        comments.append(f"膳食纤维仅{fiber_val:.1f}g，严重不足！纤维能促进胆汁排泄，建议明日增加蔬菜、粗粮摄入。")
+        comments.append(f"膳食纤维仅{fiber_val:.1f}g，严重不足！纤维能促进肠道健康和代谢，建议明日增加蔬菜、粗粮摄入。")
     
     water_val = health_data.get('water_total', 0)
     water_target = health_data.get('water_target', 2000)
     if water_val >= water_target:
-        comments.append(f"饮水{water_val}ml 达标，稀释胆汁效果优秀！")
+        comments.append(f"饮水{water_val}ml 达标，效果优秀！")
     else:
-        comments.append(f"饮水仅{water_val}ml，未达到{water_target}ml 目标。充足饮水能稀释胆汁，预防结石形成。")
+        comments.append(f"饮水仅{water_val}ml，未达到{water_target}ml 目标。充足饮水能提升代谢效率。")
     
     steps = health_data.get('steps', 0)
     if steps >= 6000:
@@ -477,7 +477,7 @@ def generate_ai_comment(health_data, config):
     elif steps >= 3000:
         comments.append(f"今日{steps}步基本达标，但作为久坐人群还可以更多。")
     else:
-        comments.append(f"今日仅{steps}步，活动量严重不足！久坐会导致胆汁淤积，建议明日增加散步或骑行。")
+        comments.append(f"今日仅{steps}步，活动量不足！活动量不足会严重降低日常消耗，建议明日增加散步或骑行。")
     
     return " ".join(comments)
 
@@ -509,7 +509,7 @@ def tavily_search(query, max_results=3):
 def generate_ai_plan(health_data, config):
     """调用大模型生成动态次日方案"""
     user_profile = config.get('user_profile', {})
-    condition = user_profile.get('condition', '胆结石')
+    condition = user_profile.get('condition', '健身减脂') 
     standards = get_condition_standards(config, condition)
     
     fat_min, fat_max = standards.get('fat_min_g', 40), standards.get('fat_max_g', 50)
@@ -541,18 +541,18 @@ def generate_ai_plan(health_data, config):
     exercises = []
     
     if '脂肪摄入超标' in shortcomings or '脂肪摄入过低' in shortcomings:
-        recipe_results = tavily_search('胆结石患者低脂高蛋白快手菜谱 2026', max_results=2)
+        recipe_results = tavily_search(f'{condition} 低脂高蛋白快手菜谱 2026', max_results=2)
         recipes = [r.get('content', '') for r in recipe_results[:2]]
     
     if '缺乏运动' in shortcomings:
-        exercise_results = tavily_search('久坐人群办公室拉伸动作 胆结石患者适合的运动 2026', max_results=2)
+        exercise_results = tavily_search(f'久坐人群办公室拉伸动作 {condition}适合的运动 2026', max_results=2)
         exercises = [r.get('content', '') for r in exercise_results[:2]]
     
-    prompt = f"""你是一位专业的私人营养师，专门服务胆结石患者。请根据以下数据生成明日优化方案：
+    prompt = f"""你是一位专业的私人营养师，专门服务{condition}人群。请根据以下数据生成明日优化方案：
 
 【用户档案】
 - 称呼：东东
-- 病理：胆结石
+- 病理/目标：{condition}
 - 饮食原则：低脂（{fat_min}-{fat_max}g/天）、高纤维（≥{fiber_min}g/天）
 - 不爱吃：鱼、蛙、海鲜（过敏）
 - 爱吃水果：苹果、耙耙柑、香蕉、梨
@@ -581,7 +581,7 @@ def generate_ai_plan(health_data, config):
     ]
 }}
 
-请结合上述格式，直接输出适用于胆结石患者的明日 JSON 方案，绝对不要输出其他多余的文字提示："""
+请结合上述格式，直接输出适用于{condition}人群的明日 JSON 方案，绝对不要输出其他多余的文字提示："""
 
     for attempt in range(3):
         try:
@@ -651,7 +651,7 @@ def get_star_string(score):
 def generate_text_report(health_data, config, date):
     """生成完整文本报告（AI 点评 + 动态方案）"""
     user_profile = config.get('user_profile', {})
-    condition = user_profile.get('condition', '胆结石')
+    condition = user_profile.get('condition', '健身减脂') 
     standards = get_condition_standards(config, condition)
     scoring_weights = get_scoring_weights(config)
     scoring_standards = config.get('scoring_standards', {})
@@ -878,7 +878,7 @@ def generate_report(memory_file, date):
     if 'step_target' not in user_profile:
         user_profile['step_target'] = 8000
         
-    condition = user_profile.get('condition', '胆结石')
+    condition = user_profile.get('condition', '健身减脂') 
     standards = get_condition_standards(config, condition)
     scoring_standards = config.get('scoring_standards', {})
     exercise_standards = config.get('exercise_standards', {})
@@ -1006,4 +1006,3 @@ if __name__ == '__main__':
         import traceback
         traceback.print_exc()
         sys.exit(1)
-        

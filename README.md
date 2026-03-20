@@ -8,7 +8,7 @@
 
 > **⚠️ 重要提示**：本项目已从 `openclaw-skill-health-report` 更名为 `Health-Mate`，仓库地址已变更为：https://github.com/tankeito/Health-Mate
 
-[![Version](https://img.shields.io/badge/version-1.1.17-blue.svg)](https://github.com/tankeito/Health-Mate/releases)
+[![Version](https://img.shields.io/badge/version-1.2.0-blue.svg)](https://github.com/tankeito/Health-Mate/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ---
@@ -443,6 +443,14 @@ health_report/
 
 - **GitHub Issues**: https://github.com/tankeito/Health-Mate/issues
 - **作者邮箱**: tqd354@gmail.com
+
+---
+
+## 🔄 版本历史 (Changelog)
+
+| 版本号 | 更新日期 | 更新内容 |
+| :--- | :--- | :--- |
+| v1.2.0 | 2026-03-20 | 1. 核心：重构病理参数支持动态健康目标（如健身减脂）；<br>2. 新增：支持多语言文档及自定义模块记录；<br>3. 优化：统一极简排版，重写记忆落盘铁律以锁死 LLM 输出；<br>4. 修复：彻底解决 PDF 的 Emoji 方块乱码 (☒) 与解析容错问题。 |
 
 ---
 
