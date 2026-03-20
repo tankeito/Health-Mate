@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-PDF 报告生成器（现代 SaaS 高颜值版 v1.1.10 - 动态刻度与高对比度字体版）
-- 优化：饮水图表 Y 轴刻度动态自适应，根据当日最大饮水量自动计算步长和上限，避免图表空旷。
-- 优化：运动条形图内部文字（如公里数/时长）颜色由白色改为深色，提升浅色背景下的可读性。
-- 保留：全局原版排版、空行、注释及基础逻辑
+PDF 报告生成器（现代 SaaS 高颜值版 v1.1.10 - 动态模块与排版修复版）
+- 优化：修复进食详情中的冗余尾部字符（如“约”、“去皮，约”）。
+- 优化：AI 点评按实际换行符分隔，呈现完美的分段层次排版。
+- 优化：彻底根治 PDF 中遗留的 emoji 导致的方块乱码 (☒)。
+- 追加：支持注入动态附加模块（如用药记录等），实现自适应编号扩展。
 """
 
 import os
@@ -53,14 +54,19 @@ C_BORDER  = HexColor(C_BORDER_STR)
 C_CARB, C_PROTEIN, C_FAT = "#3B82F6", "#10B981", "#F59E0B"     
 
 def clean_html_tags(text):
+    """【已优化】过滤 HTML 标签以及容易导致 PDF 乱码的 Emoji/图形字符"""
     if not text: return ""
     text = re.sub(r'<[^>]+>', '', str(text))
-    for emoji in ['⭐', '✅', '⚠️', '❌', '🎉', '💡', '🚶', '🍎', '🥗', '💧', '🏃', '📊', '📈', '📄', '📥', '🥣', '🍜', '🍽️', '🍲', '⏰', '🚴', '🧘', '🔴', '🥦', '🍚', '🍳', '🥤', '🕐', '🌙', '💪', '🎯', '📌', '👍', '💯']: text = text.replace(emoji, '')
+    # 正则：强制过滤掉绝大多数的 Emoji（Unicode 范围大于 0x10000 的基本都是现代 Emoji）
+    text = re.sub(r'[\U00010000-\U0010ffff]', '', text)
+    # 强制清理：补充替换基本多语言平面 (BMP) 内常见的导致 PDF 黑框(☒) 的字符
+    for emoji in ['⭐', '✅', '⚠️', '⚠', '❌', '🎉', '💡', '🚶', '🍎', '🥗', '💧', '🏃', '📊', '📈', '📄', '📥', '🥣', '🍜', '🍽️', '🍲', '⏰', '🚴', '🧘', '🔴', '🥦', '🍚', '🍳', '🥤', '🕐', '🌙', '💪', '🎯', '📌', '👍', '💯', '💊', '☑', '☑️', '📝', '🤖', '🌟', '📋']: 
+        text = text.replace(emoji, '')
     return re.sub(r'\s+', ' ', re.sub(r'[\ufffd]', '', re.sub(r'[\x00-\x1f\x7f-\x9f]', '', text))).strip()
 
 def stars_to_text(stars_str):
     if not stars_str: return ""
-    star_count = stars_str.count('⭐')
+    star_count = str(stars_str).count('⭐')
     return f'<font color="{C_WARNING_STR}">{"★" * star_count}</font>' + f'<font color="{C_BORDER_STR}">{"★" * (5 - star_count)}</font>'
 
 def register_chinese_font():
@@ -72,7 +78,7 @@ def register_chinese_font():
     if not os.path.exists(local_ttf):
         try:
             if not os.path.exists(assets_dir): os.makedirs(assets_dir, exist_ok=True)
-            with urllib.request.urlopen("https://raw.githubusercontent.com/tankeito/Health-Mate/main/assets/NotoSansSC-VF.ttf", timeout=120) as response:
+            with urllib.request.urlopen("https://raw.githubusercontent.com/tankeito/Health-Mate/main/assets/NotoSansSC-VF.ttf", timeout=15) as response:
                 with open(local_ttf, 'wb') as f: f.write(response.read())
         except: return 'Helvetica'
     if os.path.exists(local_ttf):
@@ -114,7 +120,6 @@ def create_nutrition_chart(nutrition):
     except: return None
 
 def create_water_chart(water_records, target_ml):
-    """饮水图表：修复堆叠文字显示问题，全部外挂为黑色字体，刻度动态自适应"""
     if not MATPLOTLIB_AVAILABLE or not water_records: return None
     try:
         my_font = get_font_prop()
@@ -172,7 +177,6 @@ def create_water_chart(water_records, target_ml):
                 if len(amounts) == 1:
                     t_bar = ax2.text(bin_pos, current_bottom + amt + 15, f"{amt}", ha='center', va='bottom', fontsize=8, color=C_TEXT_MAIN_STR)
                 else:
-                    # 堆叠的层级向右偏移输出，避免重叠
                     t_bar = ax2.text(bin_pos + 0.8, current_bottom + amt/2, f"{amt}", ha='left', va='center', fontsize=8, color=C_TEXT_MAIN_STR)
                 if my_font: t_bar.set_fontproperties(my_font)
                 current_bottom += amt
@@ -189,18 +193,14 @@ def create_water_chart(water_records, target_ml):
         ax2.spines['left'].set_color(C_BORDER_STR)
         ax2.spines['bottom'].set_color(C_BORDER_STR)
         
-        # [1.1.10 修复] 动态计算 Y 轴上限和刻度步长
         if max_y == 0:
-            y_limit = 500
-            step = 100
+            y_limit, step = 500, 100
         else:
-            y_limit = int(max_y * 1.2) # 留出 20% 顶部空间
-            # 根据最大值动态决定步长，避免刻度过密或过疏
-            step = 100 if max_y < 800 else 200
+            y_limit = int(max_y * 1.2)
+            step = max(100, int((max_y / 5) / 100) * 100)
             
-        # 确保刻度覆盖到 y_limit，但不强制顶满整个 y_limit 的空间，使得最上面的数字不至于太贴边
         ax2.set_yticks(range(step, y_limit + step, step))
-        ax2.set_ylim(0, max_y + (step if max_y < 800 else max_y * 0.3)) # 动态设置可视区域上限
+        ax2.set_ylim(0, max_y + (step if max_y < 800 else max_y * 0.3))
         
         ax2.tick_params(axis='y', labelleft=True, colors=C_TEXT_MUTED_STR, labelsize=8)
         ax2.tick_params(axis='x', colors=C_TEXT_MUTED_STR)
@@ -219,7 +219,6 @@ def create_water_chart(water_records, target_ml):
         return None
 
 def create_exercise_chart(exercise_data, steps, step_target=8000):
-    """运动条形图全部长度统一。内部写详情，尾端写热量，高度自适应。"""
     if not MATPLOTLIB_AVAILABLE: return None
     try:
         my_font = get_font_prop()
@@ -231,10 +230,8 @@ def create_exercise_chart(exercise_data, steps, step_target=8000):
                 dist = e.get('distance_km', 0)
                 dur = e.get('duration_min', 0)
                 
-                # 1. Y 轴仅保留“骑行”等类型名
                 labels.append(ex_type)
                 
-                # 2. 准备条形图内部文字 "4.54km (22min)"
                 in_str = []
                 if dist > 0: in_str.append(f"{dist}km")
                 if dur > 0: in_str.append(f"({dur}min)")
@@ -255,31 +252,24 @@ def create_exercise_chart(exercise_data, steps, step_target=8000):
             
         fig_height = max(1.2, len(labels) * 0.6 + 0.5)
         fig, ax = plt.subplots(figsize=(7, fig_height))
-        
         y_pos = range(len(labels))
-        
         chart_color = "#20D091" 
         track_color = "#F1F5F9"
         step_color = "#3B82F6" 
         
-        # 定义全局长条长度（以步数目标或默认值 100 为基准）
         max_bg = max(step_target, steps) if steps > 0 else 100
         
         for i, (label, cal, tgt, is_s, in_txt) in enumerate(zip(labels, calories, targets, is_step, inner_texts)):
             if is_s:
-                # 步数采用双轨进度条
                 ax.plot([0, max_bg], [i, i], color=track_color, linewidth=12, solid_capstyle='round', zorder=1)
                 ax.plot([0, cal], [i, i], color=step_color, linewidth=12, solid_capstyle='round', zorder=2)
                 text_str = f"{int(cal)} / {int(tgt)} 步"
                 t_val = ax.text(max_bg * 1.05, i, text_str, ha='left', va='center', fontsize=9, color=C_TEXT_MUTED_STR, zorder=3)
             else:
-                # 所有运动长条填满全局长度
                 ax.plot([0, max_bg], [i, i], color=chart_color, linewidth=12, solid_capstyle='round', zorder=1)
-                # [1.1.10 修复] 内部嵌入公里/时长，颜色改为深色以提升可读性
                 if in_txt:
                     t_in = ax.text(max_bg * 0.02, i, in_txt, ha='left', va='center', fontsize=9, color=C_TEXT_MAIN_STR, fontweight='bold', zorder=3)
                     if my_font: t_in.set_fontproperties(my_font)
-                # 外部尾随热量（灰字）
                 text_str = f"{int(cal)} kcal"
                 t_val = ax.text(max_bg * 1.05, i, text_str, ha='left', va='center', fontsize=9, color=C_TEXT_MUTED_STR, zorder=3)
 
@@ -289,8 +279,6 @@ def create_exercise_chart(exercise_data, steps, step_target=8000):
         ax.set_yticklabels(labels)
         ax.invert_yaxis()  
         ax.set_ylim(len(labels) - 0.5, -0.5)
-        
-        # 扩大 xlim 保证外部文字不被切除
         ax.set_xlim(0, max_bg * 1.35)
         
         ax.spines['top'].set_visible(False)
@@ -312,7 +300,7 @@ def create_exercise_chart(exercise_data, steps, step_target=8000):
         print(f"⚠️ 运动图表生成失败：{e}")
         return None
 
-def generate_pdf_report(data, profile, scores, nutrition, macros, risks, plan, output_path, water_records=None, meals=None, exercise_data=None, ai_comment=None):
+def generate_pdf_report(data, profile, scores, nutrition, macros, risks, plan, output_path, water_records=None, meals=None, exercise_data=None, ai_comment=None, custom_sections=None):
     font_name = register_chinese_font()
     footer_text = f"{profile.get('condition', '健康')}专属健康管理 - Health-Mate"
     
@@ -361,9 +349,11 @@ def generate_pdf_report(data, profile, scores, nutrition, macros, risks, plan, o
     if ai_comment:
         story.append(Paragraph("专家 AI 点评", heading_style))
         clean_comment = '\n'.join([l for l in ai_comment.split('\n') if not l.strip().startswith(('[plugins]', '[adp-', 'Hint:', 'error:'))]).strip()
-        for para in re.split(r'(?<=[.!。!])\s+', clean_comment)[:5]:  
-            if para.strip(): story.append(Paragraph(f"<font color='#1E293B'>{clean_html_tags(para)}</font>", normal_style))
-        story.append(Spacer(1, 0.3*cm))
+        for para in clean_comment.split('\n'):  
+            if para.strip(): 
+                story.append(Paragraph(f"<font color='#1E293B'>{clean_html_tags(para)}</font>", normal_style))
+                story.append(Spacer(1, 0.15*cm)) 
+        story.append(Spacer(1, 0.2*cm))
     
     story.append(Paragraph("二、基础健康数据", heading_style))
     bmi_val = scores["weight"].get("bmi", 0) or 0
@@ -451,7 +441,7 @@ def generate_pdf_report(data, profile, scores, nutrition, macros, risks, plan, o
                 meal_data = [["食物名称", "份量", "热量", "蛋白质", "脂肪", "碳水"]]
                 for food in food_nutrition:
                     name_raw = food.get("name", "").split('→')[0].strip() if '→' in food.get("name", "") else food.get("name", "").strip()
-                    portion_match = re.search(r'(\d+(?:\.\d+)?)\s*(ml|g|个 | 碗 | 份 | 杯 | 片)', name_raw)
+                    portion_match = re.search(r'(\d+(?:\.\d+)?)\s*(ml|g|个|碗|份|杯|片)', name_raw)
                     if portion_match:
                         name_simple = re.sub(r'\s*' + re.escape(portion_match.group(0)), '', name_raw).strip()
                         portion_display = f"{float(portion_match.group(1)):.0f}{portion_match.group(2)}"
@@ -459,13 +449,17 @@ def generate_pdf_report(data, profile, scores, nutrition, macros, risks, plan, o
                         name_simple = name_raw
                         portion_display = f"{food.get('portion_grams', 100):.0f}g"
                     
-                    name_simple = re.sub(r'\s*（约\d+g）$|\s*（约）$|\s*约$', '', name_simple).strip()
+                    name_simple = re.sub(r'[，,]\s*约\s*[）)]', '）', name_simple)  
+                    name_simple = re.sub(r'[(（]\s*约\s*[)）]', '', name_simple)     
+                    name_simple = re.sub(r'\s*约$', '', name_simple).strip()       
+                    name_simple = re.sub(r'[(（]$', '', name_simple).strip()        
+                    
                     if len(name_simple) < 2: name_simple = name_raw
                     meal_data.append([clean_html_tags(name_simple), portion_display, f"{food.get('calories', 0):.0f}kcal", f"{food.get('protein', 0):.1f}g", f"{food.get('fat', 0):.1f}g", f"{food.get('carb', 0):.1f}g"])
                 
                 modern_meal_style = [
                     ('BACKGROUND', (0, 0), (-1, 0), C_BG_HEAD), ('TEXTCOLOR', (0, 0), (-1, 0), C_TEXT_MUTED),  
-                    ('TEXTCOLOR', (0, 1), (-1, -1), C_TEXT_MAIN), ('ALIGN', (0, 0), (0, -1), 'LEFT'),                   
+                    ('TEXTCOLOR', (0, 1), (-1, -1), C_TEXT_MAIN), ('ALIGN', (0, 0), (0, -1), 'LEFT'),                  
                     ('ALIGN', (1, 0), (-1, -1), 'CENTER'), ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
                     ('FONTNAME', (0, 0), (-1, -1), font_name), ('FONTSIZE', (0, 0), (-1, -1), 9),
                     ('TOPPADDING', (0, 0), (-1, -1), 6), ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
@@ -498,7 +492,20 @@ def generate_pdf_report(data, profile, scores, nutrition, macros, risks, plan, o
         story.append(Paragraph("<font color='#64748B'>今日无运动记录</font>", normal_style))
     story.append(Spacer(1, 0.4*cm))
     
-    story.append(Paragraph("七、风险预警", heading_style))
+    num_map = {7: "七", 8: "八", 9: "九", 10: "十"}
+    section_idx = 7
+    
+    if custom_sections:
+        story.append(Paragraph(f"{num_map.get(section_idx, str(section_idx))}、附加监测记录", heading_style))
+        section_idx += 1
+        for header, items in custom_sections.items():
+            story.append(Paragraph(f"<b>{header}</b>", ParagraphStyle('Sub', parent=normal_style, textColor=C_TEXT_MAIN, spaceAfter=4)))
+            for item in items:
+                story.append(Paragraph(f"<font color='{C_PRIMARY_STR}'>■</font> {clean_html_tags(item)}", normal_style))
+            story.append(Spacer(1, 0.3*cm))
+    
+    story.append(Paragraph(f"{num_map.get(section_idx, str(section_idx))}、风险预警", heading_style))
+    section_idx += 1
     if risks:
         for risk in risks:
             story.append(Paragraph(f"<font color='{C_DANGER_STR}'><b>{clean_html_tags(risk.get('level', '')).strip()} {clean_html_tags(risk.get('item', ''))}</b></font>", normal_style))
@@ -509,7 +516,7 @@ def generate_pdf_report(data, profile, scores, nutrition, macros, risks, plan, o
         story.append(Paragraph(f"<font color='{C_SUCCESS_STR}'>今日无明显风险，继续保持健康生活方式！</font>", normal_style))
     story.append(Spacer(1, 0.4*cm))
     
-    story.append(Paragraph("八、次日可执行方案", heading_style))
+    story.append(Paragraph(f"{num_map.get(section_idx, str(section_idx))}、次日可执行方案", heading_style))
     for category, title in [("diet", "饮食计划"), ("water", "饮水计划"), ("exercise", "运动建议")]:
         if plan.get(category):
             story.append(Paragraph(f"<b>{title}</b>", ParagraphStyle('Sub', parent=normal_style, textColor=C_TEXT_MAIN, spaceAfter=6)))
@@ -549,3 +556,4 @@ def generate_pdf_report(data, profile, scores, nutrition, macros, risks, plan, o
 
 if __name__ == "__main__":
     print("PDF 生成器模块，请通过 health_report_pro.py 调用")
+    

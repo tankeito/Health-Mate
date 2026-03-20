@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-健康报告生成系统（AI 专业版 v1.1.9 - 原版排版正则修复版）
+健康报告生成系统（AI 专业版 v1.1.13 - 最小差分与排版统一版）
 - 恢复：100% 保留原有代码排版与注释
 - 修复：运动正则解析，完美提取“下午骑行（约 17:17）”等非标格式，防止数据丢失
 - 修复：进食时间正则解析，兼容“约”字
 - 优化：引入目标步数参数，供下游 PDF 渲染进度条使用
+- 优化：[1.1.13 新增] 动态捕获 Markdown 中的自定义模块（如用药记录等），自动推送到报告中
+- 优化：[1.1.13 新增] 统一三端文本推送的排版，对齐精简版 Markdown 模板，解决乱码符号
 """
 
 import sys
@@ -223,6 +225,7 @@ def parse_memory_file(file_path):
         'water_total': 0, 'water_target': 2000,
         'total_calories': 0, 'total_protein': 0, 'total_fat': 0, 'total_carb': 0, 'total_fiber': 0,
         'steps': 0, 'overeating_factor': 1.0,
+        'custom_sections': {} # 【1.1.13新增】用于容纳动态追加的记录（如用药）
     }
     if not os.path.exists(file_path): return data
     
@@ -236,6 +239,22 @@ def parse_memory_file(file_path):
     # 解析晨起体重
     weight_match = re.search(r'晨起空腹.*?([\d.]+)\s*斤', content)
     if weight_match: data['weight_morning'] = float(weight_match.group(1)) / 2
+
+    # 【1.1.13 新增】动态捕获用户新加的记录区块 (匹配所有二级标题)
+    blocks = re.finditer(r'^##\s+([^\n]+)\n(.*?)(?=\n##\s|\Z)', content, re.MULTILINE | re.DOTALL)
+    exclude_keywords = ['体重', '饮水', '饮食', '运动', '症状', '不适', '目标']
+    for m in blocks:
+        header_raw = m.group(1).strip()
+        # 排除系统内置的核心区块，捕获附加块
+        if not any(k in header_raw for k in exclude_keywords):
+            lines = []
+            for line in m.group(2).split('\n'):
+                l = line.strip()
+                # 忽略无意义占位符
+                if l and l not in ['(待记录)', '（待记录）'] and not l.startswith('_'):
+                    lines.append(l)
+            if lines:
+                data['custom_sections'][header_raw] = lines
     
     # 解析饮水记录
     water_blocks = re.findall(r'### (晨起|上午|中午|下午|晚上)([^\n]*)\n(?:[^\n]*\n)*?- 饮水量[：:]\s*(\d+)\s*ml\n- 累计[：:]\s*(\d+)\s*ml/\s*(\d+)\s*ml', content)
@@ -254,7 +273,7 @@ def parse_memory_file(file_path):
         data['water_target'] = int(water_blocks[-1][4])
     
     # 解析过饱情况
-    overeating_matches = re.findall(r'(?:吃 | 感觉).{0,20}?(?:有点饱 | 过饱 | 吃撑 | 吃太饱)', content)
+    overeating_matches = re.findall(r'(?:吃|感觉).{0,20}?(?:有点饱|过饱|吃撑|吃太饱)', content)
     data['overeating_factor'] = 1.25 if len(overeating_matches) > 0 else 1.0
     
     # 解析症状
@@ -287,7 +306,7 @@ def parse_memory_file(file_path):
             
         meal_content = content[end:next_start]
         
-        meal_overeating = 1.25 if re.search(r'(?:吃 | 感觉).{0,20}?(?:有点饱 | 过饱 | 吃撑)', meal_content) else 1.0
+        meal_overeating = 1.25 if re.search(r'(?:吃|感觉).{0,20}?(?:有点饱|过饱|吃撑)', meal_content) else 1.0
         
         meal_data = {
             'type': meal_type, 'time': meal_time, 'foods': [], 'food_nutrition': [],
@@ -673,44 +692,51 @@ def generate_text_report(health_data, config, date):
     fat_min, fat_max = standards.get('fat_min_g', 40), standards.get('fat_max_g', 50)
     fiber_min = standards.get('fiber_min_g', 25)
     
+    # 文案逻辑判断
+    water_target = health_data.get('water_target', 2000)
+    water_target = water_target if water_target > 0 else 2000 # 防除零
+    water_percent = health_data.get('water_total', 0) * 100 // water_target
+    
+    fat_val = health_data.get('total_fat', 0)
+    if fat_val > fat_max:
+        fat_status = f"⚠ 脂肪摄入超标 ({fat_val:.1f}g)"
+    elif fat_val < fat_min:
+        fat_status = f"⚠ 脂肪摄入过低 ({fat_val:.1f}g)"
+    else:
+        fat_status = f"✅ 脂肪摄入合理"
+        
+    protein_status = "✅ 蛋白质摄入充足" if health_data.get('total_protein', 0) >= 60 else "⚠ 蛋白质不足"
+
+    # 移除导致排版混乱的换行和特定的勾选符号，以保证纯文本展示的美观性
+    compact_ai_comment = re.sub(r'[☑✅]', '', ai_comment).replace('\n', ' ').strip()
+    
+    # 动态渲染附加记录（如用药记录等）
+    custom_text = ""
+    for header, items in health_data.get('custom_sections', {}).items():
+        custom_text += f"\n**📌 {header}**\n" + '\n'.join([f"{item}" for item in items]) + "\n"
+
     report = f"""📊 **{date} 健康报告**
-
 ### 🌟 {date} 今日综合评分
-
 🎯 **总分：{get_star_string(total_score)} {total_score}/100**（基础分{base_score:.1f} + 运动加分{exercise_bonus:.1f}）
-
 ---
-
 📊 **分项汇总**
-
 * **饮食合规性** {get_star_string(diet_score)} {diet_score}/100
-  {'✅ 脂肪摄入合理' if fat_min <= health_data.get('total_fat', 0) <= fat_max else '⚠️ 脂肪摄入过低' if health_data.get('total_fat', 0) < fat_min else '⚠️ 脂肪摄入超标'} ({health_data.get('total_fat', 0):.1f}g) | {'✅ 蛋白质摄入充足' if health_data.get('total_protein', 0) >= 60 else '⚠️ 蛋白质不足'}
-
+  {fat_status} | {protein_status}
 * **饮水完成度** {get_star_string(water_score)} {water_score}/100
-  {health_data.get('water_total', 0)}ml/{health_data.get('water_target', 2000)}ml，{health_data.get('water_total', 0) // 20}% 完成度
-
+  {health_data.get('water_total', 0)}ml/{water_target}ml，{water_percent}% 完成度
 * **体重管理** {get_star_string(weight_score)} {weight_score}/100
   晨起空腹：{(health_data.get('weight_morning') or 0) * 2:.1f}斤，BMI：{bmi:.1f}
-
 * **症状管理** {get_star_string(symptom_score)} {symptom_score}/100
-  {'✅ 无不适症状' if not health_data.get('symptom_keywords') else '⚠️ ' + '；'.join(health_data.get('symptom_keywords', []))}
-
+  {'✅ 无不适症状' if not health_data.get('symptom_keywords') else '⚠ ' + '；'.join(health_data.get('symptom_keywords', []))}
 * **运动管理** {get_star_string(exercise_score)} {exercise_score}/100
   {generate_exercise_summary(health_data)}
-
 * **健康依从性** {get_star_string(100 if len(health_data.get('meals', [])) >= 3 else 50)} {100 if len(health_data.get('meals', [])) >= 3 else 50}/100
-  完成{len(health_data.get('meals', []))}餐，饮水{'达标' if health_data.get('water_total', 0) >= health_data.get('water_target', 2000) else '未达标'}
-
+  完成{len(health_data.get('meals', []))}餐，饮水{'达标' if health_data.get('water_total', 0) >= water_target else '未达标'}
 ---
-
-### 🤖 AI 专属健康点评
-
-{ai_comment}
-
+### 🤖 AI点评
+{compact_ai_comment}
 ---
-
 ### 📝 今日详情汇总
-
 **🥗 进食情况**
 {generate_meal_summary(health_data)}
 
@@ -718,34 +744,11 @@ def generate_text_report(health_data, config, date):
 {generate_water_summary(health_data)}
 
 **🏃 运动情况**
-{generate_exercise_detail(health_data)}
-
+{generate_exercise_detail(health_data)}{custom_text}
 ---
-
-### 📈 基础健康数据
-
-**身体指标**
-* 身高：{user_profile.get('height_cm', 172)}cm
-* 体重：{(health_data.get('weight_morning') or 0) * 2:.1f}斤（{weight_kg if weight_kg else '未记录'}kg）
-* BMI：{bmi:.1f}
-* 基础代谢 (BMR)：{bmr:.0f} kcal
-* 每日消耗 (TDEE)：{tdee:.0f} kcal
-
-**热量与营养素**
-* 当日摄入热量：{health_data.get('total_calories', 0):.0f} kcal
-* 蛋白质：{health_data.get('total_protein', 0):.1f}g（推荐{user_profile.get('current_weight_kg', 65) * 1.2:.0f}g）
-* 脂肪：{health_data.get('total_fat', 0):.1f}g（推荐{standards.get('fat_min_g', 40)}-{standards.get('fat_max_g', 50)}g）
-* 碳水：{health_data.get('total_carb', 0):.1f}g（推荐{(tdee * 0.55 / 4):.0f}g）
-* 膳食纤维：{health_data.get('total_fiber', 0):.1f}g（推荐≥{standards.get('fiber_min_g', 25)}g）
-
----
-
 ### 📋 次日优化方案（AI 动态生成）
 
-{generate_plan_text(ai_plan)}
-
----
-"""
+{generate_plan_text(ai_plan)}"""
     return report
 
 def generate_meal_summary(health_data):
@@ -753,19 +756,14 @@ def generate_meal_summary(health_data):
     if not meals: return '无记录'
     lines = []
     for meal in meals:
-        foods = '、'.join(meal.get('foods', [])[:3])
-        if len(meal.get('foods', [])) > 3: foods += ' 等'
+        foods = '、'.join(meal.get('foods', []))
         lines.append(f"{meal.get('type', '')}({meal.get('time', '')}): {foods} - {meal.get('total_calories', 0):.0f}kcal")
-    return '\n'.join(lines) if lines else '无详细记录'
+    return '\n'.join(lines)
 
 def generate_water_summary(health_data):
-    records = health_data.get('water_records', [])
-    if not records: return '无记录'
-    lines = []
-    for r in records[:6]:
-        lines.append(f"{r.get('time', '')}: {r.get('amount_ml', 0)}ml")
-    lines.append(f"→ 总计：{health_data.get('water_total', 0)}ml/{health_data.get('water_target', 2000)}ml")
-    return '\n'.join(lines)
+    water_target = health_data.get('water_target', 2000)
+    water_target = water_target if water_target > 0 else 2000
+    return f"总计：{health_data.get('water_total', 0)}ml/{water_target}ml"
 
 def generate_exercise_summary(health_data):
     exercises = health_data.get('exercise_records', [])
@@ -788,8 +786,7 @@ def generate_exercise_detail(health_data):
     if cycling:
         total_km = sum(e.get('distance_km', 0) for e in cycling)
         total_min = sum(e.get('duration_min', 0) for e in cycling)
-        details = [f"{e.get('distance_km', 0)}km/{e.get('duration_min', 0)}分钟" for e in cycling]
-        lines.append(f"骑行：{'、'.join(details)}（合计{total_km:.2f}km/{total_min:.1f}分钟）")
+        lines.append(f"骑行：{total_km:.2f}km/{total_min:.1f}分钟")
     if steps > 0:
         lines.append(f"步数：{steps}步")
     return '\n'.join(lines) if lines else '无详细记录'
@@ -865,11 +862,11 @@ def generate_plan_text(plan):
         lines.append('')
     
     if plan.get('notes'):
-        lines.append('**⚠️ 特别关注**')
+        lines.append('**⚠ 特别关注**')
         for item in plan.get('notes', []):
             lines.append(f'* {item}')
     
-    return '\n'.join(lines)
+    return '\n'.join(lines).strip()
 
 # ==================== PDF 报告生成（完整数据） ====================
 def generate_report(memory_file, date):
@@ -961,7 +958,8 @@ def generate_report(memory_file, date):
             water_records=health_data.get('water_records', []),
             meals=health_data.get('meals', []),
             exercise_data=health_data.get('exercise_records', []),
-            ai_comment=ai_comment  # 传递 AI 点评到 PDF
+            ai_comment=ai_comment,  # 传递 AI 点评到 PDF
+            custom_sections=health_data.get('custom_sections', {}) # 传递自定义模块到 PDF
         )
         
         # 复制到 Web 目录并生成下载链接
@@ -1008,3 +1006,4 @@ if __name__ == '__main__':
         import traceback
         traceback.print_exc()
         sys.exit(1)
+        

@@ -2,7 +2,7 @@
     "name": "health-mate",
     "display_name": "Health-Mate",
     "type": "python/app",
-    "version": "1.1.12",
+    "version": "1.1.13",
     "description": "Personal Health Assistant - 专业健康报告生成插件。自动读取本地记忆，生成带数据可视化的 PDF 报告，并支持多端推送。",
     "author": "tankeito",
     "email": "tqd354@gmail.com",
