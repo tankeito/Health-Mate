@@ -1,14 +1,38 @@
-English | 中文
+[English](README.md) | 中文
 
 # 🏥 Health-Mate 个人健康管家
 
-> **OpenClaw 专属健康管理插件**
+> **您的智能健康伴侣，专为 OpenClaw 打造**
 > 
-> *记录饮食、饮水、运动、体重数据，一键生成带 AI 点评的可视化 PDF 报告*
+> *将日常健康习惯转化为可执行的洞察。精准追踪营养、饮水、运动与体重变化。生成 AI 驱动的专业 PDF 报告—所有数据 100% 私有，完全本地运行。*
 
 [![Version](https://img.shields.io/badge/version-1.3.0-blue.svg)](https://github.com/tankeito/Health-Mate/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![OpenClaw](https://img.shields.io/badge/OpenClaw-Skill-green.svg)](https://openclaw.ai)
+
+---
+
+## 🌟 项目概述
+
+Health-Mate 是一款**生产就绪的双语健康管理技能**，专为 OpenClaw AI 助手平台独家打造。源于让个人健康追踪既**强大又隐私优先**的愿景，Health-Mate 填补了休闲健身应用与临床健康监测系统之间的空白。
+
+### Health-Mate 的独特之处
+
+与那些收割用户数据的云端健康追踪器不同，Health-Mate 完全在您的本地机器上运行。每一次热量计算、每一次饮水提醒、每一条 AI 生成的健康洞察，都在**您的硬件上离线完成**。您拥有健康旅程的完全所有权，同时享受企业级功能：
+
+- **🔒 隐私至上设计**：除非您显式配置 Webhook 端点用于报告推送，否则数据永远不会离开您的机器
+- **🧠 AI 驱动洞察**：大语言模型集成提供个性化健康点评和次日行动方案
+- **📊 专业可视化**：Matplotlib 渲染图表（营养环形图、饮水柱状图、趋势线）媲美高端智能手表应用
+- **🌐 双语卓越体验**：从解析逻辑到 PDF 输出再到文档，中文/英文完全对等
+- **⚙️ 病理智能协议**：预配置的胆结石、糖尿病、高血压、减脂目标专用方案
+- **📬 灵活推送**：支持钉钉、飞书、Telegram，或纯本地运行
+
+### Health-Mate 适合谁？
+
+- **慢性病管理者**：需要精准宏量营养素追踪的胆结石、糖尿病、高血压患者
+- **健身爱好者**：追求结构化减脂或增肌计划的运动员和健身人群
+- **隐私倡导者**：拒绝将个人数据拱手让给云端公司的健康意识用户
+- **OpenClaw 高级用户**：构建个性化 AI 助手生态系统的开发者和爱好者
 
 ---
 
@@ -150,28 +174,6 @@ python3 scripts/health_report_pro.py /root/.openclaw/workspace/memory/2026-03-20
 - 总步数：8500 步
 ```
 
-### 英文模板（支持格式）
-
-```markdown
-# 2026-03-20 Health Log
-
-### Breakfast (around 08:30)
-- Oatmeal 50g → approx. 190kcal
-- Skim milk 250ml → approx. 87kcal
-
-### Morning (around 09:45)
-- Water intake: 300ml
-- Cumulative: 300ml/2000ml
-
-### Afternoon Cycling (around 17:17)
-- Distance: 10km
-- Duration: 47min
-- Burn: approx. 300kcal
-
-## Today Steps
-- Total steps: 8500 steps
-```
-
 ---
 
 ## 🤖 命令列表
@@ -200,7 +202,7 @@ python3 scripts/health_report_pro.py /root/.openclaw/workspace/memory/2026-03-20
 
 ## 📊 报告结构
 
-### 日报结构（10 页）
+### 日报结构
 
 1. **封面页** – 日期、综合评分、星级
 2. **分项评分** – 6 维度（饮食/饮水/体重/症状/运动/依从性）
@@ -213,7 +215,7 @@ python3 scripts/health_report_pro.py /root/.openclaw/workspace/memory/2026-03-20
 9. **风险预警** – 基于记录数据的健康风险评估
 10. **次日方案** – 饮食/饮水/运动建议清单
 
-### 周报结构（3 页）
+### 周报结构
 
 1. **核心概览** – 周平均分、最佳/最差日
 2. **趋势图表** – 体重波动、每日热量摄入、步数统计

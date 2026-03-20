@@ -2,13 +2,37 @@ English | [中文](README_ZH.md)
 
 # 🏥 Health-Mate
 
-> **Personal Health Assistant for OpenClaw**
+> **Your Intelligent Health Companion for OpenClaw**
 > 
-> *Track your diet, hydration, exercise, and weight. Generate beautiful PDF reports with AI-powered insights.*
+> *Transform daily health habits into actionable insights. Track nutrition, hydration, exercise, and weight with precision. Generate stunning PDF reports powered by AI analysis—all while keeping your data 100% private and local.*
 
 [![Version](https://img.shields.io/badge/version-1.3.0-blue.svg)](https://github.com/tankeito/Health-Mate/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![OpenClaw](https://img.shields.io/badge/OpenClaw-Skill-green.svg)](https://openclaw.ai)
+
+---
+
+## 🌟 Project Overview
+
+Health-Mate is a **production-ready, bilingual health management skill** built exclusively for the OpenClaw AI assistant platform. Born from the vision of making personal health tracking both **powerful and privacy-first**, Health-Mate bridges the gap between casual fitness apps and clinical health monitoring systems.
+
+### What Makes Health-Mate Different?
+
+Unlike cloud-based health trackers that harvest your data, Health-Mate operates entirely on your local machine. Every calorie calculation, every hydration reminder, every AI-generated insight happens **offline on your hardware**. You retain complete ownership of your health journey while enjoying enterprise-grade features:
+
+- **🔒 Privacy by Design**: No data leaves your machine unless you explicitly configure webhook endpoints for report delivery
+- **🧠 AI-Powered Insights**: Large language model integration provides personalized health commentary and next-day action plans
+- **📊 Professional Visualization**: Matplotlib-rendered charts (nutrition rings, hydration bars, trend lines) rival premium smartwatch apps
+- **🌐 Bilingual Excellence**: Full Chinese/English parity—from parsing logic to PDF output to documentation
+- **⚙️ Condition-Specific Intelligence**: Pre-configured protocols for gallstones, diabetes, hypertension, and fat loss goals
+- **📬 Flexible Delivery**: Choose from DingTalk, Feishu, Telegram, or local-only operation
+
+### Who Is Health-Mate For?
+
+- **Chronic Condition Management**: Individuals managing gallstones, diabetes, or hypertension who need precise macro tracking
+- **Fitness Enthusiasts**: Athletes and gym-goers pursuing structured fat loss or muscle gain programs
+- **Privacy Advocates**: Health-conscious users who refuse to surrender personal data to cloud corporations
+- **OpenClaw Power Users**: Developers and tinkerers building personalized AI assistant ecosystems
 
 ---
 
@@ -148,28 +172,6 @@ python3 scripts/health_report_pro.py /root/.openclaw/workspace/memory/2026-03-20
 
 ## Today Steps
 - Total steps: 8500 steps
-```
-
-### Chinese Template (Supported Format)
-
-```markdown
-# 2026-03-20 健康记录
-
-### 早餐（约 08:30）
-- 燕麦片 50g → 约 190kcal
-- 脱脂牛奶 250ml → 约 87kcal
-
-### 上午（约 09:45）
-- 饮水量：300ml
-- 累计：300ml/2000ml
-
-### 下午骑行（约 17:17）
-- 距离：10 公里
-- 耗时：47 分钟
-- 消耗：约 300kcal
-
-## 今日步数
-- 总步数：8500 步
 ```
 
 ---
