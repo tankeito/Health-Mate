@@ -1,7 +1,7 @@
 ---
 name: health-mate
 display_name: Health-Mate
-version: 1.1.15
+version: 1.1.16
 type: python/app
 description: "专业健康报告生成插件。以只读方式解析本地记忆文件。安全透明，网络权限仅用于字体下载及用户自定义的 Webhook 推送。"
 install: pip install -r requirements.txt
@@ -31,7 +31,7 @@ env:
 ---
 # Health-Mate - 个人健康助手
 
-> **版本**：1.1.12 | **适用**：OpenClaw AI 助理
+> **版本**：1.1.16 | **适用**：OpenClaw AI 助理
 > 
 > **Personal Health Assistant - A native skill exclusively designed for OpenClaw**
 > 
