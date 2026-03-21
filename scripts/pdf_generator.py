@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """PDF rendering for the daily Health-Mate report."""
 
@@ -13,7 +13,7 @@ from reportlab.lib.pagesizes import A4
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image, KeepTogether
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import cm
-from reportlab.lib.enums import TA_CENTER, TA_LEFT
+from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from i18n import (
@@ -60,17 +60,33 @@ C_CARB, C_PROTEIN, C_FAT = "#3B82F6", "#10B981", "#F59E0B"
 
 def clean_html_tags(text):
     """Strip HTML and symbols that commonly break PDF rendering."""
-    if not text: return ""
+    if not text:
+        return ""
     text = re.sub(r'<[^>]+>', '', str(text))
     text = re.sub(r'[\U00010000-\U0010ffff]', '', text)
-    for emoji in ['⭐', '✅', '⚠️', '⚠', '❌', '🎉', '💡', '🚶', '🍎', '🥗', '💧', '🏃', '📊', '📈', '📄', '📥', '🥣', '🍜', '🍽️', '🍲', '⏰', '🚴', '🧘', '🔴', '🥦', '🍚', '🍳', '🥤', '🕐', '🌙', '💪', '🎯', '📌', '👍', '💯', '💊', '☑', '☑️', '📝', '🤖', '🌟', '📋']: 
-        text = text.replace(emoji, '')
+    for token in ['★', '☆', '✓', '•', '|']:
+        text = text.replace(token, '')
     return re.sub(r'\s+', ' ', re.sub(r'[\ufffd]', '', re.sub(r'[\x00-\x1f\x7f-\x9f]', '', text))).strip()
 
 def stars_to_text(stars_str):
-    if not stars_str: return ""
-    star_count = str(stars_str).count('⭐')
-    return f'<font color="{C_WARNING_STR}">{"★" * star_count}</font>' + f'<font color="{C_BORDER_STR}">{"★" * (5 - star_count)}</font>'
+    if not stars_str:
+        return ""
+    star_count = str(stars_str).count('★')
+    return f'<font color="{C_WARNING_STR}">{"★" * star_count}</font>' + f'<font color="{C_BORDER_STR}">{"☆" * (5 - star_count)}</font>'
+
+
+def profile_condition_title(profile, locale):
+    display = str((profile or {}).get("condition_display", "") or "").strip()
+    if display:
+        return display
+    conditions = (profile or {}).get("conditions", [])
+    if isinstance(conditions, list) and conditions:
+        labels = [condition_name(locale, item) for item in conditions if item]
+        labels = [item for item in labels if item]
+        if labels:
+            separator = "、" if resolve_locale(locale=locale) == "zh-CN" else ", "
+            return separator.join(labels)
+    return condition_name(locale, (profile or {}).get('condition', 'balanced'))
 
 
 def simplify_food_name_for_pdf(value):
@@ -352,71 +368,96 @@ def create_exercise_chart(exercise_data, steps, step_target=8000, locale="zh-CN"
         print(f"WARNING: exercise chart generation failed: {e}")
         return None
 
-def generate_pdf_report(data, profile, scores, nutrition, macros, risks, plan, output_path, locale="zh-CN", water_records=None, meals=None, exercise_data=None, ai_comment=None, custom_sections=None):
+def generate_pdf_report(data, profile, scores, nutrition, macros, risks, plan, output_path, locale="zh-CN", water_records=None, meals=None, exercise_data=None, ai_comment=None, medication_records=None, custom_sections=None, generation_meta=None):
     locale = resolve_locale(locale=locale)
     font_name = register_chinese_font()
-    footer_text = f"{condition_name(locale, profile.get('condition', 'balanced'))} - Health-Mate"
+    footer_text = f"{profile_condition_title(profile, locale)} - Health-Mate"
 
-    doc = SimpleDocTemplate(output_path, pagesize=A4, rightMargin=2*cm, leftMargin=2*cm, topMargin=2*cm, bottomMargin=2*cm, title=t(locale, "daily_report_title"))
+    def localize(zh_text, en_text):
+        return zh_text if locale == 'zh-CN' else en_text
+
+    def source_text(source):
+        labels = {
+            'llm': localize('\u6765\u6e90\uff1aLLM \u52a8\u6001\u751f\u6210', 'Source: LLM generated'),
+            'fallback': localize('\u6765\u6e90\uff1a\u672c\u5730\u89c4\u5219', 'Source: local rules'),
+            'fallback_tavily': localize('\u6765\u6e90\uff1aTavily \u68c0\u7d22 + \u672c\u5730\u89c4\u5219', 'Source: Tavily retrieval + local rules'),
+            'local': localize('\u6765\u6e90\uff1a\u672c\u5730\u89c4\u5219', 'Source: local rules'),
+        }
+        return labels.get(source or 'local', labels['local'])
+
+    module_map = scores.get('module_map', {}) if isinstance(scores, dict) else {}
+    score_modules = scores.get('modules', []) if isinstance(scores, dict) else []
+
+    doc = SimpleDocTemplate(output_path, pagesize=A4, rightMargin=2*cm, leftMargin=2*cm, topMargin=2*cm, bottomMargin=2*cm, title=t(locale, 'daily_report_title'))
     styles = getSampleStyleSheet()
     title_style = ParagraphStyle('CustomTitle', parent=styles['Heading1'], fontSize=20, textColor=C_PRIMARY, spaceAfter=10, alignment=TA_CENTER, fontName=font_name)
     heading_style = ParagraphStyle('CustomHeading', parent=styles['Heading2'], fontSize=13, textColor=C_PRIMARY, spaceBefore=15, spaceAfter=10, fontName=font_name)
     normal_style = ParagraphStyle('CustomNormal', parent=styles['Normal'], fontSize=10, textColor=C_TEXT_MAIN, fontName=font_name, leading=15)
+    muted_style = ParagraphStyle('Muted', parent=normal_style, textColor=C_TEXT_MUTED, fontSize=9, leading=12)
+    source_note_style = ParagraphStyle('SourceNote', parent=muted_style, alignment=TA_RIGHT, spaceBefore=4, spaceAfter=0)
     cell_style_center = ParagraphStyle('CellCenter', parent=normal_style, alignment=TA_CENTER, leading=12)
-    
+
     base_table_style = [
         ('BACKGROUND', (0, 0), (-1, 0), C_BG_HEAD), ('TEXTCOLOR', (0, 0), (-1, 0), C_TEXT_MUTED),
         ('TEXTCOLOR', (0, 1), (-1, -1), C_TEXT_MAIN), ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'), ('FONTNAME', (0, 0), (-1, -1), font_name),
         ('FONTSIZE', (0, 0), (-1, -1), 9), ('TOPPADDING', (0, 0), (-1, -1), 8),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 8), ('LINEBELOW', (0, 0), (-1, -1), 0.5, HexColor("#E2E8F0")), 
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 8), ('LINEBELOW', (0, 0), (-1, -1), 0.5, HexColor('#E2E8F0')),
     ]
 
     story = []
-    
-    condition_title = condition_name(locale, profile.get('condition', 'balanced'))
-    story.append(Paragraph(f"<b>{condition_title} · {t(locale, 'daily_report_title')}</b>", title_style))
+    condition_title = profile_condition_title(profile, locale)
+    story.append(Paragraph(f"<b>{condition_title} | {t(locale, 'daily_report_title')}</b>", title_style))
     story.append(Paragraph(f"<font color='#64748B'>{data['date']} | {profile.get('name', t(locale, 'default_name'))}</font>", ParagraphStyle('Date', parent=normal_style, alignment=TA_CENTER)))
     story.append(Spacer(1, 0.5*cm))
 
     story.append(Paragraph(f"1. {t(locale, 'overall_score_title', date=data.get('date', ''))}", heading_style))
-    score_data = [
-        [t(locale, 'dimension'), t(locale, 'score'), t(locale, 'stars'), t(locale, 'status')],
-        [t(locale, 'diet_label'), f"{scores['diet']['raw']:.0f}/100", Paragraph(stars_to_text(scores['diet']['stars']), cell_style_center), t(locale, 'achieved') if scores['diet']['raw']>=80 else t(locale, 'needs_improvement')],
-        [t(locale, 'water_label'), f"{scores['water']['raw']:.0f}/100", Paragraph(stars_to_text(scores['water']['stars']), cell_style_center), t(locale, 'achieved') if scores['water']['raw']>=100 else t(locale, 'under_target')],
-        [t(locale, 'weight_label'), f"{scores['weight']['raw']:.0f}/100", Paragraph(stars_to_text(scores['weight']['stars']), cell_style_center), t(locale, 'normal') if scores['weight'].get('bmi') and 18.5<=scores['weight']['bmi']<24 else t(locale, 'attention')],
-        [t(locale, 'symptom_label'), f"{scores['symptom']['raw']:.0f}/100", Paragraph(stars_to_text(scores['symptom']['stars']), cell_style_center), t(locale, 'symptom_free') if not scores['symptom']['has_symptoms'] else t(locale, 'has_symptoms')],
-        [t(locale, 'exercise_label'), f"{scores['exercise']['raw']:.0f}/100", Paragraph(stars_to_text(scores['exercise']['stars']), cell_style_center), t(locale, 'achieved') if scores['exercise']['raw']>=60 else t(locale, 'needs_boost')],
-        [t(locale, 'adherence_label'), f"{scores['adherence']['raw']:.0f}/100", Paragraph(stars_to_text(scores['adherence']['stars']), cell_style_center), t(locale, 'excellent') if scores['adherence']['raw']>=80 else t(locale, 'fair')],
-        [t(locale, 'score_total_label'), f"{scores['total']:.0f}/100", Paragraph(stars_to_text(scores['total_stars']), cell_style_center), t(locale, 'excellent') if scores['total']>=80 else t(locale, 'good') if scores['total']>=60 else t(locale, 'needs_improvement')],
-    ]
-    score_table = Table(score_data, colWidths=[4*cm, 3*cm, 3.5*cm, 3.5*cm])
+    score_data = [[t(locale, 'dimension'), t(locale, 'score'), t(locale, 'stars'), t(locale, 'status')]]
+    for module in score_modules:
+        score_data.append([
+            clean_html_tags(module.get('title', module.get('id', ''))),
+            f"{module.get('raw', 0):.0f}/100",
+            Paragraph(stars_to_text(module.get('stars', '')), cell_style_center),
+            clean_html_tags(module.get('status', '')),
+        ])
+    score_data.append([
+        t(locale, 'score_total_label'),
+        f"{scores.get('total', 0):.0f}/100",
+        Paragraph(stars_to_text(scores.get('total_stars', '')), cell_style_center),
+        t(locale, 'excellent') if scores.get('total', 0) >= 80 else t(locale, 'good') if scores.get('total', 0) >= 60 else t(locale, 'needs_improvement'),
+    ])
+    score_table = Table(score_data, colWidths=[4.5*cm, 3*cm, 3*cm, 4*cm])
     score_style = list(base_table_style)
     for i in range(1, len(score_data)):
-        status = score_data[i][3]
-        if status in [t(locale, 'achieved'), t(locale, 'excellent'), t(locale, 'normal'), t(locale, 'symptom_free')]:
+        raw_score = scores.get('total', 0) if i == len(score_data) - 1 else score_modules[i - 1].get('raw', 0)
+        if raw_score >= 80:
             score_style.append(('TEXTCOLOR', (3, i), (3, i), C_SUCCESS))
-        elif status in [t(locale, 'needs_improvement'), t(locale, 'under_target'), t(locale, 'attention'), t(locale, 'has_symptoms'), t(locale, 'needs_boost'), t(locale, 'fair')]:
-            score_style.append(('TEXTCOLOR', (3, i), (3, i), C_WARNING if status in [t(locale, 'attention'), t(locale, 'needs_boost'), t(locale, 'fair'), t(locale, 'needs_improvement')] else C_DANGER))
+        elif raw_score >= 60:
+            score_style.append(('TEXTCOLOR', (3, i), (3, i), C_WARNING))
+        else:
+            score_style.append(('TEXTCOLOR', (3, i), (3, i), C_DANGER))
     score_table.setStyle(TableStyle(score_style))
     story.append(score_table)
     story.append(Spacer(1, 0.4*cm))
-    
+
     if ai_comment:
         story.append(Paragraph(t(locale, 'expert_ai_insights'), heading_style))
         clean_comment = '\n'.join([l for l in ai_comment.split('\n') if not l.strip().startswith(('[plugins]', '[adp-', 'Hint:', 'error:'))]).strip()
-        for para in clean_comment.split('\n'):  
-            if para.strip(): 
+        for para in clean_comment.split('\n'):
+            if para.strip():
                 story.append(Paragraph(f"<font color='#1E293B'>{clean_html_tags(para)}</font>", normal_style))
-                story.append(Spacer(1, 0.15*cm)) 
+                story.append(Spacer(1, 0.15*cm))
+        if generation_meta:
+            story.append(Paragraph(source_text(generation_meta.get('ai_comment')), source_note_style))
         story.append(Spacer(1, 0.2*cm))
-    
+
     story.append(Paragraph(f"2. {t(locale, 'daily_baseline_data')}", heading_style))
-    bmi_val = scores["weight"].get("bmi", 0) or 0
-    weight_val = data.get("weight_morning")
-    bmr_val = (10*(weight_val or 65) + 6.25*profile.get('height_cm',172) - 5*profile.get('age',34) + (5 if str(profile.get('gender', 'male')).lower() == 'male' else -161))
+    weight_module = module_map.get('weight', {})
+    bmi_val = weight_module.get('bmi', scores.get('bmi', 0)) or 0
+    weight_val = data.get('weight_morning')
+    bmr_val = (10 * (weight_val or 65) + 6.25 * profile.get('height_cm', 172) - 5 * profile.get('age', 34) + (5 if str(profile.get('gender', 'male')).lower() == 'male' else -161))
     tdee_val = bmr_val * profile.get('activity_level', 1.2)
-    
+
     health_data = [
         [t(locale, 'metric'), t(locale, 'value'), t(locale, 'reference_range')],
         [t(locale, 'height'), f"{profile['height_cm']}cm", t(locale, 'not_available')],
@@ -432,12 +473,14 @@ def generate_pdf_report(data, profile, scores, nutrition, macros, risks, plan, o
     ]
     health_table = Table(health_data, colWidths=[5*cm, 4*cm, 5*cm])
     health_style = list(base_table_style)
-    if 18.5 <= bmi_val < 24: health_style.append(('TEXTCOLOR', (1, 3), (1, 3), C_SUCCESS))
-    elif bmi_val > 0: health_style.append(('TEXTCOLOR', (1, 3), (1, 3), C_DANGER if bmi_val >= 28 or bmi_val < 18.5 else C_WARNING))
+    if 18.5 <= bmi_val < 24:
+        health_style.append(('TEXTCOLOR', (1, 3), (1, 3), C_SUCCESS))
+    elif bmi_val > 0:
+        health_style.append(('TEXTCOLOR', (1, 3), (1, 3), C_DANGER if bmi_val >= 28 or bmi_val < 18.5 else C_WARNING))
     health_table.setStyle(TableStyle(health_style))
     story.append(health_table)
     story.append(Spacer(1, 0.4*cm))
-    
+
     temp_images = []
 
     story.append(Paragraph(f"3. {t(locale, 'daily_nutrition_breakdown')}", heading_style))
@@ -448,7 +491,7 @@ def generate_pdf_report(data, profile, scores, nutrition, macros, risks, plan, o
         img.hAlign = 'CENTER'
         story.append(img)
         story.append(Spacer(1, 0.2*cm))
-    
+
     nutrition_data = [
         [t(locale, 'nutrient'), t(locale, 'actual_intake'), t(locale, 'recommended_intake')],
         [t(locale, 'calories'), f"{nutrition['calories']:.0f} kcal", f"{tdee_val:.0f} kcal"],
@@ -461,7 +504,7 @@ def generate_pdf_report(data, profile, scores, nutrition, macros, risks, plan, o
     nutri_table.setStyle(TableStyle(base_table_style))
     story.append(nutri_table)
     story.append(Spacer(1, 0.4*cm))
-    
+
     story.append(Paragraph(f"4. {t(locale, 'daily_water_details')}", heading_style))
     if water_records and len(water_records) > 0:
         chart_path_water = create_water_chart(water_records, data.get('water_target', 2000), locale)
@@ -474,29 +517,29 @@ def generate_pdf_report(data, profile, scores, nutrition, macros, risks, plan, o
     else:
         story.append(Paragraph(f"<font color='#64748B'>{t(locale, 'no_water_today')}</font>", normal_style))
         story.append(Spacer(1, 0.4*cm))
-    
+
     story.append(Paragraph(f"5. {t(locale, 'daily_meal_details')}", heading_style))
     if meals and len(meals) > 0:
         seen_meals = set()
         for meal in meals:
-            meal_elements = [] 
-            meal_type = meal.get("type", "")
-            meal_time = meal.get("time", "")
+            meal_elements = []
+            meal_type = meal.get('type', '')
+            meal_time = meal.get('time', '')
             meal_key = f"{meal_type}_{meal_time}"
-            
-            if meal_key in seen_meals: continue
+            if meal_key in seen_meals:
+                continue
             seen_meals.add(meal_key)
-            
-            meal_time_str = f" <font color='#64748B' size='9'>({meal_time})</font>" if meal_time else ""
-            meal_title_text = f"<font color='{C_PRIMARY_STR}'>■</font> <b>{meal_name(locale, meal_type)}</b>{meal_time_str} <font color='#64748B' size='9'>· {t(locale, 'meal_total', calories=meal.get('total_calories', 0))}</font>"
+
+            meal_time_str = f" <font color='#64748B' size='9'>({meal_time})</font>" if meal_time else ''
+            meal_title_text = f"<b>{meal_name(locale, meal_type)}</b>{meal_time_str} <font color='#64748B' size='9'>| {t(locale, 'meal_total', calories=meal.get('total_calories', 0))}</font>"
             meal_title = Paragraph(meal_title_text, ParagraphStyle('MealTitle', parent=normal_style, spaceBefore=8, spaceAfter=4))
             meal_elements.append(meal_title)
-            
-            food_nutrition = meal.get("food_nutrition", [])
+
+            food_nutrition = meal.get('food_nutrition', [])
             if food_nutrition and len(food_nutrition) > 0:
                 meal_data = [[t(locale, 'food_name'), t(locale, 'portion'), t(locale, 'calories'), t(locale, 'protein'), t(locale, 'fat'), t(locale, 'carb')]]
                 for food in food_nutrition:
-                    name_raw = food.get("name", "").split('→')[0].strip() if '→' in food.get("name", "") else food.get("name", "").strip()
+                    name_raw = str(food.get('name', '')).strip()
                     portion_match = re.search(rf'(\d+(?:\.\d+)?)\s*{PORTION_UNIT_PATTERN}', name_raw, re.IGNORECASE)
                     if portion_match:
                         name_simple = re.sub(r'\s*' + re.escape(portion_match.group(0)), '', name_raw).strip()
@@ -504,34 +547,37 @@ def generate_pdf_report(data, profile, scores, nutrition, macros, risks, plan, o
                     else:
                         name_simple = name_raw
                         portion_display = f"{food.get('portion_grams', 100):.0f}g"
-                    
+
                     name_simple = simplify_food_name_for_pdf(name_simple)
-                    
-                    if len(name_simple) < 2: name_simple = name_raw
-                    meal_data.append([clean_html_tags(name_simple), portion_display, f"{food.get('calories', 0):.0f}kcal", f"{food.get('protein', 0):.1f}g", f"{food.get('fat', 0):.1f}g", f"{food.get('carb', 0):.1f}g"])
-                
-                modern_meal_style = [
-                    ('BACKGROUND', (0, 0), (-1, 0), C_BG_HEAD), ('TEXTCOLOR', (0, 0), (-1, 0), C_TEXT_MUTED),  
-                    ('TEXTCOLOR', (0, 1), (-1, -1), C_TEXT_MAIN), ('ALIGN', (0, 0), (0, -1), 'LEFT'),                  
-                    ('ALIGN', (1, 0), (-1, -1), 'CENTER'), ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-                    ('FONTNAME', (0, 0), (-1, -1), font_name), ('FONTSIZE', (0, 0), (-1, -1), 9),
-                    ('TOPPADDING', (0, 0), (-1, -1), 6), ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
-                    ('LINEBELOW', (0, 0), (-1, -1), 0.5, C_BORDER), 
-                ]
+                    if len(name_simple) < 2:
+                        name_simple = name_raw
+                    meal_data.append([
+                        clean_html_tags(name_simple),
+                        portion_display,
+                        f"{food.get('calories', 0):.0f}kcal",
+                        f"{food.get('protein', 0):.1f}g",
+                        f"{food.get('fat', 0):.1f}g",
+                        f"{food.get('carb', 0):.1f}g",
+                    ])
+
                 meal_table = Table(meal_data, colWidths=[4.5*cm, 2*cm, 2*cm, 2*cm, 2*cm, 2.5*cm])
-                meal_table.setStyle(TableStyle(modern_meal_style))
+                meal_table.setStyle(TableStyle(base_table_style + [
+                    ('ALIGN', (0, 0), (0, -1), 'LEFT'),
+                    ('ALIGN', (1, 0), (-1, -1), 'CENTER'),
+                ]))
                 meal_elements.append(meal_table)
             else:
                 meal_elements.append(Paragraph(f"<font color='#64748B'>{t(locale, 'no_food_detail')}</font>", normal_style))
+
             meal_elements.append(Spacer(1, 0.4*cm))
             story.append(KeepTogether(meal_elements))
     else:
         story.append(Paragraph(f"<font color='#64748B'>{t(locale, 'no_meals_today')}</font>", normal_style))
     story.append(Spacer(1, 0.2*cm))
-    
+
     story.append(Paragraph(f"6. {t(locale, 'daily_exercise_details')}", heading_style))
-    steps = data.get("steps", 0)
-    step_target = profile.get("step_target", 8000)
+    steps = data.get('steps', 0)
+    step_target = profile.get('step_target', 8000)
     exercise_lines = build_exercise_detail_lines(exercise_data, steps, locale)
     if exercise_data or steps > 0:
         chart_path_exercise = create_exercise_chart(exercise_data, steps, step_target, locale)
@@ -551,19 +597,31 @@ def generate_pdf_report(data, profile, scores, nutrition, macros, risks, plan, o
     else:
         story.append(Paragraph(f"<font color='#64748B'>{t(locale, 'no_exercise_today')}</font>", normal_style))
     story.append(Spacer(1, 0.4*cm))
-    
+
     section_idx = 7
-    
+    has_medication_module = any(module.get('id') == 'medication' for module in score_modules)
+    if has_medication_module:
+        medication_title = localize('\u7528\u836f\u60c5\u51b5', 'Medication')
+        story.append(Paragraph(f"{section_idx}. {medication_title}", heading_style))
+        section_idx += 1
+        if medication_records:
+            for item in medication_records:
+                item_text = re.sub(r'^\s*[-*]\s*', '', str(item or '')).strip()
+                story.append(Paragraph(f"- {clean_html_tags(item_text)}", normal_style))
+        else:
+            story.append(Paragraph(f"<font color='#64748B'>{t(locale, 'no_record')}</font>", normal_style))
+        story.append(Spacer(1, 0.3*cm))
+
     if custom_sections:
         story.append(Paragraph(f"{section_idx}. {t(locale, 'extra_monitoring_records')}", heading_style))
         section_idx += 1
         for header, items in custom_sections.items():
-            story.append(Paragraph(f"<b>{header}</b>", ParagraphStyle('Sub', parent=normal_style, textColor=C_TEXT_MAIN, spaceAfter=4)))
+            story.append(Paragraph(f"<b>{clean_html_tags(header)}</b>", ParagraphStyle('Sub', parent=normal_style, textColor=C_TEXT_MAIN, spaceAfter=4)))
             for item in items:
                 item_text = re.sub(r'^\s*[-*]\s*', '', str(item or '')).strip()
                 story.append(Paragraph(f"- {clean_html_tags(item_text)}", normal_style))
             story.append(Spacer(1, 0.3*cm))
-    
+
     story.append(Paragraph(f"{section_idx}. {t(locale, 'risk_alerts')}", heading_style))
     section_idx += 1
     if risks:
@@ -574,10 +632,12 @@ def generate_pdf_report(data, profile, scores, nutrition, macros, risks, plan, o
             story.append(Spacer(1, 0.2*cm))
     else:
         story.append(Paragraph(f"<font color='{C_SUCCESS_STR}'>{t(locale, 'no_risk')}</font>", normal_style))
+    if generation_meta:
+        story.append(Paragraph(source_text(generation_meta.get('risk_alerts')), source_note_style))
     story.append(Spacer(1, 0.4*cm))
-    
+
     story.append(Paragraph(f"{section_idx}. {t(locale, 'action_plan')}", heading_style))
-    for category, title in [("diet", t(locale, 'diet_plan')), ("water", t(locale, 'water_plan')), ("exercise", t(locale, 'exercise_plan'))]:
+    for category, title in [('diet', t(locale, 'diet_plan')), ('water', t(locale, 'water_plan')), ('exercise', t(locale, 'exercise_plan'))]:
         if plan.get(category):
             story.append(Paragraph(f"<b>{title}</b>", ParagraphStyle('Sub', parent=normal_style, textColor=C_TEXT_MAIN, spaceAfter=6)))
             for item in plan.get(category, []):
@@ -585,35 +645,39 @@ def generate_pdf_report(data, profile, scores, nutrition, macros, risks, plan, o
                     time = item.get('time', item.get('period', item.get('time_range', '')))
                     content = item.get('menu', item.get('activity', item.get('amount', '')))
                     note = item.get('note', item.get('details', ''))
-                    
-                    if not content: content = ('、' if locale == 'zh-CN' else ', ').join(str(i) for i in item.get('items', []))[:30]
-                    
+                    if not content:
+                        separator = ' / ' if locale == 'zh-CN' else ', '
+                        content = separator.join(str(i) for i in item.get('items', []))[:30]
                     cal = item.get('calories', '')
-                    if cal: note = f"{cal}kcal " + note
-                    
+                    if cal:
+                        note = f"{cal}kcal {note}".strip()
                     clean_item = f"<b>{time}</b> {clean_html_tags(content)}"
-                    if note: clean_item += f" <font color='#64748B'>({clean_html_tags(note)})</font>"
-                else: 
+                    if note:
+                        clean_item += f" <font color='#64748B'>({clean_html_tags(note)})</font>"
+                else:
                     clean_item = clean_html_tags(str(item))
-                story.append(Paragraph(f"<font color='{C_PRIMARY_STR}'>■</font> {clean_item}", normal_style))
+                story.append(Paragraph(f"- {clean_item}", normal_style))
             story.append(Spacer(1, 0.2*cm))
-            
-    if plan.get("notes"):
+
+    if plan.get('notes'):
         story.append(Paragraph(f"<b>{t(locale, 'special_attention')}</b>", ParagraphStyle('Sub', parent=normal_style, textColor=C_TEXT_MAIN, spaceAfter=6)))
-        for item in plan.get("notes", []):
-            story.append(Paragraph(f"<font color='{C_WARNING_STR}'>■</font> {clean_html_tags(item)}", normal_style))
-    
+        for item in plan.get('notes', []):
+            story.append(Paragraph(f"- {clean_html_tags(item)}", normal_style))
+    if generation_meta:
+        story.append(Paragraph(source_text(generation_meta.get('next_day_plan')), source_note_style))
+
     story.append(Spacer(1, 1.5*cm))
     footer_style = ParagraphStyle('Footer', parent=normal_style, fontSize=9, textColor=C_TEXT_MUTED, alignment=TA_CENTER)
     story.append(Paragraph(t(locale, 'generated_at', timestamp=datetime.now().strftime('%Y-%m-%d %H:%M:%S')), footer_style))
     story.append(Paragraph(f"{footer_text}", footer_style))
-    
+
     doc.build(story)
     for temp_img in temp_images:
-        try: os.remove(temp_img)
-        except: pass
+        try:
+            os.remove(temp_img)
+        except:
+            pass
     print(f"PDF report generated: {output_path}")
-
 if __name__ == "__main__":
     print("Use this module via health_report_pro.py.")
     

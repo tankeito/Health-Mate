@@ -49,7 +49,7 @@ TEXTS: Dict[str, Dict[str, str]] = {
         "weekly_report_title": "健康周报",
         "daily_report_heading": "{date} 健康报告",
         "weekly_text_heading": "{start_date} 至 {end_date} 健康周报",
-        "overall_score_title": "{date} 今日综合评分",
+        "overall_score_title": "今日综合评分",
         "item_summary_title": "分项汇总",
         "ai_comment_title": "AI 点评",
         "details_title": "今日详情汇总",
@@ -175,15 +175,21 @@ TEXTS: Dict[str, Dict[str, str]] = {
         "weekly_ai_review_title": "专家 AI 深度复盘",
         "weekly_next_plan_title": "下周干预方案",
         "weekly_rings_center": "本周\n健康概览",
-        "weekly_ring_diet": "饮食达标",
-        "weekly_ring_water": "饮水达标",
-        "weekly_ring_exercise": "运动达标",
+        "weekly_ring_diet": "饮食评分",
+        "weekly_ring_water": "饮水达标率",
+        "weekly_ring_exercise": "步数达标率",
+        "weekly_ring_label": "{label} {percent:.0f}%",
         "target_line": "目标：{target}",
         "weight_trend_title": "本周体重波动趋势 ({unit})",
         "calorie_trend_title": "本周每日摄入热量 (kcal)",
         "step_trend_title": "本周每日步数分布 (步)",
         "water_trend_title": "本周每日饮水量分布 (ml)",
         "weekly_nutrition_center": "日均摄入\n{calories} kcal",
+        "weekly_chart_weight_label": "体重趋势图",
+        "weekly_chart_calorie_label": "热量趋势图",
+        "weekly_chart_nutrition_label": "营养结构图",
+        "weekly_chart_step_label": "步数趋势图",
+        "weekly_chart_water_label": "饮水趋势图",
         "weekly_period": "评估周期：{start_date} 至 {end_date} | 监测人：{name}",
         "weekly_summary_title": "本周核心指标",
         "weekly_review_section": "本周复盘",
@@ -287,7 +293,7 @@ TEXTS: Dict[str, Dict[str, str]] = {
         "weekly_report_title": "Weekly Health Report",
         "daily_report_heading": "{date} Health Report",
         "weekly_text_heading": "Weekly Health Report ({start_date} to {end_date})",
-        "overall_score_title": "Today's Overall Score",
+        "overall_score_title": "Overall Score",
         "item_summary_title": "Category Summary",
         "ai_comment_title": "AI Insight",
         "details_title": "Today's Breakdown",
@@ -413,15 +419,21 @@ TEXTS: Dict[str, Dict[str, str]] = {
         "weekly_ai_review_title": "Expert AI Weekly Review",
         "weekly_next_plan_title": "Plan For Next Week",
         "weekly_rings_center": "Weekly\nOverview",
-        "weekly_ring_diet": "Diet goal",
-        "weekly_ring_water": "Hydration goal",
-        "weekly_ring_exercise": "Exercise goal",
+        "weekly_ring_diet": "Diet score",
+        "weekly_ring_water": "Hydration goal rate",
+        "weekly_ring_exercise": "Step goal rate",
+        "weekly_ring_label": "{label} {percent:.0f}%",
         "target_line": "Target: {target}",
         "weight_trend_title": "Weight Trend This Week ({unit})",
         "calorie_trend_title": "Daily Calories This Week (kcal)",
         "step_trend_title": "Daily Steps This Week",
         "water_trend_title": "Daily Hydration This Week (ml)",
         "weekly_nutrition_center": "Daily avg\n{calories} kcal",
+        "weekly_chart_weight_label": "Weight trend chart",
+        "weekly_chart_calorie_label": "Calorie trend chart",
+        "weekly_chart_nutrition_label": "Macro balance chart",
+        "weekly_chart_step_label": "Step trend chart",
+        "weekly_chart_water_label": "Hydration trend chart",
         "weekly_period": "Period: {start_date} to {end_date} | User: {name}",
         "weekly_summary_title": "Weekly Metrics",
         "weekly_review_section": "Weekly Review",
@@ -1021,6 +1033,91 @@ def build_ai_plan_system_prompt(locale: Optional[str]) -> str:
 
 
 def build_weekly_ai_prompt(locale: Optional[str], context: dict) -> str:
+    if resolve_locale(locale=locale) == "en-US":
+        return f"""You are a professional weekly health reviewer. Based on the aggregated 7-day health data below, write a grounded weekly review and a next-week action plan.
+
+Profile summary: {context.get('profile_summary', 'N/A')}
+Managed conditions / goals: {context.get('condition_name', 'General health management')}
+Primary goal: {context.get('primary_condition', 'General health management')}
+Diet principle: {context.get('diet_principle', 'Keep a steady and balanced routine')}
+Hydration target: {context.get('water_target', 2000)} ml
+Step target: {context.get('step_target', 8000)}
+
+[Weekly summary]
+- Weight change: {context.get('weight_change', 'N/A')}
+- Average overall score: {context.get('avg_total_score', 0):.1f}/100
+- Average diet score: {context.get('avg_diet_score', 0):.1f}/100
+- Average daily calories: {context.get('avg_calories', 0):.0f} kcal
+- Average daily water: {context.get('avg_water', 0):.0f} ml
+- Average daily steps: {context.get('avg_steps', 0):.0f}
+- Diet goal days: {context.get('diet_goal_days', 0)}/7
+- Hydration goal days: {context.get('water_goal_days', 0)}/7
+- Step goal days: {context.get('step_goal_days', 0)}/7
+- Symptom days: {context.get('symptom_days', 0)}/7
+- Symptom events: {context.get('symptoms_count', 0)}
+- Medication log days: {context.get('medication_days', 0)}/7
+- Best day: {context.get('best_day', 'N/A')}
+- Focus day: {context.get('focus_day', 'N/A')}
+- Strengths observed: {context.get('strengths', 'None')}
+- Gaps observed: {context.get('gaps', 'None')}
+- Suggested focus: {context.get('next_focus', 'Keep the current routine')}
+- Extra monitoring sections: {context.get('custom_sections', 'None')}
+
+Output in exactly two parts with no markdown code fence:
+
+---review---
+Write 140-220 words. Explicitly cover:
+1. what went well this week,
+2. what did not go well,
+3. what matters most for the managed conditions,
+4. what should be prioritized next week.
+
+---plan---
+- Provide 3-5 concrete actions for next week.
+- Actions must be practical, specific, and aligned with the managed conditions.
+"""
+    return f"""你是一位专业的周度健康复盘专家。请根据以下 7 天聚合数据，输出一份可信、可执行的周报复盘与下周行动方案。
+
+个人信息：{context.get('profile_summary', '暂无')}
+管理目标：{context.get('condition_name', '综合健康管理')}
+主目标：{context.get('primary_condition', '综合健康管理')}
+管理原则：{context.get('diet_principle', '保持稳定规律')}
+饮水目标：{context.get('water_target', 2000)} ml
+步数目标：{context.get('step_target', 8000)}
+
+[周度汇总]
+- 体重变化：{context.get('weight_change', '暂无')}
+- 周均综合评分：{context.get('avg_total_score', 0):.1f}/100
+- 周均饮食评分：{context.get('avg_diet_score', 0):.1f}/100
+- 日均热量：{context.get('avg_calories', 0):.0f} kcal
+- 日均饮水：{context.get('avg_water', 0):.0f} ml
+- 日均步数：{context.get('avg_steps', 0):.0f}
+- 饮食达标天数：{context.get('diet_goal_days', 0)}/7
+- 饮水达标天数：{context.get('water_goal_days', 0)}/7
+- 步数达标天数：{context.get('step_goal_days', 0)}/7
+- 症状天数：{context.get('symptom_days', 0)}/7
+- 症状次数：{context.get('symptoms_count', 0)}
+- 用药记录天数：{context.get('medication_days', 0)}/7
+- 最佳日：{context.get('best_day', '暂无')}
+- 重点复盘日：{context.get('focus_day', '暂无')}
+- 本周亮点：{context.get('strengths', '暂无')}
+- 待改进项：{context.get('gaps', '暂无')}
+- 下周重点：{context.get('next_focus', '保持当前节奏')}
+- 额外监测项目：{context.get('custom_sections', '暂无')}
+
+请严格按以下两部分输出，不要加代码块：
+
+---review---
+写 140-220 字，明确说明：
+1. 本周做得好的地方，
+2. 本周做得不够好的地方，
+3. 对当前多病种/目标最关键的影响，
+4. 下周最该优先做什么。
+
+---plan---
+- 输出 3-5 条下周可执行方案。
+- 要求具体、落地，并与当前管理目标保持一致。
+"""
     if resolve_locale(locale=locale) == "en-US":
         return f"""You are a professional weekly health reviewer. Based on the aggregated 7-day health data below, write a weekly review and next-week action plan.
 

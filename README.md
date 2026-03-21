@@ -6,7 +6,7 @@ English | [中文](README_ZH.md)
 > 
 > *Transform daily health habits into actionable insights. Track nutrition, hydration, exercise, and weight with precision. Generate stunning PDF reports powered by AI analysis—all while keeping your data 100% private and local.*
 
-[![Version](https://img.shields.io/badge/version-1.3.1-blue.svg)](https://github.com/tankeito/Health-Mate/releases)
+[![Version](https://img.shields.io/badge/version-1.3.3-blue.svg)](https://github.com/tankeito/Health-Mate/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![OpenClaw](https://img.shields.io/badge/OpenClaw-Skill-green.svg)](https://openclaw.ai)
 
@@ -58,6 +58,16 @@ Unlike cloud-based health trackers that harvest your data, Health-Mate operates 
 | 🤖 **AI Health Commentary** | LLM-generated insights and next-day action plans based on your recorded data |
 | 📬 **Multi-Channel Delivery** | Optional push to DingTalk, Feishu, or Telegram via configurable webhooks |
 | 🔒 **Local-First Processing** | All analysis and PDF generation happen locally—no data leaves your machine unless you configure webhooks |
+
+---
+
+## 🆕 What's New In 1.3.3
+
+- **Multi-condition profiles**: `user_config.json` now supports `conditions`, `primary_condition`, and backward-compatible `condition`. Daily and weekly analysis, LLM prompts, and fallback logic all evaluate the full condition set.
+- **Dynamic fallback with Tavily support**: expert commentary, next-day plans, and weekly fallback reviews are no longer fixed canned text. When `TAVILY_API_KEY` is configured, local fallback can enrich output with retrieved guidance.
+- **Custom scoring and monitoring**: medication is available as a default scoring module, and custom sections such as biochemistry can be added, scored, and rendered in daily/weekly PDF output.
+- **Stronger weekly report**: weekly output now includes profile details, strengths, gaps, next-week focus, best/focus day summaries, and additional monitoring rollups.
+- **Improved first-run setup**: `scripts/init_config.py` now guides users through multi-condition selection, primary goal selection, scoring weights, medication/custom modules, and writes everything into `config/user_config.json`.
 
 ---
 
@@ -193,7 +203,7 @@ The same protocol should be mirrored in `soul.md` so the OpenClaw runtime prompt
 | Variable | Required | Description | Example |
 |----------|----------|-------------|---------|
 | `MEMORY_DIR` | ✅ Yes | Directory containing markdown health logs | `/root/.openclaw/workspace/memory` |
-| `TAVILY_API_KEY` | ❌ No | Tavily API key for recipe/exercise research | `tvly-dev-xxx` |
+| `TAVILY_API_KEY` | ❌ No | Tavily API key for Tavily-assisted fallback in commentary, planning, and weekly suggestions | `tvly-dev-xxx` |
 | `DINGTALK_WEBHOOK` | ❌ No | DingTalk bot webhook for report delivery | `https://oapi.dingtalk.com/...` |
 | `FEISHU_WEBHOOK` | ❌ No | Feishu bot webhook for report delivery | `https://open.feishu.cn/...` |
 | `TELEGRAM_BOT_TOKEN` | ❌ No | Telegram bot token for report delivery | `YOUR_BOT_TOKEN` |
@@ -234,6 +244,7 @@ health-mate/
 ├── scripts/
 │   ├── health_report_pro.py      # Daily report generator
 │   ├── weekly_report_pro.py      # Weekly report generator
+│   ├── export_memory_en.py       # Normalize Chinese memory into English test samples
 │   ├── pdf_generator.py          # PDF rendering engine
 │   ├── weekly_pdf_generator.py   # Weekly PDF renderer
 │   ├── i18n.py                   # Bilingual language layer
@@ -282,11 +293,13 @@ The following files **must never be committed** to public repositories:
 
 ## 🔄 Changelog
 
-### v1.3.1 — 2026-03-20
+### v1.3.3 — 2026-03-20
 
-- 🔐 **Protocol Sync**: Synced `README`, `SKILL.md`, and `soul.md` memory-write rules to the same strict structure
-- 🧾 **Parser Safety**: Clarified that hydration blocks must contain exactly two lines and no extra commentary fields
-- 🏷️ **Release Update**: Bumped documentation and package metadata to version `1.3.1`
+- 🤖 **Generation Sources**: Added explicit LLM/local-fallback source tracking for expert commentary, risk alerts, and next-day plans
+- ⚖️ **Custom Scoring**: Moved scoring modules and weights into `user_config.json`, including optional medication/custom-section scoring
+- 📈 **Weekly Charts**: Clarified weekly ring-chart labels and added chart-level subtitles for the five core trend visuals
+- 🌐 **English Verification**: Confirmed end-to-end English memory parsing, automatic English report inference from English memory, and `memory_en/` sample generation via `scripts/export_memory_en.py`
+- 🏷️ **Release Update**: Bumped documentation and package metadata to version `1.3.3`
 
 ### v1.3.0 — 2026-03-20
 

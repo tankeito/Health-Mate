@@ -1,9 +1,9 @@
 ---
 name: health-mate
 display_name: Health-Mate
-version: 1.3.1
+version: 1.3.3
 type: python/app
-description: "Executable bilingual OpenClaw health-report skill with local Python scripts for markdown parsing, PDF generation, and optional webhook delivery."
+description: "Executable bilingual OpenClaw health-report skill with local Python scripts for markdown parsing, weekly chart rendering, automatic locale-aware English/Chinese PDF generation, English memory export helpers, and optional webhook delivery."
 install: pip install -r requirements.txt
 capabilities:
   - file_read
@@ -17,7 +17,7 @@ metadata:
         - MEMORY_DIR
 env:
   MEMORY_DIR: Required. Explicitly set this to the markdown health-memory directory to be read by the skill.
-  TAVILY_API_KEY: Optional. Used only for extra recipe and exercise research when generating next-day suggestions.
+  TAVILY_API_KEY: Optional. Used for Tavily-assisted local fallback in expert commentary, next-day planning, and weekly review suggestions.
   DINGTALK_WEBHOOK: Optional. If set, the final report payload can be sent to DingTalk.
   FEISHU_WEBHOOK: Optional. If set, the final report payload can be sent to Feishu.
   TELEGRAM_BOT_TOKEN: Optional. If set together with TELEGRAM_CHAT_ID, the final report payload can be sent to Telegram.
@@ -96,8 +96,10 @@ If you do not want any runtime font download, pre-populate `assets/NotoSansSC-VF
 
 ## AI Runtime Notes
 
-- If `openclaw` is available in the runtime environment, the skill can request AI commentary and planning
+- If `openclaw` is available in the runtime environment, the skill can request AI commentary, next-day planning, and weekly review text
 - If `openclaw` is not available, the skill falls back to deterministic local logic so report generation still completes
+- When multiple conditions are configured, both the LLM path and the fallback path evaluate the combined condition set
+- Weekly output can summarize additional configured or dynamically discovered monitoring sections, such as medication or biochemistry
 
 ## Command Intent
 
@@ -202,11 +204,16 @@ For security and deployment review, the following should be considered expected 
 
 ## Changelog
 
-### v1.3.1 — 2026-03-20
+### v1.3.3 — 2026-03-20
 
-- Synchronized the Memory Write Protocol with the stricter `soul.md` rules used at runtime
-- Clarified that hydration blocks must contain exactly two lines and that no extra commentary fields are allowed
-- Updated release metadata and documentation versioning for the 1.3.1 release
+- Added explicit LLM/local-fallback source tracking for expert commentary, risk alerts, and next-day plans
+- Moved scoring modules and weights into `user_config.json`, including medication and custom-section scoring support
+- Added multi-condition profile support with `conditions` and `primary_condition`
+- Upgraded fallback generation to use dynamic local logic and optional Tavily-assisted guidance
+- Refined weekly chart labels/captions so ring metrics and trend visuals are easier to read
+- Verified English memory parsing, automatic English report inference from English memory, and `memory_en/` export via `scripts/export_memory_en.py`
+- Expanded weekly reports with profile details, strengths/gaps review, next-week focus, and additional monitoring summaries
+- Updated release metadata and documentation versioning for the 1.3.3 release
 
 ### v1.3.0 — 2026-03-20
 

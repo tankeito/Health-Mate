@@ -2,8 +2,8 @@
     "name": "health-mate",
     "display_name": "Health-Mate",
     "type": "python/app",
-    "version": "1.3.1",
-    "description": "Health-Mate is an executable bilingual Chinese/English OpenClaw health-management skill. SECURITY DISCLOSURE: 1. It requires 'MEMORY_DIR' to be set; if unset, it falls back to reading the default '/root/.openclaw/workspace/memory' path. 2. It writes local reports/logs and may download an open-source TTF font if missing locally. 3. Webhook outbound requests only execute if credentials are user-configured.",
+    "version": "1.3.3",
+    "description": "Health-Mate is an executable bilingual Chinese/English OpenClaw health-management skill with local markdown parsing, clearer weekly chart labeling, automatic locale-aware English/Chinese PDF generation, and an English memory export helper. SECURITY DISCLOSURE: 1. It requires 'MEMORY_DIR' to be set; if unset, it falls back to reading the default '/root/.openclaw/workspace/memory' path. 2. It writes local reports/logs and may download an open-source TTF font if missing locally. 3. Webhook outbound requests only execute if credentials are user-configured.",
     "author": "tankeito",
     "email": "tqd354@gmail.com",
     "license": "MIT",
@@ -26,7 +26,7 @@
     ],
     "env": {
         "MEMORY_DIR": "Required. Explicitly set this to the markdown health-memory directory that the skill should read. Production deployment should not rely on wrapper-script fallback paths.",
-        "TAVILY_API_KEY": "Optional. Used only for extra recipe and exercise research during next-day planning.",
+        "TAVILY_API_KEY": "Optional. Used for Tavily-assisted local fallback in expert commentary, next-day planning, and weekly review suggestions.",
         "DINGTALK_WEBHOOK": "Optional. If set, the final report payload can be sent to DingTalk.",
         "FEISHU_WEBHOOK": "Optional. If set, the final report payload can be sent to Feishu.",
         "TELEGRAM_BOT_TOKEN": "Optional. If set together with TELEGRAM_CHAT_ID, the final report payload can be sent to Telegram.",
@@ -52,7 +52,8 @@
         "Executable local Python scripts and shell runners, not an instruction-only prompt bundle",
         "Bilingual Chinese/English parsing, prompts, and report generation",
         "Strict memory-write protocol for reliable markdown parsing",
-        "Localized daily and weekly PDF reports with charts and fallback-safe report generation",
+        "Localized daily and weekly PDF reports with charts, multi-condition support, and fallback-safe report generation",
+        "Custom scoring modules and additional monitoring sections including medication and lab-style sections",
         "Optional outbound network behavior limited to Tavily, webhook delivery, and fallback font download when needed"
     ],
     "tags": [

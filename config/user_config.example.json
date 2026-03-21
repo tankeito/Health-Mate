@@ -1,6 +1,7 @@
 {
-    "_comment": "Sample Health-Mate user profile. Copy this file to user_config.json and fill in your real values.",
-    "_version": "3.0",
+    "_comment": "Sample Health-Mate configuration. Copy this file to user_config.json and replace the demo values with your own settings. Multiple conditions, custom scoring modules, and medication tracking are supported.",
+    "_version": "1.3.3",
+    "config_version": "1.3.3",
     "language": "zh-CN",
     "user_profile": {
         "name": "Alex",
@@ -8,15 +9,29 @@
         "age": 34,
         "height_cm": 172,
         "current_weight_kg": 65.2,
-        "target_weight_kg": 64,
-        "condition": "gallstones",
+        "target_weight_kg": 64.0,
+        "condition": "diabetes",
+        "primary_condition": "diabetes",
+        "conditions": [
+            "diabetes",
+            "hypertension"
+        ],
         "activity_level": 1.2,
         "water_target_ml": 2000,
         "step_target": 8000,
         "dietary_preferences": {
-            "dislike": ["food-to-avoid-1", "food-to-avoid-2"],
-            "allergies": ["allergy-1", "allergy-2"],
-            "favorite_fruits": ["apple", "banana"]
+            "dislike": [
+                "food-to-avoid-1",
+                "food-to-avoid-2"
+            ],
+            "allergies": [
+                "allergy-1",
+                "allergy-2"
+            ],
+            "favorite_fruits": [
+                "apple",
+                "banana"
+            ]
         }
     },
     "condition_standards": {
@@ -52,14 +67,91 @@
             "water_min_ml": 2000
         }
     },
+    "scoring": {
+        "modules": [
+            {
+                "id": "diet",
+                "type": "builtin",
+                "title": "饮食合规性",
+                "enabled": true,
+                "weight": 20
+            },
+            {
+                "id": "water",
+                "type": "builtin",
+                "title": "饮水完成度",
+                "enabled": true,
+                "weight": 15
+            },
+            {
+                "id": "weight",
+                "type": "builtin",
+                "title": "体重管理",
+                "enabled": true,
+                "weight": 15
+            },
+            {
+                "id": "symptom",
+                "type": "builtin",
+                "title": "症状管理",
+                "enabled": true,
+                "weight": 15
+            },
+            {
+                "id": "exercise",
+                "type": "builtin",
+                "title": "运动管理",
+                "enabled": true,
+                "weight": 20
+            },
+            {
+                "id": "adherence",
+                "type": "builtin",
+                "title": "健康依从性",
+                "enabled": true,
+                "weight": 15
+            },
+            {
+                "id": "medication",
+                "type": "section_presence",
+                "title": "用药情况",
+                "section_title": "用药情况",
+                "enabled": false,
+                "weight": 0,
+                "score_when_present": 100,
+                "score_when_missing": 0
+            },
+            {
+                "id": "biochemistry",
+                "type": "section_presence",
+                "title": "生化情况",
+                "section_title": "生化情况",
+                "enabled": false,
+                "weight": 0,
+                "score_when_present": 100,
+                "score_when_missing": 0
+            }
+        ]
+    },
     "exercise_standards": {
         "weekly_target_minutes": 150
     },
-    "scoring_weights": {
-        "_comment": "The diet + water + weight weights are normalized automatically. exercise_bonus is added afterward.",
-        "diet": 0.45,
-        "water": 0.35,
-        "weight": 0.20,
-        "exercise_bonus": 0.10
+    "ai_generation": {
+        "expert_commentary": {
+            "mode": "hybrid",
+            "max_attempts": 3,
+            "timeout_seconds": 90
+        },
+        "next_day_plan": {
+            "mode": "hybrid",
+            "max_attempts": 3,
+            "timeout_seconds": 90
+        },
+        "risk_alerts": {
+            "mode": "local"
+        }
+    },
+    "report_preferences": {
+        "append_custom_sections": true
     }
 }
