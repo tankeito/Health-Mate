@@ -1,7 +1,7 @@
 {
     "_comment": "Sample Health-Mate configuration. Copy this file to user_config.json and replace the demo values with your own settings. Multiple conditions, custom scoring modules, and medication tracking are supported.",
-    "_version": "1.3.3",
-    "config_version": "1.3.3",
+    "_version": "1.3.5",
+    "config_version": "1.3.5",
     "language": "zh-CN",
     "user_profile": {
         "name": "Alex",

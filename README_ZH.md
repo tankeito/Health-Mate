@@ -6,7 +6,7 @@
 > 
 > *将日常健康习惯转化为可执行的洞察。精准追踪营养、饮水、运动与体重变化。生成 AI 驱动的专业 PDF 报告—所有数据 100% 私有，完全本地运行。*
 
-[![Version](https://img.shields.io/badge/version-1.3.3-blue.svg)](https://github.com/tankeito/Health-Mate/releases)
+[![Version](https://img.shields.io/badge/version-1.3.5-blue.svg)](https://github.com/tankeito/Health-Mate/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![OpenClaw](https://img.shields.io/badge/OpenClaw-Skill-green.svg)](https://openclaw.ai)
 
@@ -61,13 +61,14 @@ Health-Mate 是一款**生产就绪的双语健康管理技能**，专为 OpenCl
 
 ---
 
-## 🆕 1.3.3 更新重点
+## 🆕 1.3.5 更新重点
 
 - **多病种配置**：`user_config.json` 现已支持 `conditions`、`primary_condition` 和兼容旧版的 `condition`。日报、周报、LLM 提示词以及本地回退逻辑都会基于完整病种集合判断。
 - **动态回退 + Tavily 检索**：专家点评、次日方案和周报回退不再使用固定模板文案。配置 `TAVILY_API_KEY` 后，本地回退也可以结合检索结果补充建议。
 - **评分模块可完全自定义**：默认内置“用药情况”，并支持追加如“生化情况”等自定义模块，既可参与评分，也会在日报/周报/PDF 中动态输出。
 - **周报内容增强**：周报新增个人信息、亮点、待改进项、下周重点、最佳日/重点复盘日，以及额外监测项目汇总。
 - **首次初始化更清晰**：`scripts/init_config.py` 现会引导用户完成多病种选择、主目标选择、权重配置、用药/自定义模块配置，并把所有设置写入 `config/user_config.json`。
+- **中文字体缺失时自动英文回退**：当 `assets/NotoSansSC-VF.ttf` 不存在且原始 memory 为中文时，系统会自动导出临时英文 memory 并生成英文 PDF，同时在报告中追加说明。
 
 ---
 
@@ -114,6 +115,8 @@ TELEGRAM_CHAT_ID="YOUR_CHAT_ID"
 REPORT_WEB_DIR="/var/www/html/reports"
 REPORT_BASE_URL="https://your-domain.com"
 ```
+
+如果本地缺少 `assets/NotoSansSC-VF.ttf`，中文 memory 生成的报告会自动回退为英文 PDF，并在报告中提示原因。若需要恢复中文 PDF，请从 [Health-Mate GitHub 仓库](https://github.com/tankeito/Health-Mate) 下载字体后放到 `assets/NotoSansSC-VF.ttf`。
 
 ### 步骤 3：初始化用户档案
 
@@ -259,7 +262,7 @@ health-mate/
 │   ├── pdf_style_config.json     # PDF 样式配置
 │   └── user_config.example.json  # 档案模板
 ├── assets/
-│   └── NotoSansSC-VF.ttf         # 中文字体（自动下载）
+│   └── NotoSansSC-VF.ttf         # 可选的本地中文字体文件
 ├── logs/                         # 执行日志
 ├── reports/                      # 生成的 PDF 报告
 ├── README.md                     # 英文文档
@@ -293,13 +296,12 @@ health-mate/
 
 ## 🔄 版本历史
 
-### v1.3.3 — 2026-03-20
+### v1.3.5 — 2026-03-21
 
-- 🔐 **协议同步**：将 `README`、`SKILL.md` 与 `soul.md` 的记忆落盘规则同步为同一强约束版本
-- 🧾 **解析安全**：明确饮水块只能有两行，禁止在模板外追加状态、点评或说明字段
-- 📈 **周报可读性**：优化 3 环图指标命名，并为 5 张核心趋势图补充图外小标题
-- 🌐 **英文链路验证**：确认英文 memory 可自动推断为英文输出，并可通过 `scripts/export_memory_en.py` 生成 `memory_en/` 后正常产出英文版日报与周报 PDF
-- 🏷️ **版本更新**：文档与技能元数据统一升级到 `1.3.3`
+- 🌐 **字体缺失英文回退**：当 `assets/NotoSansSC-VF.ttf` 缺失时，中文来源的日报和周报会自动导出临时英文 memory，并生成带说明的英文 PDF
+- 🔒 **安装与安全说明对齐**：文档已同步当前真实行为：必须显式设置 `MEMORY_DIR`、字体运行时下载默认关闭、不再存在隐藏的 memory 默认回退
+- 📈 **报告细节统一**：周报概览文案、趋势图标题、渲染说明已在文本报告、PDF 和元数据中统一
+- 🏷️ **版本更新**：文档、配置示例和技能元数据统一升级到 `1.3.5`
 
 ### v1.3.0 — 2026-03-20
 
@@ -321,7 +323,7 @@ health-mate/
 
 - 周报系统上线（极坐标图表 + 趋势分析）
 - Matplotlib 可视化（营养环形图、饮水柱状图、进度追踪）
-- 中文字体自动下载支持
+- 中文字体按需手动放入 `assets/`，运行时下载默认关闭
 - 隐私合规更新与安全声明
 
 ---

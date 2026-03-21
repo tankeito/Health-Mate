@@ -1,9 +1,9 @@
 ---
 name: health-mate
 display_name: Health-Mate
-version: 1.3.4
+version: 1.3.5
 type: python/app
-description: "Executable bilingual OpenClaw health-report skill. SECURITY WARNING: 1. MEMORY_DIR is strictly REQUIRED. Unset variables fallback to global workspace memory. 2. Reads local 'config/.env'. 3. Network I/O (Webhooks/Tavily/Fonts) is strictly scoped/opt-in."
+description: "Executable bilingual OpenClaw health-report skill with local Python scripts for markdown parsing, weekly chart rendering, explicit MEMORY_DIR-based English/Chinese PDF generation, automatic English fallback when bundled local Chinese font is missing, and optional webhook delivery."
 install: pip install -r requirements.txt
 capabilities:
   - file_read
@@ -16,14 +16,15 @@ metadata:
       env:
         - MEMORY_DIR
 env:
-  MEMORY_DIR: "REQUIRED. Must be explicitly set to an isolated directory to avoid reading global workspace fallback paths."
-  TAVILY_API_KEY: "Optional. Used for local fallback in expert commentary."
-  DINGTALK_WEBHOOK: "Optional. Push delivery."
-  FEISHU_WEBHOOK: "Optional. Push delivery."
-  TELEGRAM_BOT_TOKEN: "Optional. Push delivery."
-  TELEGRAM_CHAT_ID: "Optional. Push delivery."
-  REPORT_WEB_DIR: "Optional. Local PDF copy target."
-  REPORT_BASE_URL: "Optional. Public URL base."
+  MEMORY_DIR: Required. Explicitly set this to the markdown health-memory directory to be read by the skill.
+  TAVILY_API_KEY: Optional. Used for Tavily-assisted local fallback in expert commentary, next-day planning, and weekly review suggestions.
+  DINGTALK_WEBHOOK: Optional. If set, the final report payload can be sent to DingTalk.
+  FEISHU_WEBHOOK: Optional. If set, the final report payload can be sent to Feishu.
+  TELEGRAM_BOT_TOKEN: Optional. If set together with TELEGRAM_CHAT_ID, the final report payload can be sent to Telegram.
+  TELEGRAM_CHAT_ID: Optional. Required only when Telegram delivery is enabled.
+  REPORT_WEB_DIR: Optional. Local directory where generated PDFs can be copied for public serving.
+  REPORT_BASE_URL: Optional. Public base URL used to build downloadable PDF links.
+  ALLOW_RUNTIME_FONT_DOWNLOAD: Optional. Set to true only if you explicitly allow fallback font download when no bundled/system CJK font is available.
 ---
 
 # Health-Mate
@@ -57,8 +58,8 @@ Main runtime libraries:
 ### Required
 
 - `MEMORY_DIR`
-  This skill expects an explicit `MEMORY_DIR` environment variable in normal deployment.
-  The shell wrappers still contain a legacy fallback path for self-hosted Linux setups, but production deployment should always set `MEMORY_DIR` directly to avoid accidental file access.
+  This skill requires an explicit `MEMORY_DIR` environment variable.
+  If `MEMORY_DIR` is missing, the Python entrypoints and shell runners now exit instead of falling back to any default path.
 
 ### Optional
 
@@ -75,14 +76,19 @@ Main runtime libraries:
 - `REPORT_BASE_URL`
   Used only when PDFs should be copied to a public directory and exposed with a downloadable URL.
 
+- `ALLOW_RUNTIME_FONT_DOWNLOAD`
+  Disabled by default. Only enable this if you explicitly want the PDF renderer to download `NotoSansSC-VF.ttf` when no bundled or system CJK font is available.
+
 ## Local File-System Behavior
 
 The skill writes local files during normal operation. This is expected behavior.
 
 - Reads markdown logs from `MEMORY_DIR`
+- Reads `config/.env` only when the bundled shell runners are used and that file exists
 - Writes generated PDFs to the local `reports/` directory unless a different public copy target is configured
 - Writes runtime logs to the local `logs/` directory
-- May place the fallback font file in the local `assets/` directory if the font is not already bundled
+- May create a temporary English memory mirror in the system temp directory when Chinese memory is rendered without a bundled local `assets/NotoSansSC-VF.ttf`
+- May place the fallback font file in the local `assets/` directory only when `ALLOW_RUNTIME_FONT_DOWNLOAD` is explicitly enabled
 
 ## Runtime Network Behavior
 
@@ -90,9 +96,9 @@ Outbound network activity is limited and conditional:
 
 - Webhook delivery is performed only if DingTalk, Feishu, or Telegram credentials are configured
 - Tavily requests are performed only if `TAVILY_API_KEY` is configured
-- If the required PDF font file is missing, the PDF generator may download `NotoSansSC-VF.ttf` from `raw.githubusercontent.com`
+- Fallback font download from `raw.githubusercontent.com` occurs only if `ALLOW_RUNTIME_FONT_DOWNLOAD=true` is explicitly set
 
-If you do not want any runtime font download, pre-populate `assets/NotoSansSC-VF.ttf` before deployment.
+If you do not want any runtime font download, leave `ALLOW_RUNTIME_FONT_DOWNLOAD` unset and pre-populate `assets/NotoSansSC-VF.ttf` if you need guaranteed Chinese PDF output. If the local bundled font is missing, Chinese-source reports fall back to English output with an explicit rendering notice.
 
 ## AI Runtime Notes
 
@@ -198,22 +204,18 @@ If an LLM is used to write local health memories, the same rules should be mirro
 For security and deployment review, the following should be considered expected behavior rather than hidden behavior:
 
 - local PDF and log file creation
+- optional loading of `config/.env` by the bundled shell runners
 - optional webhook delivery
 - optional Tavily search usage
-- optional fallback font download when the local font file is missing
+- optional opt-in fallback font download when `ALLOW_RUNTIME_FONT_DOWNLOAD` is enabled
 
 ## Changelog
 
-### v1.3.3 — 2026-03-20
+### v1.3.5 — 2026-03-21
 
-- Added explicit LLM/local-fallback source tracking for expert commentary, risk alerts, and next-day plans
-- Moved scoring modules and weights into `user_config.json`, including medication and custom-section scoring support
-- Added multi-condition profile support with `conditions` and `primary_condition`
-- Upgraded fallback generation to use dynamic local logic and optional Tavily-assisted guidance
-- Refined weekly chart labels/captions so ring metrics and trend visuals are easier to read
-- Verified English memory parsing, automatic English report inference from English memory, and `memory_en/` export via `scripts/export_memory_en.py`
-- Expanded weekly reports with profile details, strengths/gaps review, next-week focus, and additional monitoring summaries
-- Updated release metadata and documentation versioning for the 1.3.3 release
+- Added automatic English PDF fallback when `assets/NotoSansSC-VF.ttf` is missing for Chinese-source reports, using a temporary exported English memory mirror and an explicit rendering notice
+- Kept runtime font download opt-in only, with documentation and metadata aligned to the actual installation and runtime behavior
+- Updated release metadata, config examples, and documentation versioning for the 1.3.5 release
 
 ### v1.3.0 — 2026-03-20
 

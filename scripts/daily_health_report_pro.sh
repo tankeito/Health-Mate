@@ -19,9 +19,12 @@ fi
 export TZ=Asia/Shanghai
 CURRENT_DATE=$(date +"%Y-%m-%d")
 CURRENT_TIME=$(date +"%H:%M:%S")
-MEMORY_DIR="${MEMORY_DIR:-/root/.openclaw/workspace/memory}"
-TODAY_FILE="${MEMORY_DIR}/${CURRENT_DATE}.md"
 LOG_FILE="${LOG_FILE:-${LOGS_DIR}/health_report_pro.log}"
+if [ -z "${MEMORY_DIR:-}" ]; then
+    echo "Error: MEMORY_DIR is not set." >> "$LOG_FILE"
+    exit 1
+fi
+TODAY_FILE="${MEMORY_DIR}/${CURRENT_DATE}.md"
 
 echo "========================================" >> "$LOG_FILE"
 echo "Run time: ${CURRENT_DATE} ${CURRENT_TIME}" >> "$LOG_FILE"

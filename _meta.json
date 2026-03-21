@@ -2,8 +2,8 @@
     "name": "health-mate",
     "display_name": "Health-Mate",
     "type": "python/app",
-    "version": "1.3.4",
-    "description": "Health-Mate is an executable bilingual OpenClaw health-management skill. SECURITY & SANDBOX DISCLOSURE: 1. MEMORY_DIR is STRICTLY REQUIRED. If unset, wrappers fallback to '/root/.openclaw/workspace/memory', which may read global agent memory. You MUST set MEMORY_DIR to an isolated path. 2. CREDENTIALS: Reads local 'config/.env' if present. 3. NETWORK I/O: Webhooks and Tavily API are strictly opt-in. A TTF font is downloaded from GitHub only if missing locally. 4. FILE I/O: Writes to local 'reports' and 'logs' folders.",
+    "version": "1.3.5",
+    "description": "Health-Mate is an executable bilingual Chinese/English OpenClaw health-management skill with local markdown parsing, clearer weekly chart labeling, locale-aware PDF generation, and automatic English fallback when bundled local Chinese font file 'assets/NotoSansSC-VF.ttf' is missing. SECURITY DISCLOSURE: 1. It requires 'MEMORY_DIR' to be explicitly set and exits if that variable is missing. 2. The bundled shell runners read 'config/.env' when present, then write local reports/logs during normal execution. 3. Outbound network requests only occur when webhook/Tavily credentials are configured, or when the user explicitly enables runtime font download via 'ALLOW_RUNTIME_FONT_DOWNLOAD'.",
     "author": "tankeito",
     "email": "tqd354@gmail.com",
     "license": "MIT",
@@ -25,14 +25,15 @@
         "http_request"
     ],
     "env": {
-        "MEMORY_DIR": "REQUIRED. Must be explicitly set to an isolated markdown health-memory directory. Do not rely on wrapper-script fallback paths.",
-        "TAVILY_API_KEY": "Optional. Used for Tavily-assisted local fallback in expert commentary, next-day planning.",
+        "MEMORY_DIR": "Required. Explicitly set this to the markdown health-memory directory that the skill should read. The skill now exits if MEMORY_DIR is missing.",
+        "TAVILY_API_KEY": "Optional. Used for Tavily-assisted local fallback in expert commentary, next-day planning, and weekly review suggestions.",
         "DINGTALK_WEBHOOK": "Optional. If set, the final report payload can be sent to DingTalk.",
         "FEISHU_WEBHOOK": "Optional. If set, the final report payload can be sent to Feishu.",
         "TELEGRAM_BOT_TOKEN": "Optional. If set together with TELEGRAM_CHAT_ID, the final report payload can be sent to Telegram.",
         "TELEGRAM_CHAT_ID": "Optional. Required only when Telegram delivery is enabled.",
         "REPORT_WEB_DIR": "Optional. Local directory where generated PDFs can be copied for public serving.",
-        "REPORT_BASE_URL": "Optional. Public base URL used to build downloadable PDF links."
+        "REPORT_BASE_URL": "Optional. Public base URL used to build downloadable PDF links.",
+        "ALLOW_RUNTIME_FONT_DOWNLOAD": "Optional. Disabled by default. Set to true only if you explicitly allow fallback download of NotoSansSC-VF.ttf when no bundled/system CJK font is available."
     },
     "commands": [
         {
@@ -52,8 +53,9 @@
         "Executable local Python scripts and shell runners, not an instruction-only prompt bundle",
         "Bilingual Chinese/English parsing, prompts, and report generation",
         "Strict memory-write protocol for reliable markdown parsing",
-        "Localized daily and weekly PDF reports with charts, multi-condition support, and fallback-safe report generation",
-        "Optional outbound network behavior limited to Tavily, webhook delivery, and fallback font download when needed"
+        "Localized daily and weekly PDF reports with charts, multi-condition support, and automatic English fallback when the bundled local Chinese font is unavailable",
+        "Custom scoring modules and additional monitoring sections including medication and lab-style sections",
+        "Optional outbound network behavior limited to Tavily, webhook delivery, and explicit opt-in fallback font download"
     ],
     "tags": [
         "health",

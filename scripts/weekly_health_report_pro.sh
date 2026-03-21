@@ -21,6 +21,11 @@ CURRENT_DATE=$(date +"%Y-%m-%d")
 CURRENT_TIME=$(date +"%H:%M:%S")
 LOG_FILE="${LOG_FILE:-${LOGS_DIR}/weekly_health_report_pro.log}"
 
+if [ -z "${MEMORY_DIR:-}" ]; then
+    echo "Error: MEMORY_DIR is not set." >> "$LOG_FILE"
+    exit 1
+fi
+
 TARGET_DATE=$(python3 -c "
 from datetime import datetime, timedelta
 yesterday = datetime.now() - timedelta(days=1)

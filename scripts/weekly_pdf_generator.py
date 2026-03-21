@@ -224,6 +224,7 @@ def create_weekly_nutrition_chart(calories, protein, fat, carb, locale):
 def generate_weekly_pdf_report(weekly_data, profile, ai_review, ai_plan, output_path, locale="zh-CN", review_source="fallback", plan_source="fallback"):
     locale = resolve_locale(locale=locale)
     font_name = register_chinese_font()
+    render_notice = str(weekly_data.get("render_notice") or "").strip()
     doc = SimpleDocTemplate(output_path, pagesize=A4, rightMargin=2*cm, leftMargin=2*cm, topMargin=2*cm, bottomMargin=2*cm, title=t(locale, 'weekly_report_title'))
     styles = getSampleStyleSheet()
     title_style = ParagraphStyle('Title', parent=styles['Heading1'], fontSize=22, textColor=HexColor(C_PRIMARY), spaceAfter=5, alignment=TA_CENTER, fontName=font_name)
@@ -232,6 +233,16 @@ def generate_weekly_pdf_report(weekly_data, profile, ai_review, ai_plan, output_
     normal_style = ParagraphStyle('Normal', parent=styles['Normal'], fontSize=10, textColor=HexColor(C_TEXT_MAIN), fontName=font_name, leading=18)
     muted_style = ParagraphStyle('Muted', parent=normal_style, textColor=HexColor(C_TEXT_MUTED), fontSize=9, leading=13)
     source_note_style = ParagraphStyle('SourceNote', parent=muted_style, alignment=TA_RIGHT, spaceBefore=4, spaceAfter=0)
+    notice_style = ParagraphStyle(
+        'RenderNotice',
+        parent=normal_style,
+        backColor=HexColor("#FFF7ED"),
+        borderColor=HexColor(C_WARNING),
+        borderWidth=0.8,
+        borderPadding=8,
+        leading=14,
+        spaceAfter=10,
+    )
     chart_label_style = ParagraphStyle('ChartLabel', parent=normal_style, textColor=HexColor(C_TEXT_MUTED), fontSize=10, leading=14, spaceBefore=4, spaceAfter=6)
 
     def source_text(source):
@@ -259,6 +270,9 @@ def generate_weekly_pdf_report(weekly_data, profile, ai_review, ai_plan, output_
 
     story.append(Paragraph(f"<b>{profile_condition_title(profile, locale)} · {t(locale, 'weekly_report_title')}</b>", title_style))
     story.append(Paragraph(t(locale, 'weekly_period', start_date=weekly_data['start_date'], end_date=weekly_data['end_date'], name=profile.get('name', t(locale, 'default_name'))), sub_title))
+    if render_notice:
+        story.append(Paragraph(f"<b>{t(locale, 'render_notice_title')}</b><br/>{clean_html_tags(render_notice)}", notice_style))
+        story.append(Spacer(1, 0.15*cm))
 
     table_style = [
         ('BACKGROUND', (0, 0), (-1, 0), HexColor(C_BG_HEAD)),

@@ -6,7 +6,7 @@ English | [中文](README_ZH.md)
 > 
 > *Transform daily health habits into actionable insights. Track nutrition, hydration, exercise, and weight with precision. Generate stunning PDF reports powered by AI analysis—all while keeping your data 100% private and local.*
 
-[![Version](https://img.shields.io/badge/version-1.3.3-blue.svg)](https://github.com/tankeito/Health-Mate/releases)
+[![Version](https://img.shields.io/badge/version-1.3.5-blue.svg)](https://github.com/tankeito/Health-Mate/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![OpenClaw](https://img.shields.io/badge/OpenClaw-Skill-green.svg)](https://openclaw.ai)
 
@@ -61,13 +61,14 @@ Unlike cloud-based health trackers that harvest your data, Health-Mate operates 
 
 ---
 
-## 🆕 What's New In 1.3.3
+## 🆕 What's New In 1.3.5
 
 - **Multi-condition profiles**: `user_config.json` now supports `conditions`, `primary_condition`, and backward-compatible `condition`. Daily and weekly analysis, LLM prompts, and fallback logic all evaluate the full condition set.
 - **Dynamic fallback with Tavily support**: expert commentary, next-day plans, and weekly fallback reviews are no longer fixed canned text. When `TAVILY_API_KEY` is configured, local fallback can enrich output with retrieved guidance.
 - **Custom scoring and monitoring**: medication is available as a default scoring module, and custom sections such as biochemistry can be added, scored, and rendered in daily/weekly PDF output.
 - **Stronger weekly report**: weekly output now includes profile details, strengths, gaps, next-week focus, best/focus day summaries, and additional monitoring rollups.
 - **Improved first-run setup**: `scripts/init_config.py` now guides users through multi-condition selection, primary goal selection, scoring weights, medication/custom modules, and writes everything into `config/user_config.json`.
+- **Font-safe English fallback**: if `assets/NotoSansSC-VF.ttf` is missing and the source memory is Chinese, Health-Mate now builds a temporary English memory mirror and renders the report in English with an explicit notice.
 
 ---
 
@@ -114,6 +115,8 @@ TELEGRAM_CHAT_ID="YOUR_CHAT_ID"
 REPORT_WEB_DIR="/var/www/html/reports"
 REPORT_BASE_URL="https://your-domain.com"
 ```
+
+If `assets/NotoSansSC-VF.ttf` is missing, Chinese-source reports automatically fall back to an English PDF and include a rendering notice. To restore Chinese PDF rendering, download the font from [Health-Mate on GitHub](https://github.com/tankeito/Health-Mate) and place it at `assets/NotoSansSC-VF.ttf`.
 
 ### Step 3: Initialize User Profile
 
@@ -259,7 +262,7 @@ health-mate/
 │   ├── pdf_style_config.json     # PDF styling configuration
 │   └── user_config.example.json  # Profile template
 ├── assets/
-│   └── NotoSansSC-VF.ttf         # Chinese font (auto-downloaded)
+│   └── NotoSansSC-VF.ttf         # Optional local Chinese font bundle
 ├── logs/                         # Execution logs
 ├── reports/                      # Generated PDF reports
 ├── README.md                     # English documentation
@@ -293,13 +296,12 @@ The following files **must never be committed** to public repositories:
 
 ## 🔄 Changelog
 
-### v1.3.3 — 2026-03-20
+### v1.3.5 — 2026-03-21
 
-- 🤖 **Generation Sources**: Added explicit LLM/local-fallback source tracking for expert commentary, risk alerts, and next-day plans
-- ⚖️ **Custom Scoring**: Moved scoring modules and weights into `user_config.json`, including optional medication/custom-section scoring
-- 📈 **Weekly Charts**: Clarified weekly ring-chart labels and added chart-level subtitles for the five core trend visuals
-- 🌐 **English Verification**: Confirmed end-to-end English memory parsing, automatic English report inference from English memory, and `memory_en/` sample generation via `scripts/export_memory_en.py`
-- 🏷️ **Release Update**: Bumped documentation and package metadata to version `1.3.3`
+- 🌐 **Font Fallback**: When `assets/NotoSansSC-VF.ttf` is missing, Chinese-source daily and weekly reports now auto-export a temporary English memory mirror and render English PDFs with a visible notice
+- 🔒 **Safer Packaging**: Documentation now matches the real runtime behavior: explicit `MEMORY_DIR`, opt-in runtime font download only, and no hidden default memory fallback
+- 📈 **Report Polish**: Weekly overview wording, trend labels, and rendering notices are now aligned across text reports, PDFs, and metadata
+- 🏷️ **Release Update**: Bumped documentation, config examples, and package metadata to version `1.3.5`
 
 ### v1.3.0 — 2026-03-20
 

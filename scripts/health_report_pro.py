@@ -8,6 +8,7 @@ import re
 import os
 import shutil
 import subprocess
+import tempfile
 from pathlib import Path
 from datetime import datetime
 
@@ -140,12 +141,13 @@ from i18n import (
     water_period_name,
     weight_unit,
 )
-from pdf_generator import generate_pdf_report as generate_pdf_report_impl
+from pdf_generator import generate_pdf_report as generate_pdf_report_impl, has_local_cjk_font
 
 validate_environment()
 
 # ==================== Tavily configuration ====================
 TAVILY_API_KEY = os.environ.get('TAVILY_API_KEY', '')
+FONT_DOWNLOAD_HELP_URL = "https://github.com/tankeito/Health-Mate"
 
 DEFAULT_AI_GENERATION = {
     "expert_commentary": {"mode": "hybrid", "max_attempts": 3, "timeout_seconds": 90},
@@ -416,7 +418,7 @@ def normalize_user_config(raw_config):
         existing = normalized_condition_standards.get(canonical_key, {})
         normalized_condition_standards[canonical_key] = deep_merge_dict(existing, value)
     merged["condition_standards"] = deep_merge_dict(base.get("condition_standards", {}), normalized_condition_standards)
-    merged["config_version"] = "1.3.3"
+    merged["config_version"] = "1.3.5"
     merged["ai_generation"] = deep_merge_dict(clone_ai_generation_defaults(), raw_config.get("ai_generation", {}))
     merged["scoring"] = {"modules": normalize_scoring_modules(raw_config, locale)}
     merged.setdefault("report_preferences", {"append_custom_sections": True})
@@ -542,10 +544,69 @@ def force_config_locale(config, locale):
     profile["locale"] = pinned_locale
     return cloned
 
+
+def build_font_render_notice(locale):
+    return t(
+        locale,
+        "font_missing_english_fallback",
+        path="assets/NotoSansSC-VF.ttf",
+        url=FONT_DOWNLOAD_HELP_URL,
+    )
+
+
+def export_memory_dir_to_english(source_dir):
+    """Build a temporary English memory mirror using the export helper script."""
+    temp_dir = tempfile.TemporaryDirectory(prefix="health_mate_memory_en_")
+    command = [
+        sys.executable,
+        str(SCRIPT_DIR / "export_memory_en.py"),
+        str(Path(source_dir).resolve()),
+        temp_dir.name,
+    ]
+    env = {**os.environ, "MEMORY_DIR": str(Path(source_dir).resolve()), "PYTHONIOENCODING": "utf-8"}
+    result = subprocess.run(command, capture_output=True, text=True, env=env, timeout=180)
+    if result.returncode != 0:
+        temp_dir.cleanup()
+        raise RuntimeError((result.stderr or result.stdout or "english memory export failed").strip())
+    return temp_dir
+
+
+def prepare_font_compatible_memory(requested_locale, source_dir, default_memory_file=None):
+    """Switch to an English memory mirror when the bundled local CJK font is missing."""
+    resolved_source_dir = str(Path(source_dir).resolve())
+    result = {
+        "locale": requested_locale,
+        "render_notice": "",
+        "temp_dir": None,
+        "memory_dir": resolved_source_dir,
+        "memory_file": default_memory_file,
+    }
+
+    if requested_locale != "zh-CN" or has_local_cjk_font():
+        return result
+
+    try:
+        temp_dir = export_memory_dir_to_english(resolved_source_dir)
+    except Exception as exc:
+        print(f"WARNING: English fallback export failed: {exc}", file=sys.stderr)
+        return result
+
+    result["locale"] = "en-US"
+    result["render_notice"] = build_font_render_notice("en-US")
+    result["temp_dir"] = temp_dir
+    result["memory_dir"] = temp_dir.name
+
+    if default_memory_file:
+        candidate = Path(temp_dir.name) / Path(default_memory_file).name
+        if candidate.exists():
+            result["memory_file"] = str(candidate)
+
+    return result
+
 def _get_default_config():
     locale = "zh-CN"
     return {
-        "config_version": "1.3.3",
+        "config_version": "1.3.5",
         "language": "zh-CN",
         "user_profile": {
             "name": "Demo User",
@@ -1891,6 +1952,7 @@ def generate_text_report(health_data, config, date):
     """Generate the localized markdown text report."""
     locale = resolve_locale(config)
     score_report = build_score_report(health_data, config)
+    render_notice = str(health_data.get('render_notice', '') or '').strip()
 
     ai_comment = health_data.get('ai_comment', '')
     ai_comment_source = health_data.get('generation_meta', {}).get('ai_comment')
@@ -1927,6 +1989,13 @@ def generate_text_report(health_data, config, date):
         for header, items in health_data.get('custom_sections', {}).items():
             custom_text += f"\n**{header}**\n" + '\n'.join(items) + "\n"
 
+    notice_block = ""
+    if render_notice:
+        notice_block = f"""### {t(locale, 'render_notice_title')}
+{render_notice}
+
+"""
+
     report = f"""## {with_text_icon('daily_report_heading', t(locale, 'daily_report_heading', date=date))}
 ### {with_text_icon('overall_score_title', t(locale, 'overall_score_title', date=date))}
 **{t(locale, 'score_total_label')}: {get_star_string(score_report.get('total', 0))} {score_report.get('total', 0)}/100**
@@ -1934,7 +2003,7 @@ def generate_text_report(health_data, config, date):
 ### {with_text_icon('item_summary_title', t(locale, 'item_summary_title'))}
 {score_summary}
 
-### {with_text_icon('ai_comment_title', t(locale, 'ai_comment_title'))}
+{notice_block}### {with_text_icon('ai_comment_title', t(locale, 'ai_comment_title'))}
 {compact_ai_comment}
 _{generation_source_label(locale, ai_comment_source or 'fallback')}_
 
@@ -2099,101 +2168,121 @@ def generate_plan_text(plan, locale):
 def generate_report(memory_file, date):
     """Generate the localized text report and PDF path."""
     base_config = load_user_config()
-    config = force_config_locale(base_config, resolve_report_locale(base_config, [memory_file]))
-    locale = resolve_locale(config)
-    user_profile = config.get('user_profile', {})
-    if 'step_target' not in user_profile:
-        user_profile['step_target'] = 8000
-
-    conditions = get_profile_conditions(user_profile)
-    primary_condition = get_primary_condition(user_profile)
-    condition_text = get_conditions_display_name(locale, conditions)
-    standards = get_condition_standards(config, conditions)
-
-    health_data = parse_memory_file(memory_file)
-    score_report = build_score_report(health_data, config)
-    risks = generate_risk_alerts(health_data, config)
-    ai_comment, ai_comment_source = generate_ai_comment(health_data, config)
-    ai_plan, ai_plan_source = generate_ai_plan(health_data, config)
-    health_data['ai_comment'] = ai_comment
-    health_data['plan'] = ai_plan
-    health_data['risks'] = risks
-    health_data['generation_meta'] = {
-        'ai_comment': ai_comment_source,
-        'next_day_plan': ai_plan_source,
-        'risk_alerts': 'local',
-    }
-
-    tdee = calculate_tdee(calculate_bmr(health_data.get('weight_morning') or 65, user_profile.get('height_cm', 172), user_profile.get('age', 34), user_profile.get('gender', 'male')), user_profile.get('activity_level', 1.2))
-    macros = {
-        'protein_p': 15, 'fat_p': 25, 'carb_p': 60,
-        'protein_g': round(user_profile.get('current_weight_kg', 65) * 1.2),
-        'fat_g': round(standards.get('fat_max_g', 50)),
-        'carb_g': round(tdee * 0.60 / 4),
-        'fiber_min_g': standards.get('fiber_min_g', 25)
-    }
-    profile_payload = dict(user_profile)
-    profile_payload['condition'] = primary_condition
-    profile_payload['primary_condition'] = primary_condition
-    profile_payload['conditions'] = conditions
-    profile_payload['condition_display'] = condition_text
-
-    timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-    pdf_filename = f"health_report_{timestamp}.pdf"
-    local_pdf_path = str(REPORTS_DIR / pdf_filename)
-    web_dir = os.environ.get("REPORT_WEB_DIR", "")
-    base_url = os.environ.get("REPORT_BASE_URL", "").rstrip('/')
+    requested_locale = resolve_report_locale(base_config, [memory_file])
+    fallback_context = prepare_font_compatible_memory(
+        requested_locale=requested_locale,
+        source_dir=Path(memory_file).resolve().parent,
+        default_memory_file=str(Path(memory_file).resolve()),
+    )
+    temp_memory_dir = fallback_context.get("temp_dir")
 
     try:
-        generate_pdf_report_impl(
-            data=health_data,
-            profile=profile_payload,
-            locale=locale,
-            scores=score_report,
-            nutrition={
-                'calories': health_data.get('total_calories', 0),
-                'protein': health_data.get('total_protein', 0),
-                'fat': health_data.get('total_fat', 0),
-                'carb': health_data.get('total_carb', 0),
-                'fiber': health_data.get('total_fiber', 0),
-            },
-            macros=macros,
-            risks=risks,
-            plan=ai_plan,
-            output_path=local_pdf_path,
-            water_records=health_data.get('water_records', []),
-            meals=health_data.get('meals', []),
-            exercise_data=health_data.get('exercise_records', []),
-            ai_comment=ai_comment,
-            medication_records=health_data.get('medication_records', []),
-            custom_sections=health_data.get('custom_sections', {}),
-            generation_meta=health_data.get('generation_meta', {}),
-        )
-        if web_dir and os.path.exists(web_dir) and base_url:
-            web_pdf_path = os.path.join(web_dir, pdf_filename)
-            shutil.copy2(local_pdf_path, web_pdf_path)
-            pdf_url = f"{base_url}/{pdf_filename}"
-            print(t(locale, "pdf_copied", path=web_pdf_path), file=sys.stderr)
-            print(t(locale, "pdf_download_url", url=pdf_url), file=sys.stderr)
-        else:
-            print(t(locale, "pdf_saved_local"), file=sys.stderr)
-            print(t(locale, "pdf_local_path", path=local_pdf_path), file=sys.stderr)
-            pdf_url = local_pdf_path
-    except Exception as e:
-        print(t(locale, "pdf_generation_failed", error=e), file=sys.stderr)
-        import traceback
-        traceback.print_exc()
-        pdf_url = local_pdf_path
+        working_memory_file = fallback_context.get("memory_file") or str(Path(memory_file).resolve())
+        config = force_config_locale(base_config, fallback_context.get("locale"))
+        locale = resolve_locale(config)
+        render_notice = str(fallback_context.get("render_notice") or "").strip()
 
-    text_report = generate_text_report(health_data, config, date)
-    delivery_message = build_delivery_message(
-        locale=locale,
-        body=text_report,
-        pdf_url=pdf_url,
-        report_kind="daily",
-        generated_at=datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-    )
-    return text_report, pdf_url, delivery_message
+        user_profile = config.get('user_profile', {})
+        if 'step_target' not in user_profile:
+            user_profile['step_target'] = 8000
+
+        conditions = get_profile_conditions(user_profile)
+        primary_condition = get_primary_condition(user_profile)
+        condition_text = get_conditions_display_name(locale, conditions)
+        standards = get_condition_standards(config, conditions)
+
+        health_data = parse_memory_file(working_memory_file)
+        if render_notice:
+            health_data['render_notice'] = render_notice
+
+        score_report = build_score_report(health_data, config)
+        risks = generate_risk_alerts(health_data, config)
+        ai_comment, ai_comment_source = generate_ai_comment(health_data, config)
+        ai_plan, ai_plan_source = generate_ai_plan(health_data, config)
+        health_data['ai_comment'] = ai_comment
+        health_data['plan'] = ai_plan
+        health_data['risks'] = risks
+        health_data['generation_meta'] = {
+            'ai_comment': ai_comment_source,
+            'next_day_plan': ai_plan_source,
+            'risk_alerts': 'local',
+        }
+        if render_notice:
+            health_data['generation_meta']['render_notice'] = render_notice
+
+        tdee = calculate_tdee(calculate_bmr(health_data.get('weight_morning') or 65, user_profile.get('height_cm', 172), user_profile.get('age', 34), user_profile.get('gender', 'male')), user_profile.get('activity_level', 1.2))
+        macros = {
+            'protein_p': 15, 'fat_p': 25, 'carb_p': 60,
+            'protein_g': round(user_profile.get('current_weight_kg', 65) * 1.2),
+            'fat_g': round(standards.get('fat_max_g', 50)),
+            'carb_g': round(tdee * 0.60 / 4),
+            'fiber_min_g': standards.get('fiber_min_g', 25)
+        }
+        profile_payload = dict(user_profile)
+        profile_payload['condition'] = primary_condition
+        profile_payload['primary_condition'] = primary_condition
+        profile_payload['conditions'] = conditions
+        profile_payload['condition_display'] = condition_text
+
+        timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+        pdf_filename = f"health_report_{timestamp}.pdf"
+        local_pdf_path = str(REPORTS_DIR / pdf_filename)
+        web_dir = os.environ.get("REPORT_WEB_DIR", "")
+        base_url = os.environ.get("REPORT_BASE_URL", "").rstrip('/')
+
+        try:
+            generate_pdf_report_impl(
+                data=health_data,
+                profile=profile_payload,
+                locale=locale,
+                scores=score_report,
+                nutrition={
+                    'calories': health_data.get('total_calories', 0),
+                    'protein': health_data.get('total_protein', 0),
+                    'fat': health_data.get('total_fat', 0),
+                    'carb': health_data.get('total_carb', 0),
+                    'fiber': health_data.get('total_fiber', 0),
+                },
+                macros=macros,
+                risks=risks,
+                plan=ai_plan,
+                output_path=local_pdf_path,
+                water_records=health_data.get('water_records', []),
+                meals=health_data.get('meals', []),
+                exercise_data=health_data.get('exercise_records', []),
+                ai_comment=ai_comment,
+                medication_records=health_data.get('medication_records', []),
+                custom_sections=health_data.get('custom_sections', {}),
+                generation_meta=health_data.get('generation_meta', {}),
+            )
+            if web_dir and os.path.exists(web_dir) and base_url:
+                web_pdf_path = os.path.join(web_dir, pdf_filename)
+                shutil.copy2(local_pdf_path, web_pdf_path)
+                pdf_url = f"{base_url}/{pdf_filename}"
+                print(t(locale, "pdf_copied", path=web_pdf_path), file=sys.stderr)
+                print(t(locale, "pdf_download_url", url=pdf_url), file=sys.stderr)
+            else:
+                print(t(locale, "pdf_saved_local"), file=sys.stderr)
+                print(t(locale, "pdf_local_path", path=local_pdf_path), file=sys.stderr)
+                pdf_url = local_pdf_path
+        except Exception as e:
+            print(t(locale, "pdf_generation_failed", error=e), file=sys.stderr)
+            import traceback
+            traceback.print_exc()
+            pdf_url = local_pdf_path
+
+        text_report = generate_text_report(health_data, config, date)
+        delivery_message = build_delivery_message(
+            locale=locale,
+            body=text_report,
+            pdf_url=pdf_url,
+            report_kind="daily",
+            generated_at=datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+        )
+        return text_report, pdf_url, delivery_message
+    finally:
+        if temp_memory_dir:
+            temp_memory_dir.cleanup()
 
 if __name__ == '__main__':
     if len(sys.argv) < 3:

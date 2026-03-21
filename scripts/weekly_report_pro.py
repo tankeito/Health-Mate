@@ -43,6 +43,7 @@ from health_report_pro import (
     get_scoring_modules,
     load_user_config,
     parse_memory_file,
+    prepare_font_compatible_memory,
     resolve_report_locale,
     run_local_llm,
     tavily_search,
@@ -61,7 +62,7 @@ from weekly_pdf_generator import generate_weekly_pdf_report
 
 validate_environment()
 
-MEMORY_DIR = os.environ.get("MEMORY_DIR", "/root/.openclaw/workspace/memory")
+MEMORY_DIR = os.environ.get("MEMORY_DIR", "")
 
 
 def localize(locale, zh_text, en_text):
@@ -238,9 +239,10 @@ def build_weekly_observations(weekly_data, profile, locale):
     return strengths, gaps, next_focus, gap_topics
 
 
-def aggregate_weekly_data(week_dates, config, locale=None):
+def aggregate_weekly_data(week_dates, config, locale=None, memory_dir=None):
     """Collect one week of metrics from the daily markdown files."""
     locale = resolve_locale(config, locale=locale)
+    memory_dir = memory_dir or MEMORY_DIR
     profile = config.get("user_profile", {})
     conditions = get_profile_conditions(profile)
     primary_condition = get_primary_condition(profile)
@@ -288,7 +290,7 @@ def aggregate_weekly_data(week_dates, config, locale=None):
     step_target = int(profile.get("step_target", 8000) or 8000)
 
     for date_str in week_dates:
-        file_path = os.path.join(MEMORY_DIR, f"{date_str}.md")
+        file_path = os.path.join(memory_dir, f"{date_str}.md")
         daily_data = parse_memory_file(file_path)
         daily_data["date"] = daily_data.get("date") or date_str
 
@@ -525,6 +527,7 @@ def get_ai_weekly_insights(weekly_data, profile, config, locale):
 
 def generate_weekly_text_report(weekly_data, profile, ai_review, ai_plan, locale, review_source, plan_source):
     """Render the weekly text message body."""
+    render_notice = str(weekly_data.get("render_notice") or "").strip()
     profile_lines = [
         f"- {localize(locale, '监测人', 'Name')}: {profile.get('name', t(locale, 'default_name'))}",
         f"- {localize(locale, '管理目标', 'Conditions')}: {weekly_data.get('condition_text', localize(locale, '综合健康管理', 'General health management'))}",
@@ -569,6 +572,16 @@ def generate_weekly_text_report(weekly_data, profile, ai_review, ai_plan, locale
         "",
         f"### {t(locale, 'weekly_summary_title')}",
         *summary_lines,
+    ]
+
+    if render_notice:
+        report_lines.extend([
+            "",
+            f"### {t(locale, 'render_notice_title')}",
+            render_notice,
+        ])
+
+    report_lines.extend([
         "",
         f"### {localize(locale, '本周亮点', 'Strengths This Week')}",
         *[f"- {item}" for item in weekly_data.get("strengths", [])],
@@ -578,7 +591,7 @@ def generate_weekly_text_report(weekly_data, profile, ai_review, ai_plan, locale
         "",
         f"### {localize(locale, '下周重点', 'Focus For Next Week')}",
         *[f"- {item}" for item in weekly_data.get("next_focus", [])],
-    ]
+    ])
 
     if custom_lines:
         report_lines.extend([
@@ -620,50 +633,66 @@ if __name__ == "__main__":
     base_config = load_user_config()
     week_dates = get_week_dates(target_date)
     week_files = [os.path.join(MEMORY_DIR, f"{date_str}.md") for date_str in week_dates]
-    locale = resolve_report_locale(base_config, week_files)
-    config = force_config_locale(base_config, locale)
-    profile = config.get("user_profile", {})
-
-    conditions = get_profile_conditions(profile)
-    profile_payload = dict(profile)
-    profile_payload["condition"] = get_primary_condition(profile)
-    profile_payload["conditions"] = conditions
-    profile_payload["condition_display"] = get_conditions_display_name(locale, conditions)
-
-    weekly_data = aggregate_weekly_data(week_dates, config, locale=locale)
-    ai_review, ai_plan, review_source, plan_source = get_ai_weekly_insights(weekly_data, profile_payload, config, locale)
-
-    timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-    pdf_filename = f"weekly_report_{timestamp}.pdf"
-    local_output_path = os.path.join(REPORTS_DIR, pdf_filename)
-
-    generate_weekly_pdf_report(
-        weekly_data,
-        profile_payload,
-        ai_review,
-        ai_plan,
-        local_output_path,
-        locale=locale,
-        review_source=review_source,
-        plan_source=plan_source,
+    requested_locale = resolve_report_locale(base_config, week_files)
+    fallback_context = prepare_font_compatible_memory(
+        requested_locale=requested_locale,
+        source_dir=MEMORY_DIR,
     )
-    pdf_url = publish_weekly_pdf(local_output_path)
-    text_report = generate_weekly_text_report(weekly_data, profile_payload, ai_review, ai_plan, locale, review_source, plan_source)
-    delivery_message = build_delivery_message(
-        locale=locale,
-        body=text_report,
-        pdf_url=pdf_url,
-        report_kind="weekly",
-        generated_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        start_date=weekly_data["start_date"],
-        end_date=weekly_data["end_date"],
-    )
+    temp_memory_dir = fallback_context.get("temp_dir")
 
-    print("=== TEXT_REPORT_START ===")
-    print(text_report)
-    print("=== TEXT_REPORT_END ===")
-    print("=== PDF_URL ===")
-    print(pdf_url)
-    print("=== DELIVERY_MESSAGE_START ===")
-    print(delivery_message)
-    print("=== DELIVERY_MESSAGE_END ===")
+    try:
+        locale = fallback_context.get("locale") or requested_locale
+        config = force_config_locale(base_config, locale)
+        profile = config.get("user_profile", {})
+        memory_dir = fallback_context.get("memory_dir") or MEMORY_DIR
+        render_notice = str(fallback_context.get("render_notice") or "").strip()
+
+        conditions = get_profile_conditions(profile)
+        profile_payload = dict(profile)
+        profile_payload["condition"] = get_primary_condition(profile)
+        profile_payload["conditions"] = conditions
+        profile_payload["condition_display"] = get_conditions_display_name(locale, conditions)
+
+        weekly_data = aggregate_weekly_data(week_dates, config, locale=locale, memory_dir=memory_dir)
+        if render_notice:
+            weekly_data["render_notice"] = render_notice
+
+        ai_review, ai_plan, review_source, plan_source = get_ai_weekly_insights(weekly_data, profile_payload, config, locale)
+
+        timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+        pdf_filename = f"weekly_report_{timestamp}.pdf"
+        local_output_path = os.path.join(REPORTS_DIR, pdf_filename)
+
+        generate_weekly_pdf_report(
+            weekly_data,
+            profile_payload,
+            ai_review,
+            ai_plan,
+            local_output_path,
+            locale=locale,
+            review_source=review_source,
+            plan_source=plan_source,
+        )
+        pdf_url = publish_weekly_pdf(local_output_path)
+        text_report = generate_weekly_text_report(weekly_data, profile_payload, ai_review, ai_plan, locale, review_source, plan_source)
+        delivery_message = build_delivery_message(
+            locale=locale,
+            body=text_report,
+            pdf_url=pdf_url,
+            report_kind="weekly",
+            generated_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            start_date=weekly_data["start_date"],
+            end_date=weekly_data["end_date"],
+        )
+
+        print("=== TEXT_REPORT_START ===")
+        print(text_report)
+        print("=== TEXT_REPORT_END ===")
+        print("=== PDF_URL ===")
+        print(pdf_url)
+        print("=== DELIVERY_MESSAGE_START ===")
+        print(delivery_message)
+        print("=== DELIVERY_MESSAGE_END ===")
+    finally:
+        if temp_memory_dir:
+            temp_memory_dir.cleanup()

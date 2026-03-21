@@ -15,6 +15,7 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import cm
 from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
 from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.cidfonts import UnicodeCIDFont
 from reportlab.pdfbase.ttfonts import TTFont
 from i18n import (
     PORTION_UNIT_PATTERN,
@@ -57,6 +58,17 @@ C_TEXT_MUTED= HexColor(C_TEXT_MUTED_STR)
 C_BG_HEAD = HexColor(C_BG_HEAD_STR)
 C_BORDER  = HexColor(C_BORDER_STR)
 C_CARB, C_PROTEIN, C_FAT = "#3B82F6", "#10B981", "#F59E0B"     
+FONT_DOWNLOAD_ENV = "ALLOW_RUNTIME_FONT_DOWNLOAD"
+LOCAL_CJK_FONT_FILENAME = "NotoSansSC-VF.ttf"
+CJK_FONT_CANDIDATES = [
+    "Noto Sans CJK SC",
+    "Noto Sans SC",
+    "Microsoft YaHei",
+    "SimHei",
+    "PingFang SC",
+    "Source Han Sans SC",
+    "Arial Unicode MS",
+]
 
 def clean_html_tags(text):
     """Strip HTML and symbols that commonly break PDF rendering."""
@@ -121,26 +133,81 @@ def build_exercise_detail_lines(exercise_data, steps, locale):
         lines.append(f"{t(locale, 'today_steps')}: {t(locale, 'steps_unit', value=steps)}")
     return lines
 
+def allow_runtime_font_download():
+    return str(os.environ.get(FONT_DOWNLOAD_ENV, "")).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def find_system_cjk_font():
+    if not MATPLOTLIB_AVAILABLE:
+        return None
+    try:
+        for candidate in CJK_FONT_CANDIDATES:
+            font_path = fm.findfont(candidate, fallback_to_default=False)
+            if font_path and os.path.exists(font_path):
+                return font_path
+    except Exception:
+        return None
+    return None
+
+
+def get_local_cjk_font_path():
+    return os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "assets", LOCAL_CJK_FONT_FILENAME))
+
+
+def has_local_cjk_font():
+    return os.path.exists(get_local_cjk_font_path())
+
+
 def register_chinese_font():
-    try: pdfmetrics.getFont('Chinese'); return 'Chinese'
-    except: pass
+    try:
+        pdfmetrics.getFont('Chinese')
+        return 'Chinese'
+    except Exception:
+        pass
     script_dir = os.path.dirname(os.path.abspath(__file__))
     assets_dir = os.path.join(script_dir, "..", "assets")
-    local_ttf = os.path.normpath(os.path.join(assets_dir, "NotoSansSC-VF.ttf"))
-    if not os.path.exists(local_ttf):
-        try:
-            if not os.path.exists(assets_dir): os.makedirs(assets_dir, exist_ok=True)
-            with urllib.request.urlopen("https://raw.githubusercontent.com/tankeito/Health-Mate/main/assets/NotoSansSC-VF.ttf", timeout=15) as response:
-                with open(local_ttf, 'wb') as f: f.write(response.read())
-        except: return 'Helvetica'
+    local_ttf = get_local_cjk_font_path()
+
     if os.path.exists(local_ttf):
-        try: pdfmetrics.registerFont(TTFont('Chinese', local_ttf)); return 'Chinese'
-        except: pass
+        try:
+            pdfmetrics.registerFont(TTFont('Chinese', local_ttf))
+            return 'Chinese'
+        except Exception:
+            pass
+
+    try:
+        pdfmetrics.registerFont(UnicodeCIDFont('STSong-Light'))
+        return 'STSong-Light'
+    except Exception:
+        pass
+
+    system_font = find_system_cjk_font()
+    if system_font:
+        try:
+            pdfmetrics.registerFont(TTFont('Chinese', system_font))
+            return 'Chinese'
+        except Exception:
+            pass
+
+    if allow_runtime_font_download():
+        try:
+            if not os.path.exists(assets_dir):
+                os.makedirs(assets_dir, exist_ok=True)
+            with urllib.request.urlopen("https://raw.githubusercontent.com/tankeito/Health-Mate/main/assets/NotoSansSC-VF.ttf", timeout=15) as response:
+                with open(local_ttf, 'wb') as f:
+                    f.write(response.read())
+            pdfmetrics.registerFont(TTFont('Chinese', local_ttf))
+            return 'Chinese'
+        except Exception:
+            pass
     return 'Helvetica'
 
 def get_font_prop():
-    local_ttf = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "assets", "NotoSansSC-VF.ttf"))
-    return fm.FontProperties(fname=local_ttf) if os.path.exists(local_ttf) else None
+    local_ttf = get_local_cjk_font_path()
+    if os.path.exists(local_ttf):
+        return fm.FontProperties(fname=local_ttf)
+    system_font = find_system_cjk_font()
+    return fm.FontProperties(fname=system_font) if system_font else None
 
 def create_nutrition_chart(nutrition, locale):
     if not MATPLOTLIB_AVAILABLE: return None
@@ -372,6 +439,7 @@ def generate_pdf_report(data, profile, scores, nutrition, macros, risks, plan, o
     locale = resolve_locale(locale=locale)
     font_name = register_chinese_font()
     footer_text = f"{profile_condition_title(profile, locale)} - Health-Mate"
+    render_notice = str(((generation_meta or {}).get("render_notice")) or data.get("render_notice") or "").strip()
 
     def localize(zh_text, en_text):
         return zh_text if locale == 'zh-CN' else en_text
@@ -395,6 +463,16 @@ def generate_pdf_report(data, profile, scores, nutrition, macros, risks, plan, o
     normal_style = ParagraphStyle('CustomNormal', parent=styles['Normal'], fontSize=10, textColor=C_TEXT_MAIN, fontName=font_name, leading=15)
     muted_style = ParagraphStyle('Muted', parent=normal_style, textColor=C_TEXT_MUTED, fontSize=9, leading=12)
     source_note_style = ParagraphStyle('SourceNote', parent=muted_style, alignment=TA_RIGHT, spaceBefore=4, spaceAfter=0)
+    notice_style = ParagraphStyle(
+        'RenderNotice',
+        parent=normal_style,
+        backColor=HexColor("#FFF7ED"),
+        borderColor=C_WARNING,
+        borderWidth=0.8,
+        borderPadding=8,
+        leading=14,
+        spaceAfter=10,
+    )
     cell_style_center = ParagraphStyle('CellCenter', parent=normal_style, alignment=TA_CENTER, leading=12)
 
     base_table_style = [
@@ -409,6 +487,9 @@ def generate_pdf_report(data, profile, scores, nutrition, macros, risks, plan, o
     condition_title = profile_condition_title(profile, locale)
     story.append(Paragraph(f"<b>{condition_title} | {t(locale, 'daily_report_title')}</b>", title_style))
     story.append(Paragraph(f"<font color='#64748B'>{data['date']} | {profile.get('name', t(locale, 'default_name'))}</font>", ParagraphStyle('Date', parent=normal_style, alignment=TA_CENTER)))
+    if render_notice:
+        story.append(Spacer(1, 0.2*cm))
+        story.append(Paragraph(f"<b>{t(locale, 'render_notice_title')}</b><br/>{clean_html_tags(render_notice)}", notice_style))
     story.append(Spacer(1, 0.5*cm))
 
     story.append(Paragraph(f"1. {t(locale, 'overall_score_title', date=data.get('date', ''))}", heading_style))
@@ -601,8 +682,7 @@ def generate_pdf_report(data, profile, scores, nutrition, macros, risks, plan, o
     section_idx = 7
     has_medication_module = any(module.get('id') == 'medication' for module in score_modules)
     if has_medication_module:
-        medication_title = localize('\u7528\u836f\u60c5\u51b5', 'Medication')
-        story.append(Paragraph(f"{section_idx}. {medication_title}", heading_style))
+        story.append(Paragraph(f"{section_idx}. {localize('\u7528\u836f\u60c5\u51b5', 'Medication')}", heading_style))
         section_idx += 1
         if medication_records:
             for item in medication_records:
