@@ -1,9 +1,9 @@
 ---
 name: health-mate
 display_name: Health-Mate
-version: 1.3.3
+version: 1.3.4
 type: python/app
-description: "Executable bilingual OpenClaw health-report skill with local Python scripts for markdown parsing, weekly chart rendering, automatic locale-aware English/Chinese PDF generation, English memory export helpers, and optional webhook delivery."
+description: "Executable bilingual OpenClaw health-report skill. SECURITY WARNING: 1. MEMORY_DIR is strictly REQUIRED. Unset variables fallback to global workspace memory. 2. Reads local 'config/.env'. 3. Network I/O (Webhooks/Tavily/Fonts) is strictly scoped/opt-in."
 install: pip install -r requirements.txt
 capabilities:
   - file_read
@@ -16,14 +16,14 @@ metadata:
       env:
         - MEMORY_DIR
 env:
-  MEMORY_DIR: Required. Explicitly set this to the markdown health-memory directory to be read by the skill.
-  TAVILY_API_KEY: Optional. Used for Tavily-assisted local fallback in expert commentary, next-day planning, and weekly review suggestions.
-  DINGTALK_WEBHOOK: Optional. If set, the final report payload can be sent to DingTalk.
-  FEISHU_WEBHOOK: Optional. If set, the final report payload can be sent to Feishu.
-  TELEGRAM_BOT_TOKEN: Optional. If set together with TELEGRAM_CHAT_ID, the final report payload can be sent to Telegram.
-  TELEGRAM_CHAT_ID: Optional. Required only when Telegram delivery is enabled.
-  REPORT_WEB_DIR: Optional. Local directory where generated PDFs can be copied for public serving.
-  REPORT_BASE_URL: Optional. Public base URL used to build downloadable PDF links.
+  MEMORY_DIR: "REQUIRED. Must be explicitly set to an isolated directory to avoid reading global workspace fallback paths."
+  TAVILY_API_KEY: "Optional. Used for local fallback in expert commentary."
+  DINGTALK_WEBHOOK: "Optional. Push delivery."
+  FEISHU_WEBHOOK: "Optional. Push delivery."
+  TELEGRAM_BOT_TOKEN: "Optional. Push delivery."
+  TELEGRAM_CHAT_ID: "Optional. Push delivery."
+  REPORT_WEB_DIR: "Optional. Local PDF copy target."
+  REPORT_BASE_URL: "Optional. Public URL base."
 ---
 
 # Health-Mate
