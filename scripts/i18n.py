@@ -47,6 +47,7 @@ TEXTS: Dict[str, Dict[str, str]] = {
         "exercise_score_failed": "警告：运动评分计算失败 - {error}",
         "daily_report_title": "健康日报",
         "weekly_report_title": "健康周报",
+        "monthly_report_title": "健康月报",
         "daily_report_heading": "{date} 健康报告",
         "weekly_text_heading": "{start_date} 至 {end_date} 健康周报",
         "overall_score_title": "今日综合评分",
@@ -204,6 +205,7 @@ TEXTS: Dict[str, Dict[str, str]] = {
         "weekly_anchor_date": "锚点日期：{value}",
         "delivery_daily_pdf": "PDF 完整报告",
         "delivery_weekly_pdf": "PDF 完整周报",
+        "delivery_monthly_pdf": "PDF 完整月报",
         "delivery_download": "点击下载",
         "delivery_period": "报告周期：{start_date} 至 {end_date}",
         "font_missing_english_fallback": "未找到中文字体文件 {path}，当前报告已自动切换为英文版。若需中文 PDF，请从 {url} 下载字体并放置到该路径。",
@@ -293,6 +295,7 @@ TEXTS: Dict[str, Dict[str, str]] = {
         "exercise_score_failed": "WARNING: Exercise scoring failed - {error}",
         "daily_report_title": "Daily Health Report",
         "weekly_report_title": "Weekly Health Report",
+        "monthly_report_title": "Monthly Health Report",
         "daily_report_heading": "{date} Health Report",
         "weekly_text_heading": "Weekly Health Report ({start_date} to {end_date})",
         "overall_score_title": "Overall Score",
@@ -450,6 +453,7 @@ TEXTS: Dict[str, Dict[str, str]] = {
         "weekly_anchor_date": "Anchor date: {value}",
         "delivery_daily_pdf": "Full PDF Report",
         "delivery_weekly_pdf": "Full Weekly PDF",
+        "delivery_monthly_pdf": "Full Monthly PDF",
         "delivery_download": "Download",
         "delivery_period": "Report period: {start_date} to {end_date}",
         "font_missing_english_fallback": "The Chinese font file {path} was not found, so this report was rendered in English. If you need Chinese PDF output, download the font from {url} and place it at that path.",
@@ -1209,11 +1213,38 @@ def build_delivery_message(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
 ) -> str:
-    pdf_label = t(locale, "delivery_daily_pdf" if report_kind == "daily" else "delivery_weekly_pdf")
+    resolved_locale = resolve_locale(locale=locale)
+    is_zh = resolved_locale == "zh-CN"
+    if report_kind == "daily":
+        pdf_label = t(locale, "delivery_daily_pdf")
+        report_title = "🌅 每日健康速览" if is_zh else "🌅 Daily Health Snapshot"
+    elif report_kind == "monthly":
+        pdf_label = t(locale, "delivery_monthly_pdf")
+        report_title = "🗓️ 健康月报速览" if is_zh else "🗓️ Monthly Health Snapshot"
+    else:
+        pdf_label = t(locale, "delivery_weekly_pdf")
+        report_title = "🗓️ 健康周报速览" if is_zh else "🗓️ Weekly Health Snapshot"
+
     body_text = markdown_to_plain_text(body)
-    lines = [body_text, "", "━━━━━━━━━━━━━━━━━━", "", pdf_label, pdf_url]
-    if report_kind == "weekly" and start_date and end_date:
-        lines.extend(["", "---", t(locale, "delivery_period", start_date=start_date, end_date=end_date)])
+    summary_label = "📝 文字版摘要" if is_zh else "📝 Text Summary"
+    pdf_block_label = "📎 PDF 完整版" if is_zh else "📎 Full PDF"
+    period_label = "📅 报告周期" if is_zh else "📅 Report Period"
+    generated_label = "⏱️ 生成时间" if is_zh else "⏱️ Generated At"
+    divider = "━━━━━━━━━━━━━━━━━━"
+
+    lines = [
+        report_title,
+        divider,
+        "",
+        summary_label,
+        body_text,
+        "",
+        divider,
+        pdf_block_label,
+        f"{pdf_label}: {pdf_url}",
+    ]
+    if report_kind in {"weekly", "monthly"} and start_date and end_date:
+        lines.extend(["", f"{period_label}: {start_date} ~ {end_date}"])
     if generated_at:
-        lines.append(t(locale, "weekly_generated_at", value=generated_at))
+        lines.append(f"{generated_label}: {generated_at}")
     return "\n".join(lines).strip()

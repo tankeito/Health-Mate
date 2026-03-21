@@ -64,6 +64,16 @@ SYMPTOM_NOISE_PATTERNS = (
     "运动汇总",
     "总消耗",
     "评估：",
+    "当前状态",
+    "症状持续时长",
+    "可能缓解因素",
+    "今日严格低脂饮食",
+    "膳食纤维达标",
+    "胆汁",
+    "少量多餐",
+    "无不适感",
+    "症状已完全缓解",
+    "已恢复",
 )
 
 
@@ -151,13 +161,24 @@ def translate_symptom_lines(raw_lines):
             ("昨晚", "Last night"),
             ("当前状态", "Current status"),
             ("当前", "Current status"),
-            ("进食后右上腹胀", "right upper abdominal bloating after eating"),
+            ("进食后右上腹隐痛", "post-meal right upper abdominal dull pain"),
+            ("进食后右上腹痛", "post-meal right upper abdominal pain"),
+            ("进食后右上腹不适", "post-meal right upper abdominal discomfort"),
+            ("进食后右上腹胀", "post-meal right upper abdominal bloating"),
+            ("右上腹隐痛", "right upper abdominal dull pain"),
+            ("右上腹痛", "right upper abdominal pain"),
+            ("右上腹不适", "right upper abdominal discomfort"),
+            ("右上腹胀痛", "right upper abdominal bloating and pain"),
+            ("右上腹胀", "right upper abdominal bloating"),
             ("右上腹胀痛已恢复", "Right upper abdominal bloating and pain have resolved."),
             ("症状已完全缓解", "symptoms fully resolved"),
             ("无不适感", "No discomfort at present."),
             ("待评估", "pending evaluation"),
             ("症状持续时长", "Duration"),
             ("可能缓解因素", "Possible relieving factors"),
+            ("持续数小时", "lasting several hours"),
+            ("持续", "lasting"),
+            ("数小时", "several hours"),
             ("严格低脂饮食", "strict low-fat meals"),
             ("膳食纤维达标", "fiber target was met"),
             ("饮水", "hydration"),
@@ -167,8 +188,10 @@ def translate_symptom_lines(raw_lines):
         for src, dst in replacements:
             updated = updated.replace(src, dst)
         if contains_cjk(updated):
-            if "腹胀" in line or "腹痛" in line:
-                updated = "Bloating or abdominal discomfort was recorded in the source note."
+            if "右上腹" in line:
+                updated = "Right upper abdominal discomfort was recorded in the source note."
+            elif "腹胀" in line or "腹痛" in line:
+                updated = "Abdominal bloating or pain was recorded in the source note."
             else:
                 updated = "A symptom-related note was recorded in the source memory."
         translated.append(updated)

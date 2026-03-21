@@ -1,341 +1,247 @@
-English | [中文](README_ZH.md)
+[Chinese Guide](README_ZH.md)
 
-# 🏥 Health-Mate
+# Health-Mate
 
-> **Your Intelligent Health Companion for OpenClaw**
-> 
-> *Transform daily health habits into actionable insights. Track nutrition, hydration, exercise, and weight with precision. Generate stunning PDF reports powered by AI analysis—all while keeping your data 100% private and local.*
+> Local-first bilingual health reporting for OpenClaw.
 
-[![Version](https://img.shields.io/badge/version-1.3.5-blue.svg)](https://github.com/tankeito/Health-Mate/releases)
+[![Version](https://img.shields.io/badge/version-1.4.0-blue.svg)](https://github.com/tankeito/Health-Mate/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![OpenClaw](https://img.shields.io/badge/OpenClaw-Skill-green.svg)](https://openclaw.ai)
+[![OpenClaw Skill](https://img.shields.io/badge/OpenClaw-Skill-green.svg)](https://openclaw.ai)
 
----
+## Overview
 
-## 🌟 Project Overview
+Health-Mate turns structured Markdown health logs into polished PDF reports.
 
-Health-Mate is a **production-ready, bilingual health management skill** built exclusively for the OpenClaw AI assistant platform. Born from the vision of making personal health tracking both **powerful and privacy-first**, Health-Mate bridges the gap between casual fitness apps and clinical health monitoring systems.
+- Daily report: scoring, nutrition, hydration, exercise, medication, AI insight, risk alerts, next-day plan
+- Weekly report: summary rings, symptom and medication heatmap, trend charts, nutrition chart, weekly review, next-week actions
+- Monthly report: macro radar, symptom heatmap, 30-day weight and BMR trend, specialty charts, AI monthly review, follow-up reminders, clinic suggestions
+- Multi-condition support: gallstones, hypertension, diabetes, fat loss, and mixed-condition management
+- Custom modules: medication tracking, monitoring sections, and user-defined scoring modules from `user_config.json`
+- Font fallback: when the bundled Chinese font is missing, the project can render an English fallback report with an explicit notice
 
-### What Makes Health-Mate Different?
+## What Changed In 1.4.0
 
-Unlike cloud-based health trackers that harvest your data, Health-Mate operates entirely on your local machine. Every calorie calculation, every hydration reminder, every AI-generated insight happens **offline on your hardware**. You retain complete ownership of your health journey while enjoying enterprise-grade features:
+- Added monthly PDF reporting with specialty deep-dive charts
+- Added weekly symptom and medication heatmap output
+- Added monthly 30-day weight and estimated BMR trend output
+- Added monthly symptom distribution and fat/carb boxplot output
+- Added residence-aware monthly follow-up reminders and hospital planning
+- Added stronger local fallback logic so reports still react to the real data when LLM generation fails
+- Removed implicit `MEMORY_DIR` fallback behavior from the shell runners; the directory must now be set explicitly
 
-- **🔒 Privacy by Design**: No data leaves your machine unless you explicitly configure webhook endpoints for report delivery
-- **🧠 AI-Powered Insights**: Large language model integration provides personalized health commentary and next-day action plans
-- **📊 Professional Visualization**: Matplotlib-rendered charts (nutrition rings, hydration bars, trend lines) rival premium smartwatch apps
-- **🌐 Bilingual Excellence**: Full Chinese/English parity—from parsing logic to PDF output to documentation
-- **⚙️ Condition-Specific Intelligence**: Pre-configured protocols for gallstones, diabetes, hypertension, and fat loss goals
-- **📬 Flexible Delivery**: Choose from DingTalk, Feishu, Telegram, or local-only operation
+## Report Output
 
-### Who Is Health-Mate For?
+### Daily PDF
 
-- **Chronic Condition Management**: Individuals managing gallstones, diabetes, or hypertension who need precise macro tracking
-- **Fitness Enthusiasts**: Athletes and gym-goers pursuing structured fat loss or muscle gain programs
-- **Privacy Advocates**: Health-conscious users who refuse to surrender personal data to cloud corporations
-- **OpenClaw Power Users**: Developers and tinkerers building personalized AI assistant ecosystems
+- Overall score and weighted module scores
+- Meal, hydration, exercise, and medication detail sections
+- AI insight with local fallback
+- Risk alerts
+- Action plan for tomorrow
 
----
+### Weekly PDF
 
-## ⚠️ Privacy & Security Warning
+- Weekly overview rings
+- Symptom and medication heatmap
+- Weight, calorie, nutrition, step, and hydration charts
+- Strengths, gaps, and next-week focus
+- Additional monitoring summary
 
-**Health-Mate reads health data from your local `MEMORY_DIR` directory. Generated PDF reports may be delivered to external platforms (DingTalk, Feishu, Telegram) only if you explicitly configure webhook endpoints.**
+### Monthly PDF
 
-**Security Recommendations**:
-- ✅ Ensure you fully trust configured webhook endpoints
-- ✅ Use in sandbox or isolated environments when testing
-- ✅ Never commit `config/.env` or `config/user_config.json` to public repositories
-- ✅ Regularly audit webhook access logs for unusual activity
+- Page 1: macro adherence radar, symptom and medication heatmap, 30-day weight and BMR trend
+- Page 2: condition-specific charts such as gallstone fat-vs-symptom trend, blood-pressure boxplot, glucose trend, body-fat trend, or custom metric charts
+- Page 3: AI monthly review, follow-up reminders, and residence-aware hospital suggestions
 
----
+## Quick Start
 
-## ✨ Core Features
-
-| Feature | Description |
-|---------|-------------|
-| 📝 **Strict Memory Protocol** | Enforces consistent markdown structure for reliable parsing—no emoji, no commentary, just clean data |
-| 🌐 **Bilingual Support** | Full Chinese/English parity in parsing, prompts, PDF rendering, and documentation |
-| 📊 **Visual PDF Reports** | Daily & weekly reports with Matplotlib charts (nutrition rings, hydration bars, progress tracking) |
-| 🤖 **AI Health Commentary** | LLM-generated insights and next-day action plans based on your recorded data |
-| 📬 **Multi-Channel Delivery** | Optional push to DingTalk, Feishu, or Telegram via configurable webhooks |
-| 🔒 **Local-First Processing** | All analysis and PDF generation happen locally—no data leaves your machine unless you configure webhooks |
-
----
-
-## 🆕 What's New In 1.3.5
-
-- **Multi-condition profiles**: `user_config.json` now supports `conditions`, `primary_condition`, and backward-compatible `condition`. Daily and weekly analysis, LLM prompts, and fallback logic all evaluate the full condition set.
-- **Dynamic fallback with Tavily support**: expert commentary, next-day plans, and weekly fallback reviews are no longer fixed canned text. When `TAVILY_API_KEY` is configured, local fallback can enrich output with retrieved guidance.
-- **Custom scoring and monitoring**: medication is available as a default scoring module, and custom sections such as biochemistry can be added, scored, and rendered in daily/weekly PDF output.
-- **Stronger weekly report**: weekly output now includes profile details, strengths, gaps, next-week focus, best/focus day summaries, and additional monitoring rollups.
-- **Improved first-run setup**: `scripts/init_config.py` now guides users through multi-condition selection, primary goal selection, scoring weights, medication/custom modules, and writes everything into `config/user_config.json`.
-- **Font-safe English fallback**: if `assets/NotoSansSC-VF.ttf` is missing and the source memory is Chinese, Health-Mate now builds a temporary English memory mirror and renders the report in English with an explicit notice.
-
----
-
-## 🚀 Quick Start
-
-### Step 1: Install
+### 1. Install
 
 ```bash
-# Navigate to OpenClaw skills directory
-cd ~/.openclaw/workspace/skills
-
-# Clone the repository
 git clone https://github.com/tankeito/Health-Mate.git health-mate
-
-# Install Python dependencies
 cd health-mate
 pip install -r requirements.txt
 ```
 
-### Step 2: Configure Environment
+### 2. Configure Runtime Environment
+
+Create `config/.env` or set environment variables in your own runtime:
 
 ```bash
-# Navigate to config directory
-cd config
-
-# Copy the example environment file
-cp .env.example .env
-
-# Edit .env with your settings
-nano .env
+MEMORY_DIR="/absolute/path/to/health-memory"
 ```
 
-**Required Environment Variables**:
-```bash
-MEMORY_DIR="/root/.openclaw/workspace/memory"
-```
+Optional integrations:
 
-**Optional (for report delivery)**:
 ```bash
-DINGTALK_WEBHOOK="https://oapi.dingtalk.com/robot/send?access_token=xxx"
-FEISHU_WEBHOOK="https://open.feishu.cn/open-apis/bot/v2/hook/xxx"
-TELEGRAM_BOT_TOKEN="YOUR_BOT_TOKEN"
-TELEGRAM_CHAT_ID="YOUR_CHAT_ID"
+TAVILY_API_KEY="tvly-..."
+DINGTALK_WEBHOOK="https://..."
+FEISHU_WEBHOOK="https://..."
+TELEGRAM_BOT_TOKEN="..."
+TELEGRAM_CHAT_ID="..."
 REPORT_WEB_DIR="/var/www/html/reports"
-REPORT_BASE_URL="https://your-domain.com"
+REPORT_BASE_URL="https://example.com/reports"
+ALLOW_RUNTIME_FONT_DOWNLOAD="false"
 ```
 
-If `assets/NotoSansSC-VF.ttf` is missing, Chinese-source reports automatically fall back to an English PDF and include a rendering notice. To restore Chinese PDF rendering, download the font from [Health-Mate on GitHub](https://github.com/tankeito/Health-Mate) and place it at `assets/NotoSansSC-VF.ttf`.
+Important:
 
-### Step 3: Initialize User Profile
+- `MEMORY_DIR` is required
+- shell runners stop immediately if `MEMORY_DIR` is missing
+- outbound requests happen only when Tavily or webhook credentials are configured, or when runtime font download is explicitly enabled
+
+### 3. Run The Setup Wizard
 
 ```bash
-# Run the interactive initialization script
-python3 scripts/init_config.py
+python scripts/init_config.py
 ```
 
-The script will guide you through:
-1. Name and gender
-2. Height, current weight, and target weight
-3. Health condition (gallstones, diabetes, hypertension, fat loss, etc.)
-4. Daily water intake target
-5. Daily step target
-6. Report delivery preferences
+The wizard writes all persistent settings into `config/user_config.json`, including:
 
-### Step 4: Test Run
+- profile basics
+- multiple conditions and primary condition
+- scoring modules and weights
+- medication participation
+- custom monitoring modules
+- residence fields used by monthly follow-up and clinic planning
+
+### 4. Generate Reports
 
 ```bash
-# Generate a daily report for a specific date
-python3 scripts/health_report_pro.py /root/.openclaw/workspace/memory/2026-03-20.md 2026-03-20
+python scripts/health_report_pro.py /path/to/memory/2026-03-20.md 2026-03-20
+python scripts/weekly_report_pro.py 2026-03-20
+python scripts/monthly_report_pro.py 2026-03-20
 ```
 
----
+Shell runners:
 
-## 📝 Memory Write Protocol
+```bash
+scripts/daily_health_report_pro.sh
+scripts/weekly_health_report_pro.sh
+scripts/monthly_health_report_pro.sh
+```
 
-**Health-Mate enforces a strict markdown structure for health logs. When writing into `MEMORY_DIR`, the AI assistant must behave like a mechanical recorder. Commentary and suggestions belong in chat only, never in the file.**
+### 5. Optional English Mirror
 
-### Non-Negotiable Rules
+If you want an English memory mirror or an English-only rendering path, use:
 
-1. **Meals, hydration, and exercise** must and may only use level-3 headings with time markers: `### Label (around HH:MM)` or `### 标签（约 HH:MM）`
-2. **Food lines** must use the exact arrow format: `- Item portion → approx. XXXkcal`
-3. **Hydration blocks** must contain exactly two lines and nothing else:
-   ```
-   - Water intake: XXXml
-   - Cumulative: XXXml/targetml
-   ```
-4. **Single exercise records** must use an exercise-specific level-3 heading such as `### Afternoon Cycling (around 17:17)` and then list distance, duration, and burn only
-5. **Step tracking** must use one level-2 heading only:
-   ```
-   ## Today Steps
-   - Total steps: XXXX steps
-   ```
-6. **Extra modules** (e.g., medication) are allowed under level-2 headings with raw bullet data only
-7. **Never include** evaluation words like `Assessment`, `Status`, `Summary`, `评估`, `状态`, `总结`, or any emoji
-8. **No chat-style comments**, LLM explanations, motivational language, or extra fields outside the template
-9. **One language per block**—Chinese and English are both valid, but do not mix within the same block
+```bash
+python scripts/export_memory_en.py
+```
 
-The same protocol should be mirrored in `soul.md` so the OpenClaw runtime prompt and `SKILL.md` stay aligned.
+This script is part of the project and should stay under version control.
 
-### English Template (Required Format)
+## Font Behavior
+
+Preferred Chinese font path:
+
+- `assets/NotoSansSC-VF.ttf`
+
+If the font is missing:
+
+- the report can switch to an English-compatible rendering path
+- the PDF adds a rendering notice
+- users who need Chinese PDF output should download the font from the project repository and place it at `assets/NotoSansSC-VF.ttf`
+
+Repository:
+
+- [Health-Mate on GitHub](https://github.com/tankeito/Health-Mate)
+
+## Memory Write Protocol
+
+When an assistant writes into `MEMORY_DIR`, it must behave like a strict recorder.
+
+Hard rules:
+
+- never write commentary, coaching, summaries, emoji, or chat filler into the memory file
+- meals, hydration, medication events, and exercise events must use level-3 headings with time markers
+- hydration blocks must stay minimal
+- step totals must stay inside one dedicated level-2 block
+- monitoring modules must use stable level-2 section headings
+- keep one language per block
+
+Example:
 
 ```markdown
 # 2026-03-20 Health Log
 
-### Breakfast (around 08:30)
-- Oatmeal 50g → approx. 190kcal
-- Skim milk 250ml → approx. 87kcal
+## Weight Record
+- Morning fasting: 64.4kg
 
-### Morning (around 09:45)
+## Hydration
+### Morning (around 08:45)
 - Water intake: 300ml
 - Cumulative: 300ml/2000ml
 
-### Afternoon Cycling (around 17:17)
-- Distance: 10km
-- Duration: 47min
-- Burn: approx. 300kcal
+## Meals
+### Breakfast (around 08:50)
+- Oatmeal 50g -> approx. 190kcal
+- Skim milk 250ml -> approx. 87kcal
+
+## Exercise
+### Afternoon Cycling (around 17:10)
+- Distance: 10.2km
+- Duration: 42min
+- Burn: approx. 290kcal
 
 ## Today Steps
-- Total steps: 8500 steps
+- Total steps: 8200 steps
 ```
 
----
+Expandable monitoring modules:
 
-## 🤖 Commands
+```markdown
+## Blood Pressure
+### Morning (around 08:00)
+- Blood Pressure: 128/82 mmHg
+- Heart Rate: 72 bpm
 
-| Command | Description | Example |
-|---------|-------------|---------|
-| `/health` | Generate daily PDF report | `/health 2026-03-20` |
-| `/health summary` | Generate weekly review report | `/health summary 2026-03-20` |
+## Glucose Record
+### After Breakfast (around 10:10)
+- Glucose: 7.1 mmol/L
+- Timing: 2h after breakfast
 
----
+## Body Composition
+- Weight: 64.4kg
+- Body Fat: 18.6%
 
-## ⚙️ Environment Variables
-
-| Variable | Required | Description | Example |
-|----------|----------|-------------|---------|
-| `MEMORY_DIR` | ✅ Yes | Directory containing markdown health logs | `/root/.openclaw/workspace/memory` |
-| `TAVILY_API_KEY` | ❌ No | Tavily API key for Tavily-assisted fallback in commentary, planning, and weekly suggestions | `tvly-dev-xxx` |
-| `DINGTALK_WEBHOOK` | ❌ No | DingTalk bot webhook for report delivery | `https://oapi.dingtalk.com/...` |
-| `FEISHU_WEBHOOK` | ❌ No | Feishu bot webhook for report delivery | `https://open.feishu.cn/...` |
-| `TELEGRAM_BOT_TOKEN` | ❌ No | Telegram bot token for report delivery | `YOUR_BOT_TOKEN` |
-| `TELEGRAM_CHAT_ID` | ❌ No | Telegram chat ID for report delivery | `YOUR_CHAT_ID` |
-| `REPORT_WEB_DIR` | ❌ No | Local directory for PDF output | `/var/www/html/reports` |
-| `REPORT_BASE_URL` | ❌ No | Public URL for PDF download links | `https://your-domain.com` |
-
----
-
-## 📊 Report Output
-
-### Daily Report Structure
-
-1. **Cover Page** – Date, overall score, star rating
-2. **Score Breakdown** – 6 dimensions (diet, water, weight, symptoms, exercise, adherence)
-3. **Health Metrics** – BMI, BMR, TDEE calculations
-4. **Nutrition Summary** – Calories and macronutrients (carbs, protein, fat, fiber)
-5. **Hydration Timeline** – Water intake throughout the day
-6. **Meal Details** – Food items with portions and calorie estimates
-7. **Exercise Log** – Activity records with duration and calories burned
-8. **AI Commentary** – Personalized health insights and suggestions
-9. **Risk Alerts** – Health risk warnings based on recorded data
-10. **Next-Day Action Plan** – Diet, water, exercise recommendations
-
-### Weekly Report Structure
-
-1. **Overview** – Weekly average score, best/worst days
-2. **Trend Charts** – Weight fluctuations, daily calorie intake, step counts
-3. **Nutrition Ring** – Average macronutrient distribution
-4. **AI Deep Analysis** – Cross-day pattern recognition and intervention suggestions
-
----
-
-## 📦 Project Structure
-
-```
-health-mate/
-├── scripts/
-│   ├── health_report_pro.py      # Daily report generator
-│   ├── weekly_report_pro.py      # Weekly report generator
-│   ├── export_memory_en.py       # Normalize Chinese memory into English test samples
-│   ├── pdf_generator.py          # PDF rendering engine
-│   ├── weekly_pdf_generator.py   # Weekly PDF renderer
-│   ├── i18n.py                   # Bilingual language layer
-│   ├── constants.py              # Food calorie database
-│   ├── init_config.py            # Interactive setup wizard
-│   ├── daily_health_report_pro.sh    # Cron job script (daily)
-│   └── weekly_health_report_pro.sh   # Cron job script (weekly)
-├── config/
-│   ├── user_config.json          # User health profile
-│   ├── .env                      # Environment variables (gitignored)
-│   ├── .env.example              # Environment template
-│   ├── pdf_style_config.json     # PDF styling configuration
-│   └── user_config.example.json  # Profile template
-├── assets/
-│   └── NotoSansSC-VF.ttf         # Optional local Chinese font bundle
-├── logs/                         # Execution logs
-├── reports/                      # Generated PDF reports
-├── README.md                     # English documentation
-├── README_ZH.md                  # Chinese documentation
-├── SKILL.md                      # OpenClaw skill definition
-└── requirements.txt              # Python dependencies
+## Biochemistry
+- ALT: 34 U/L
+- AST: 28 U/L
 ```
 
----
+Forbidden content:
 
-## 🔐 Privacy & Data Protection
+- `Assessment`
+- `Status`
+- `Summary`
+- motivational filler
+- debug logs
+- system logs
+- tables inside daily memory files
 
-### Files Protected by `.gitignore`
+## Runtime Safety
 
-The following files **must never be committed** to public repositories:
+Expected local behavior:
 
-- `config/user_config.json` – Personal health data
-- `config/.env` – Webhook tokens and private configuration
-- `reports/*.pdf` – Generated health reports
-- `logs/*.log` – Execution logs
+- reads Markdown logs from `MEMORY_DIR`
+- reads `config/.env` when shell runners are used
+- writes PDFs into `reports/`
+- writes logs into `logs/`
+- may create a temporary English memory mirror for rendering fallback
 
-### Recommended Practices
+Expected network behavior:
 
-1. **Private Repository** – Set as Private when forking
-2. **Regular Backups** – Backup config files to secure storage
-3. **Key Rotation** – Update webhook tokens every 3-6 months
-4. **Sandbox Testing** – Test in isolated environments first
-5. **Log Auditing** – Regularly review webhook access logs
+- Tavily only when `TAVILY_API_KEY` is configured
+- webhook delivery only when the corresponding webhook credentials are configured
+- runtime font download only when `ALLOW_RUNTIME_FONT_DOWNLOAD=true`
 
----
+## Changelog
 
-## 🔄 Changelog
+### v1.4.0 - 2026-03-21
 
-### v1.3.5 — 2026-03-21
-
-- 🌐 **Font Fallback**: When `assets/NotoSansSC-VF.ttf` is missing, Chinese-source daily and weekly reports now auto-export a temporary English memory mirror and render English PDFs with a visible notice
-- 🔒 **Safer Packaging**: Documentation now matches the real runtime behavior: explicit `MEMORY_DIR`, opt-in runtime font download only, and no hidden default memory fallback
-- 📈 **Report Polish**: Weekly overview wording, trend labels, and rendering notices are now aligned across text reports, PDFs, and metadata
-- 🏷️ **Release Update**: Bumped documentation, config examples, and package metadata to version `1.3.5`
-
-### v1.3.0 — 2026-03-20
-
-- 🌐 **Bilingual Architecture**: Added i18n.py for unified Chinese/English language layer
-- 📝 **Memory Protocol**: Hardened anti-commentary rules with CN/EN templates
-- 🔧 **Parsing Improvements**: Enhanced bilingual meal, hydration, exercise block detection
-- 🎨 **PDF Fixes**: Resolved emoji rendering issues (☒ squares) in PDF output
-- 💊 **Medication Tracking**: Added support for custom modules (e.g., 用药记录)
-- 📚 **Documentation**: Complete English/Chinese README restructuring
-
-### v1.2.0 — 2026-03-20
-
-- 🎯 **Dynamic Targets**: Refactored condition parameters for flexible health goals (e.g., fat loss)
-- 🌍 **Multi-Language Docs**: Added bilingual documentation and custom module support
-- 🧹 **Strict Protocol**: Rewrote Memory Write Protocol to lock down LLM output
-- 🐛 **Bug Fixes**: Fixed PDF emoji rendering and parsing error tolerance
-
-### v1.1.x — Earlier Releases
-
-- Weekly report system with polar charts and trend analysis
-- Matplotlib visualization (nutrition rings, hydration bars, progress tracking)
-- Automated font download for Chinese character support
-- Privacy compliance updates and security declarations
-
----
-
-## 📄 License
-
-MIT License – See [LICENSE](LICENSE) for details.
-
----
-
-## 📞 Support
-
-- **GitHub Issues**: https://github.com/tankeito/Health-Mate/issues
-- **Email**: tqd354@gmail.com
-- **Repository**: https://github.com/tankeito/Health-Mate
+- Added monthly reporting
+- Added symptom and medication heatmaps to weekly and monthly reports
+- Added monthly specialty charts and weight/BMR trend output
+- Added residence-aware medical planning
+- Refreshed README, README_ZH, SKILL metadata, and package metadata

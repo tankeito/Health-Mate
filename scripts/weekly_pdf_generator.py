@@ -13,9 +13,11 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, Tabl
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import cm
 from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+from reportlab.lib.utils import ImageReader
 
 from pdf_generator import register_chinese_font, get_font_prop, clean_html_tags
 from i18n import condition_name, format_weight, format_weight_delta, resolve_locale, t, weight_unit
+from monthly_pdf_generator import create_macro_radar_chart, create_symptom_heatmap
 
 try:
     import matplotlib.pyplot as plt
@@ -55,6 +57,50 @@ def profile_condition_title(profile, locale):
             return separator.join(labels)
     return condition_name(locale, (profile or {}).get("condition", "balanced"))
 
+
+def _style_matplotlib_text(text_obj, font_prop=None, *, color=None, fontsize=None, fontweight="bold"):
+    resolved_color = color if color is not None else text_obj.get_color()
+    if color is not None:
+        text_obj.set_color(color)
+    if fontsize is not None:
+        text_obj.set_fontsize(fontsize)
+    if font_prop:
+        text_obj.set_fontproperties(font_prop)
+    if fontweight:
+        text_obj.set_fontweight(fontweight)
+    outline_color = C_TEXT_MAIN if str(resolved_color).lower() in {"#ffffff", "white"} else "white"
+    text_obj.set_path_effects([path_effects.withStroke(linewidth=1.0, foreground=outline_color, alpha=0.65)])
+
+
+def _apply_axis_tick_style(ax, font_prop=None, *, x_color=C_TEXT_MAIN, y_color=C_TEXT_MAIN, fontsize=8):
+    for label in ax.get_xticklabels():
+        _style_matplotlib_text(label, font_prop, color=x_color, fontsize=fontsize)
+    for label in ax.get_yticklabels():
+        _style_matplotlib_text(label, font_prop, color=y_color, fontsize=fontsize)
+
+
+def _style_legend(legend, font_prop=None, fontsize=8):
+    if not legend:
+        return
+    for text in legend.get_texts():
+        _style_matplotlib_text(text, font_prop, fontsize=fontsize)
+
+
+def _build_chart_image(path: str, max_width_cm: float, max_height_cm: float, h_align: str = "CENTER") -> Image:
+    width_limit = max_width_cm * cm
+    height_limit = max_height_cm * cm
+    try:
+        width_px, height_px = ImageReader(path).getSize()
+        scale = min(width_limit / max(width_px, 1), height_limit / max(height_px, 1))
+        width = width_px * scale
+        height = height_px * scale
+    except Exception:
+        width = width_limit
+        height = height_limit
+    chart = Image(path, width=width, height=height)
+    chart.hAlign = h_align
+    return chart
+
 def create_weekly_rings_chart(diet_pct, water_pct, exercise_pct, locale):
     """Create the weekly multi-ring overview chart."""
     if not MATPLOTLIB_AVAILABLE: return None
@@ -76,7 +122,8 @@ def create_weekly_rings_chart(diet_pct, water_pct, exercise_pct, locale):
         ax.set_theta_direction(-1)      
         ax.axis('off')                  
         
-        ax.text(0, 0, t(locale, 'weekly_rings_center'), ha='center', va='center', fontsize=12, color=C_TEXT_MAIN, fontweight='bold', fontproperties=my_font)
+        center = ax.text(0, 0, t(locale, 'weekly_rings_center'), ha='center', va='center', fontsize=12, color=C_TEXT_MAIN, fontweight='bold', fontproperties=my_font)
+        _style_matplotlib_text(center, my_font, color=C_TEXT_MAIN, fontsize=12)
 
         diet_label = t(locale, 'weekly_ring_label', label=t(locale, 'weekly_ring_diet'), percent=diet_pct * 100)
         water_label = t(locale, 'weekly_ring_label', label=t(locale, 'weekly_ring_water'), percent=water_pct * 100)
@@ -92,7 +139,8 @@ def create_weekly_rings_chart(diet_pct, water_pct, exercise_pct, locale):
         }
         if my_font:
             legend_kwargs["prop"] = my_font
-        ax.legend(**legend_kwargs)
+        legend = ax.legend(**legend_kwargs)
+        _style_legend(legend, my_font, fontsize=8)
 
         plt.tight_layout()
         temp_img = tempfile.NamedTemporaryFile(delete=False, suffix='.png')
@@ -125,18 +173,18 @@ def create_trend_line_chart(dates, values, title):
         ax.spines['right'].set_visible(False)
         ax.spines['left'].set_color(C_BORDER)
         ax.spines['bottom'].set_color(C_BORDER)
-        ax.tick_params(axis='x', colors=C_TEXT_MUTED)
-        ax.tick_params(axis='y', colors=C_TEXT_MUTED)
+        ax.tick_params(axis='x', colors=C_TEXT_MAIN, labelsize=8)
+        ax.tick_params(axis='y', colors=C_TEXT_MAIN, labelsize=8)
         ax.yaxis.grid(True, linestyle='--', alpha=0.3, color=C_BORDER, zorder=1)
+        _apply_axis_tick_style(ax, my_font)
         
         for d, v in valid_data:
             t = ax.text(d, v + (max_val - min_val)*0.05, f"{v:.1f}", ha='center', va='bottom', fontsize=9, color=C_TEXT_MAIN, fontweight='bold')
-            if my_font: t.set_fontproperties(my_font)
+            _style_matplotlib_text(t, my_font, color=C_TEXT_MAIN, fontsize=9)
             
-        if my_font:
-            for label in ax.get_xticklabels(): label.set_fontproperties(my_font)
-            ax.set_title(title, fontproperties=my_font, color=C_TEXT_MAIN, loc='left', pad=15, fontweight='bold')
-            
+        title_obj = ax.set_title(title, color=C_TEXT_MAIN, loc='left', pad=15, fontweight='bold')
+        _style_matplotlib_text(title_obj, my_font, color=C_TEXT_MAIN)
+             
         plt.tight_layout()
         temp_img = tempfile.NamedTemporaryFile(delete=False, suffix='.png')
         plt.savefig(temp_img.name, transparent=True, dpi=200)
@@ -156,23 +204,23 @@ def create_bar_trend_chart(dates, values, target, color, title, ylabel):
         
         if target and target > 0:
             ax.axhline(y=target, color=C_WARNING, linestyle='--', alpha=0.8, linewidth=1.5, zorder=1)
-            t_tgt = ax.text(len(dates)-0.5, target, f"{target}", color=C_WARNING, va='bottom', ha='right', fontsize=9)
-            if my_font: t_tgt.set_fontproperties(my_font)
+            t_tgt = ax.text(len(dates)-0.5, target, f"{target}", color=C_WARNING, va='bottom', ha='right', fontsize=9, fontweight='bold')
+            _style_matplotlib_text(t_tgt, my_font, color=C_WARNING, fontsize=9)
             
         ax.spines['top'].set_visible(False)
         ax.spines['right'].set_visible(False)
         ax.spines['left'].set_visible(False)
         ax.spines['bottom'].set_color(C_BORDER)
-        ax.tick_params(axis='y', colors=C_TEXT_MUTED)
-        ax.tick_params(axis='x', colors=C_TEXT_MUTED)
+        ax.tick_params(axis='y', colors=C_TEXT_MAIN, labelsize=8)
+        ax.tick_params(axis='x', colors=C_TEXT_MAIN, labelsize=8)
         ax.yaxis.grid(True, linestyle='--', alpha=0.3, color=C_BORDER, zorder=0)
+        _apply_axis_tick_style(ax, my_font)
         
         max_val = max(values + [target if target else 0])
         ax.set_ylim(0, max_val * 1.2)
         
-        if my_font:
-            for label in ax.get_xticklabels(): label.set_fontproperties(my_font)
-            ax.set_title(title, fontproperties=my_font, color=C_TEXT_MAIN, loc='left', pad=15, fontweight='bold')
+        title_obj = ax.set_title(title, color=C_TEXT_MAIN, loc='left', pad=15, fontweight='bold')
+        _style_matplotlib_text(title_obj, my_font, color=C_TEXT_MAIN)
 
         plt.tight_layout()
         temp_img = tempfile.NamedTemporaryFile(delete=False, suffix='.png')
@@ -196,10 +244,7 @@ def create_weekly_nutrition_chart(calories, protein, fat, carb, locale):
         wedges, texts, autotexts = ax.pie([carb_kcal, protein_kcal, fat_kcal], labels=[t(locale, 'carb'), t(locale, 'protein'), t(locale, 'fat')], colors=[C_CARB, C_PROTEIN, C_FAT], autopct='%1.1f%%', startangle=90, wedgeprops=dict(width=0.4, edgecolor='w'))
         
         for label_text in texts:
-            label_text.set_color(C_TEXT_MUTED)
-            label_text.set_fontsize(9)
-            if my_font:
-                label_text.set_fontproperties(my_font)
+            _style_matplotlib_text(label_text, my_font, color=C_TEXT_MAIN, fontsize=9)
         for auto_text in autotexts:
             auto_text.set_color("#FFFFFF")
             auto_text.set_fontsize(9)
@@ -209,8 +254,7 @@ def create_weekly_nutrition_chart(calories, protein, fat, carb, locale):
                 auto_text.set_fontproperties(my_font)
 
         center_text = ax.text(0, 0, t(locale, 'weekly_nutrition_center', calories=int(calories)), ha='center', va='center', fontsize=10, fontweight='bold', color=C_TEXT_MAIN)
-        if my_font:
-            center_text.set_fontproperties(my_font)
+        _style_matplotlib_text(center_text, my_font, color=C_TEXT_MAIN, fontsize=10)
         
         plt.tight_layout()
         temp_img = tempfile.NamedTemporaryFile(delete=False, suffix='.png')
@@ -232,6 +276,7 @@ def generate_weekly_pdf_report(weekly_data, profile, ai_review, ai_plan, output_
     heading_style = ParagraphStyle('Heading', parent=styles['Heading2'], fontSize=14, textColor=HexColor(C_PRIMARY), spaceBefore=18, spaceAfter=12, fontName=font_name)
     normal_style = ParagraphStyle('Normal', parent=styles['Normal'], fontSize=10, textColor=HexColor(C_TEXT_MAIN), fontName=font_name, leading=18)
     muted_style = ParagraphStyle('Muted', parent=normal_style, textColor=HexColor(C_TEXT_MUTED), fontSize=9, leading=13)
+    footer_style = ParagraphStyle('Footer', parent=normal_style, fontSize=9, textColor=HexColor(C_TEXT_MUTED), alignment=TA_CENTER, leading=13)
     source_note_style = ParagraphStyle('SourceNote', parent=muted_style, alignment=TA_RIGHT, spaceBefore=4, spaceAfter=0)
     notice_style = ParagraphStyle(
         'RenderNotice',
@@ -301,15 +346,28 @@ def generate_weekly_pdf_report(weekly_data, profile, ai_review, ai_plan, output_
     story.append(Spacer(1, 0.3*cm))
 
     story.append(Paragraph(f"2. {t(locale, 'weekly_overview_title')}", heading_style))
-    diet_pct = min(1.0, weekly_data.get('avg_diet_score', 0) / 100)
-    water_pct = weekly_data.get('water_goal_days', 0) / 7.0
-    exercise_pct = weekly_data.get('step_goal_days', 0) / 7.0
-    ring_chart = create_weekly_rings_chart(diet_pct, water_pct, exercise_pct, locale)
-    if ring_chart:
-        temp_images.append(ring_chart)
-        img = Image(ring_chart, width=8*cm, height=7*cm)
-        img.hAlign = 'CENTER'
+    macro_scores = weekly_data.get('macro_scores', {})
+    radar_chart = create_macro_radar_chart(macro_scores, locale)
+    heatmap_chart = create_symptom_heatmap(weekly_data.get('daily_records', []), locale, min_weeks=1)
+    if radar_chart:
+        temp_images.append(radar_chart)
+    if heatmap_chart:
+        temp_images.append(heatmap_chart)
+    if radar_chart and heatmap_chart:
+        chart_table = Table(
+            [[_build_chart_image(radar_chart, 7.2, 6.2), _build_chart_image(heatmap_chart, 10.0, 5.2)]],
+            colWidths=[7.4*cm, 10.2*cm],
+        )
+        chart_table.setStyle(TableStyle([('VALIGN', (0, 0), (-1, -1), 'MIDDLE'), ('ALIGN', (0, 0), (-1, -1), 'CENTER')]))
+        story.append(chart_table)
+    elif radar_chart:
+        img = _build_chart_image(radar_chart, 10.2, 8.0)
         story.append(img)
+    elif heatmap_chart:
+        story.append(_build_chart_image(heatmap_chart, 16.0, 5.5))
+    if heatmap_chart:
+        story.append(Paragraph(localize(locale, "热力图右上角 M 表示该日有用药记录。", "In the heatmap, the corner marker M indicates a medication day."), muted_style))
+        story.append(Spacer(1, 0.12*cm))
 
     summary_rows = [
         [t(locale, 'dimension'), t(locale, 'value'), t(locale, 'health_status')],
@@ -354,7 +412,7 @@ def generate_weekly_pdf_report(weekly_data, profile, ai_review, ai_plan, output_
     if weight_chart:
         temp_images.append(weight_chart)
         story.append(Paragraph(f"<b>{t(locale, 'weekly_chart_weight_label')}</b>", chart_label_style))
-        story.append(Image(weight_chart, width=14*cm, height=5.25*cm))
+        story.append(_build_chart_image(weight_chart, 14.0, 5.25))
         story.append(Spacer(1, 0.2*cm))
 
     bmr_val = (10 * (profile.get('current_weight_kg', 65)) + 6.25 * profile.get('height_cm', 172) - 5 * profile.get('age', 34) + (5 if str(profile.get('gender', 'male')).lower() == 'male' else -161))
@@ -363,15 +421,14 @@ def generate_weekly_pdf_report(weekly_data, profile, ai_review, ai_plan, output_
     if cal_chart:
         temp_images.append(cal_chart)
         story.append(Paragraph(f"<b>{t(locale, 'weekly_chart_calorie_label')}</b>", chart_label_style))
-        story.append(Image(cal_chart, width=14*cm, height=5.25*cm))
+        story.append(_build_chart_image(cal_chart, 14.0, 5.25))
         story.append(Spacer(1, 0.2*cm))
 
     nutri_chart = create_weekly_nutrition_chart(weekly_data['avg_calories'], weekly_data['avg_protein'], weekly_data['avg_fat'], weekly_data['avg_carb'], locale)
     if nutri_chart:
         temp_images.append(nutri_chart)
         story.append(Paragraph(f"<b>{t(locale, 'weekly_chart_nutrition_label')}</b>", chart_label_style))
-        img = Image(nutri_chart, width=10*cm, height=6*cm)
-        img.hAlign = 'CENTER'
+        img = _build_chart_image(nutri_chart, 10.0, 6.0)
         story.append(img)
         story.append(Spacer(1, 0.2*cm))
 
@@ -379,14 +436,14 @@ def generate_weekly_pdf_report(weekly_data, profile, ai_review, ai_plan, output_
     if step_chart:
         temp_images.append(step_chart)
         story.append(Paragraph(f"<b>{t(locale, 'weekly_chart_step_label')}</b>", chart_label_style))
-        story.append(Image(step_chart, width=14*cm, height=5.25*cm))
+        story.append(_build_chart_image(step_chart, 14.0, 5.25))
         story.append(Spacer(1, 0.2*cm))
 
     water_chart = create_bar_trend_chart(short_dates, weekly_data['water_intakes'], profile.get('water_target_ml', 2000), C_SUCCESS, t(locale, 'water_trend_title'), t(locale, 'average_water'))
     if water_chart:
         temp_images.append(water_chart)
         story.append(Paragraph(f"<b>{t(locale, 'weekly_chart_water_label')}</b>", chart_label_style))
-        story.append(Image(water_chart, width=14*cm, height=5.25*cm))
+        story.append(_build_chart_image(water_chart, 14.0, 5.25))
         story.append(Spacer(1, 0.2*cm))
 
     story.append(Paragraph(f"5. {t(locale, 'weekly_ai_review_title')}", heading_style))
@@ -396,6 +453,10 @@ def generate_weekly_pdf_report(weekly_data, profile, ai_review, ai_plan, output_
     story.append(Paragraph(f"6. {t(locale, 'weekly_next_plan_title')}", heading_style))
     append_lines(ai_plan)
     story.append(Paragraph(source_text(plan_source), source_note_style))
+
+    story.append(Spacer(1, 0.16*cm))
+    story.append(Paragraph(localize(locale, f"报告生成时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", f"Report generated at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"), footer_style))
+    story.append(Paragraph(f"{profile_condition_title(profile, locale)} - Health-Mate", footer_style))
 
     doc.build(story)
     for img in temp_images:

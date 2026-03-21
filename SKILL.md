@@ -1,9 +1,9 @@
 ---
 name: health-mate
 display_name: Health-Mate
-version: 1.3.5
+version: 1.4.0
 type: python/app
-description: "Executable bilingual OpenClaw health-report skill with local Python scripts for markdown parsing, weekly chart rendering, explicit MEMORY_DIR-based English/Chinese PDF generation, automatic English fallback when bundled local Chinese font is missing, and optional webhook delivery."
+description: "Executable bilingual OpenClaw health-report skill. It reads Markdown logs from an explicitly configured MEMORY_DIR, generates daily, weekly, and monthly PDF reports, and only performs Tavily, webhook, or font-download network activity when the corresponding runtime options are enabled."
 install: pip install -r requirements.txt
 capabilities:
   - file_read
@@ -16,173 +16,122 @@ metadata:
       env:
         - MEMORY_DIR
 env:
-  MEMORY_DIR: Required. Explicitly set this to the markdown health-memory directory to be read by the skill.
-  TAVILY_API_KEY: Optional. Used for Tavily-assisted local fallback in expert commentary, next-day planning, and weekly review suggestions.
-  DINGTALK_WEBHOOK: Optional. If set, the final report payload can be sent to DingTalk.
-  FEISHU_WEBHOOK: Optional. If set, the final report payload can be sent to Feishu.
-  TELEGRAM_BOT_TOKEN: Optional. If set together with TELEGRAM_CHAT_ID, the final report payload can be sent to Telegram.
-  TELEGRAM_CHAT_ID: Optional. Required only when Telegram delivery is enabled.
-  REPORT_WEB_DIR: Optional. Local directory where generated PDFs can be copied for public serving.
-  REPORT_BASE_URL: Optional. Public base URL used to build downloadable PDF links.
-  ALLOW_RUNTIME_FONT_DOWNLOAD: Optional. Set to true only if you explicitly allow fallback font download when no bundled/system CJK font is available.
+  MEMORY_DIR: Required. Explicitly set this to the Markdown health-memory directory that the skill may read.
+  TAVILY_API_KEY: Optional. Enables Tavily-assisted fallback guidance and monthly clinic lookup hints.
+  DINGTALK_WEBHOOK: Optional. Enables DingTalk delivery.
+  FEISHU_WEBHOOK: Optional. Enables Feishu delivery.
+  TELEGRAM_BOT_TOKEN: Optional. Enables Telegram delivery when paired with TELEGRAM_CHAT_ID.
+  TELEGRAM_CHAT_ID: Optional. Required only for Telegram delivery.
+  REPORT_WEB_DIR: Optional. Local directory used when generated PDFs should be copied for public download.
+  REPORT_BASE_URL: Optional. Public base URL used for generated PDF links.
+  ALLOW_RUNTIME_FONT_DOWNLOAD: Optional. Disabled by default. Set to true only if runtime fallback download of NotoSansSC-VF.ttf is explicitly allowed.
 ---
 
 # Health-Mate
 
-Health-Mate is an executable OpenClaw health-management skill for bilingual daily wellness tracking. It is not an instruction-only prompt bundle. The package includes Python scripts and shell runners that read structured markdown health logs, generate daily and weekly PDF reports, and optionally send report payloads to configured webhook endpoints.
+Health-Mate is an executable OpenClaw skill, not a prompt-only package.
 
-## Purpose
+It reads structured Markdown logs from `MEMORY_DIR`, generates localized PDF reports, and can optionally deliver the final message to external services.
 
-- Read structured markdown health logs from `MEMORY_DIR`
-- Parse meals, hydration, exercise, steps, symptoms, and custom monitoring sections
-- Generate localized daily and weekly health reports
-- Render local PDF files
-- Optionally deliver final report payloads to DingTalk, Feishu, or Telegram
+## What It Does
+
+- Parses meals, hydration, exercise, symptoms, medication, and custom monitoring sections
+- Generates daily reports with scoring, detail sections, AI insight, risk alerts, and next-day actions
+- Generates weekly reports with rings, heatmap, trend charts, nutrition chart, weekly review, and next-week plan
+- Generates monthly reports with radar, heatmap, 30-day weight and BMR trend, specialty charts, follow-up reminders, and clinic suggestions
+- Supports multi-condition management in both LLM and local fallback paths
+- Keeps core parsing, scoring, and PDF rendering local
 
 ## Installation
-
-Install the Python dependencies locally:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-Main runtime libraries:
+Dependencies:
 
 - `reportlab`
 - `pillow`
 - `matplotlib`
 
-## Required Configuration
+## Required Runtime Setup
 
-### Required
+Required:
 
 - `MEMORY_DIR`
-  This skill requires an explicit `MEMORY_DIR` environment variable.
-  If `MEMORY_DIR` is missing, the Python entrypoints and shell runners now exit instead of falling back to any default path.
 
-### Optional
+Optional:
 
 - `TAVILY_API_KEY`
-  Enables extra search context for next-day planning only.
-
 - `DINGTALK_WEBHOOK`
 - `FEISHU_WEBHOOK`
 - `TELEGRAM_BOT_TOKEN`
 - `TELEGRAM_CHAT_ID`
-  These are used only when outbound delivery is intentionally enabled.
-
 - `REPORT_WEB_DIR`
 - `REPORT_BASE_URL`
-  Used only when PDFs should be copied to a public directory and exposed with a downloadable URL.
-
 - `ALLOW_RUNTIME_FONT_DOWNLOAD`
-  Disabled by default. Only enable this if you explicitly want the PDF renderer to download `NotoSansSC-VF.ttf` when no bundled or system CJK font is available.
 
-## Local File-System Behavior
+## Local And Network Behavior
 
-The skill writes local files during normal operation. This is expected behavior.
+Expected local file I/O:
 
-- Reads markdown logs from `MEMORY_DIR`
-- Reads `config/.env` only when the bundled shell runners are used and that file exists
-- Writes generated PDFs to the local `reports/` directory unless a different public copy target is configured
-- Writes runtime logs to the local `logs/` directory
-- May create a temporary English memory mirror in the system temp directory when Chinese memory is rendered without a bundled local `assets/NotoSansSC-VF.ttf`
-- May place the fallback font file in the local `assets/` directory only when `ALLOW_RUNTIME_FONT_DOWNLOAD` is explicitly enabled
+- reads Markdown logs from `MEMORY_DIR`
+- reads `config/.env` when shell runners are used
+- writes PDFs into `reports/`
+- writes logs into `logs/`
+- may create a temporary English memory mirror for rendering fallback
 
-## Runtime Network Behavior
+Expected network I/O:
 
-Outbound network activity is limited and conditional:
+- Tavily only when `TAVILY_API_KEY` is configured
+- webhook delivery only when the matching delivery credentials are configured
+- runtime font download only when `ALLOW_RUNTIME_FONT_DOWNLOAD=true`
 
-- Webhook delivery is performed only if DingTalk, Feishu, or Telegram credentials are configured
-- Tavily requests are performed only if `TAVILY_API_KEY` is configured
-- Fallback font download from `raw.githubusercontent.com` occurs only if `ALLOW_RUNTIME_FONT_DOWNLOAD=true` is explicitly set
+Important:
 
-If you do not want any runtime font download, leave `ALLOW_RUNTIME_FONT_DOWNLOAD` unset and pre-populate `assets/NotoSansSC-VF.ttf` if you need guaranteed Chinese PDF output. If the local bundled font is missing, Chinese-source reports fall back to English output with an explicit rendering notice.
+- there is no implicit default `MEMORY_DIR` fallback in the shell runners
+- the skill exits if `MEMORY_DIR` is missing
 
-## AI Runtime Notes
-
-- If `openclaw` is available in the runtime environment, the skill can request AI commentary, next-day planning, and weekly review text
-- If `openclaw` is not available, the skill falls back to deterministic local logic so report generation still completes
-- When multiple conditions are configured, both the LLM path and the fallback path evaluate the combined condition set
-- Weekly output can summarize additional configured or dynamically discovered monitoring sections, such as medication or biochemistry
-
-## Command Intent
+## Commands
 
 - `/health`
-  Generate the localized daily report for today or for a specified date
+  Daily report
 
 - `/health summary`
-  Generate the localized weekly review anchored to a specified date
+  Weekly report
 
-## Agent Behavior
-
-When this skill is active, the assistant may be natural and helpful in chat, but it must be strict and mechanical when writing files under `MEMORY_DIR`.
-
-- Never write encouragement, analysis, commentary, summaries, or conversational filler into the memory file
-- Use one language per record block
-- Chinese and English are both supported, but field labels must not be mixed inside the same block
-- If time or calories are uncertain, estimate conservatively while preserving the exact structure
+- `/health month`
+  Monthly report
 
 ## Memory Write Protocol
 
-When writing into `MEMORY_DIR`, the model must behave like a mechanical data recorder. Advice, commentary, and conversational guidance belong in chat only and must never be written into the memory file. The following structure must be preserved exactly because downstream parsing depends on fixed regex patterns.
+When writing into `MEMORY_DIR`, the model must act like a strict recorder.
 
-If an LLM is used to write local health memories, the same rules should be mirrored into `soul.md` or the runtime system prompt so the runtime layer and the skill layer do not drift apart.
+Hard rules:
 
-### Non-Negotiable Rules
+1. Never write commentary, advice, summaries, emoji, or chat filler into the file.
+2. Meals, hydration, medication events, and exercise events must use level-3 headings with time markers.
+3. Hydration blocks must remain minimal and structured.
+4. Step totals must stay in one dedicated level-2 block.
+5. Monitoring modules must use stable level-2 headings.
+6. Use one language per block.
 
-1. Meals, hydration blocks, and exercise blocks must and may only use level-3 headings with time markers: `### Label (around HH:MM)` or `### 标签（约 HH:MM）`
-2. Food lines must use the exact arrow format:
-   `- Item portion → approx. XXXkcal`
-3. Hydration blocks must contain exactly two lines and nothing else:
-   `- Water intake: XXXml`
-   `- Cumulative: XXXml/targetml`
-4. Single exercise records must use an exercise-specific level-3 heading such as `### Afternoon Cycling (around 17:17)` or `### 下午骑行（约 17:17）`, then list distance, duration, and burn only
-5. Step tracking must use one level-2 heading only:
-   `## Today Steps`
-   followed by:
-   `- Total steps: XXXX steps`
-6. Extra modules such as medication are allowed, but they must stay under level-2 headings and contain raw bullet data only
-7. File output must never include evaluation words such as `Assessment`, `Status`, `Summary`, `评估`, `状态`, `总结`, or any emoji
-8. The memory file must never contain chat-style comments, LLM explanations, motivational language, or extra fields that are not part of the template
-9. Chinese and English templates are both valid, but the model must not mix them in the same record block
-
-### Chinese Template
-
-```markdown
-# 2026-03-20 健康记录
-
-### 早餐（约 08:30）
-- 燕麦片 50g → 约 190kcal
-- 脱脂牛奶 250ml → 约 87kcal
-
-### 上午（约 09:45）
-- 饮水量：300ml
-- 累计：300ml/2000ml
-
-### 下午骑行（约 17:17）
-- 距离：10公里
-- 耗时：47分钟
-- 消耗：约 300kcal
-
-## 今日步数
-- 总步数：8500 步
-```
-
-### English Template
+Core template:
 
 ```markdown
 # 2026-03-20 Health Log
 
+## Meals
 ### Breakfast (around 08:30)
-- Oatmeal 50g → approx. 190kcal
-- Skim milk 250ml → approx. 87kcal
+- Oatmeal 50g -> approx. 190kcal
+- Skim milk 250ml -> approx. 87kcal
 
+## Hydration
 ### Morning (around 09:45)
 - Water intake: 300ml
 - Cumulative: 300ml/2000ml
 
+## Exercise
 ### Afternoon Cycling (around 17:17)
 - Distance: 10km
 - Duration: 47min
@@ -192,34 +141,70 @@ If an LLM is used to write local health memories, the same rules should be mirro
 - Total steps: 8500 steps
 ```
 
-## Bilingual Parsing Rules
+Expandable monitoring modules:
 
-- Daily and weekly reports may be generated from either the Chinese template or the English template
-- File headings and field labels are parsed bilingually
-- Internal code and config prefer canonical English values
-- Chinese display output remains fully supported when `language` is set to `zh-CN`
+```markdown
+## Blood Pressure
+### Morning (around 08:00)
+- Blood Pressure: 128/82 mmHg
+- Heart Rate: 72 bpm
 
-## Operational Review Notes
+## Glucose Record
+### After Breakfast (around 10:10)
+- Glucose: 7.1 mmol/L
+- Timing: 2h after breakfast
 
-For security and deployment review, the following should be considered expected behavior rather than hidden behavior:
+## Body Composition
+- Weight: 64.4kg
+- Body Fat: 18.6%
 
-- local PDF and log file creation
-- optional loading of `config/.env` by the bundled shell runners
-- optional webhook delivery
-- optional Tavily search usage
-- optional opt-in fallback font download when `ALLOW_RUNTIME_FONT_DOWNLOAD` is enabled
+## Biochemistry
+- ALT: 34 U/L
+- AST: 28 U/L
+```
+
+Forbidden content:
+
+- `Assessment`
+- `Status`
+- `Summary`
+- motivational filler
+- debug notes
+- system logs
+- tables inside daily memory files
+
+## Monthly Report Expectations
+
+The monthly report now includes:
+
+- macro adherence radar
+- symptom and medication heatmap
+- 30-day weight and BMR trend
+- condition-specific specialty charts
+- AI monthly review
+- follow-up reminders
+- residence-aware hospital suggestions
+
+If the user manages multiple conditions, the monthly report should combine them instead of collapsing to a single narrow perspective.
+
+## Font Fallback
+
+Preferred Chinese font path:
+
+- `assets/NotoSansSC-VF.ttf`
+
+If it is missing:
+
+- the skill may switch to an English-compatible rendering path
+- the output adds a rendering notice
+- users who need Chinese PDF output should download the font from the project repository
 
 ## Changelog
 
-### v1.3.5 — 2026-03-21
+### v1.4.0 - 2026-03-21
 
-- Added automatic English PDF fallback when `assets/NotoSansSC-VF.ttf` is missing for Chinese-source reports, using a temporary exported English memory mirror and an explicit rendering notice
-- Kept runtime font download opt-in only, with documentation and metadata aligned to the actual installation and runtime behavior
-- Updated release metadata, config examples, and documentation versioning for the 1.3.5 release
-
-### v1.3.0 — 2026-03-20
-
-- Added a shared bilingual language layer for prompts, parsing, PDF rendering, and shell delivery
-- Added bilingual markdown parsing for meals, hydration, exercise, steps, symptoms, and custom sections
-- Hardened the Memory Write Protocol with Chinese and English templates and stronger anti-commentary rules
-- Updated metadata, config examples, and documentation to align with the bilingual release
+- Added monthly reporting
+- Added weekly and monthly symptom and medication heatmaps
+- Added monthly weight and BMR trend output
+- Added residence-aware monthly medical planning
+- Refreshed README, README_ZH, SKILL metadata, and package metadata

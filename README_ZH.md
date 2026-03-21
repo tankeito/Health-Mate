@@ -1,341 +1,247 @@
-[English](README.md) | 中文
+[English Guide](README.md)
 
-# 🏥 Health-Mate 个人健康管家
+# Health-Mate
 
-> **您的智能健康伴侣，专为 OpenClaw 打造**
-> 
-> *将日常健康习惯转化为可执行的洞察。精准追踪营养、饮水、运动与体重变化。生成 AI 驱动的专业 PDF 报告—所有数据 100% 私有，完全本地运行。*
+> 面向 OpenClaw 的本地优先双语健康报告工具。
 
-[![Version](https://img.shields.io/badge/version-1.3.5-blue.svg)](https://github.com/tankeito/Health-Mate/releases)
+[![Version](https://img.shields.io/badge/version-1.4.0-blue.svg)](https://github.com/tankeito/Health-Mate/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![OpenClaw](https://img.shields.io/badge/OpenClaw-Skill-green.svg)](https://openclaw.ai)
+[![OpenClaw Skill](https://img.shields.io/badge/OpenClaw-Skill-green.svg)](https://openclaw.ai)
 
----
+## 项目概览
 
-## 🌟 项目概述
+Health-Mate 会把结构化 Markdown 健康记录转换成更适合阅读和存档的 PDF 报告。
 
-Health-Mate 是一款**生产就绪的双语健康管理技能**，专为 OpenClaw AI 助手平台独家打造。源于让个人健康追踪既**强大又隐私优先**的愿景，Health-Mate 填补了休闲健身应用与临床健康监测系统之间的空白。
+- 日报：综合评分、饮食、饮水、运动、用药、AI 点评、风险预警、次日方案
+- 周报：3 环概览、症状与用药热力图、趋势图、营养结构图、本周复盘、下周行动
+- 月报：宏观依从性雷达图、热力图、30 天体重与基础代谢趋势、专科图表、AI 月度研判、复查提醒、门诊建议
+- 多病种支持：胆结石、高血压、糖尿病、健身减脂，以及多病种联合管理
+- 自定义模块：用药记录、监测模块、自定义评分模块都可以写入 `user_config.json`
+- 字体兜底：缺少中文字体时，可自动走英文兼容渲染，并在 PDF 中附加说明
 
-### Health-Mate 的独特之处
+## 1.4.0 版本重点
 
-与那些收割用户数据的云端健康追踪器不同，Health-Mate 完全在您的本地机器上运行。每一次热量计算、每一次饮水提醒、每一条 AI 生成的健康洞察，都在**您的硬件上离线完成**。您拥有健康旅程的完全所有权，同时享受企业级功能：
+- 新增月报 PDF 流程
+- 新增周报症状与用药热力图
+- 新增月报 30 天体重与基础代谢趋势图
+- 新增月报症状分布图与脂肪/碳水箱线图
+- 新增基于常居地的月报复查提醒与门诊建议
+- 增强了 LLM 失败时的本地回退逻辑，确保输出仍基于真实数据
+- shell 运行脚本不再内置 `MEMORY_DIR` 兜底路径，必须显式配置
 
-- **🔒 隐私至上设计**：除非您显式配置 Webhook 端点用于报告推送，否则数据永远不会离开您的机器
-- **🧠 AI 驱动洞察**：大语言模型集成提供个性化健康点评和次日行动方案
-- **📊 专业可视化**：Matplotlib 渲染图表（营养环形图、饮水柱状图、趋势线）媲美高端智能手表应用
-- **🌐 双语卓越体验**：从解析逻辑到 PDF 输出再到文档，中文/英文完全对等
-- **⚙️ 病理智能协议**：预配置的胆结石、糖尿病、高血压、减脂目标专用方案
-- **📬 灵活推送**：支持钉钉、飞书、Telegram，或纯本地运行
+## 报告内容
 
-### Health-Mate 适合谁？
+### 健康日报
 
-- **慢性病管理者**：需要精准宏量营养素追踪的胆结石、糖尿病、高血压患者
-- **健身爱好者**：追求结构化减脂或增肌计划的运动员和健身人群
-- **隐私倡导者**：拒绝将个人数据拱手让给云端公司的健康意识用户
-- **OpenClaw 高级用户**：构建个性化 AI 助手生态系统的开发者和爱好者
+- 今日综合评分与权重模块评分
+- 进食、饮水、运动、用药详情
+- AI 点评与本地规则回退
+- 风险预警
+- 次日可执行方案
 
----
+### 健康周报
 
-## ⚠️ 隐私与安全警告
+- 本周健康指标概览
+- 症状与用药热力图
+- 体重、热量、营养、步数、饮水趋势图
+- 本周亮点、待改进项、下周重点
+- 附加监测模块汇总
 
-**Health-Mate 从本地 `MEMORY_DIR` 目录读取健康数据。仅在您显式配置 Webhook 端点时，生成的 PDF 报告才会推送至外部平台（钉钉/飞书/Telegram）。**
+### 健康月报
 
-**安全建议**：
-- ✅ 确保完全信任所配置的 Webhook 接收端
-- ✅ 测试时建议在沙箱或隔离环境中使用
-- ✅ 切勿将 `config/.env` 或 `config/user_config.json` 提交到公开仓库
-- ✅ 定期检查 Webhook 访问日志，发现异常调用
+- 第 1 页：宏观依从性雷达图、症状与用药热力图、30 天体重与基础代谢趋势图
+- 第 2 页：病种专项图表，如胆结石脂肪/症状关系、高血压箱线图、血糖趋势、体脂趋势、自定义指标图
+- 第 3 页：AI 月度病情研判、复查提醒、医院与门诊建议
 
----
+## 快速开始
 
-## ✨ 核心特性
-
-| 特性 | 说明 |
-|------|------|
-| 📝 **记忆落盘铁律** | 强制执行标准化 Markdown 结构，无 Emoji、无点评、仅纯净数据，确保解析可靠性 |
-| 🌐 **双语支持** | 中文/英文完全对等，支持双语解析、提示词、PDF 渲染及文档 |
-| 📊 **可视化 PDF 报告** | 日报 + 周报双系统，Matplotlib 图表（营养环形图、饮水柱状图、趋势追踪） |
-| 🤖 **AI 健康点评** | 基于大模型的个性化健康洞察与次日行动方案 |
-| 📬 **多通道推送** | 支持钉钉/飞书/Telegram，通过可配置 Webhook 可选推送 |
-| 🔒 **本地优先处理** | 所有分析与 PDF 生成均在本地完成—除非配置 Webhook，否则数据不出域 |
-
----
-
-## 🆕 1.3.5 更新重点
-
-- **多病种配置**：`user_config.json` 现已支持 `conditions`、`primary_condition` 和兼容旧版的 `condition`。日报、周报、LLM 提示词以及本地回退逻辑都会基于完整病种集合判断。
-- **动态回退 + Tavily 检索**：专家点评、次日方案和周报回退不再使用固定模板文案。配置 `TAVILY_API_KEY` 后，本地回退也可以结合检索结果补充建议。
-- **评分模块可完全自定义**：默认内置“用药情况”，并支持追加如“生化情况”等自定义模块，既可参与评分，也会在日报/周报/PDF 中动态输出。
-- **周报内容增强**：周报新增个人信息、亮点、待改进项、下周重点、最佳日/重点复盘日，以及额外监测项目汇总。
-- **首次初始化更清晰**：`scripts/init_config.py` 现会引导用户完成多病种选择、主目标选择、权重配置、用药/自定义模块配置，并把所有设置写入 `config/user_config.json`。
-- **中文字体缺失时自动英文回退**：当 `assets/NotoSansSC-VF.ttf` 不存在且原始 memory 为中文时，系统会自动导出临时英文 memory 并生成英文 PDF，同时在报告中追加说明。
-
----
-
-## 🚀 快速开始
-
-### 步骤 1：安装
+### 1. 安装依赖
 
 ```bash
-# 进入 OpenClaw skills 目录
-cd ~/.openclaw/workspace/skills
-
-# 克隆仓库
 git clone https://github.com/tankeito/Health-Mate.git health-mate
-
-# 安装 Python 依赖
 cd health-mate
 pip install -r requirements.txt
 ```
 
-### 步骤 2：配置环境变量
+### 2. 配置运行环境
+
+可以新建 `config/.env`，也可以在你自己的运行环境里直接设置：
 
 ```bash
-# 进入配置目录
-cd config
-
-# 复制环境变量模板
-cp .env.example .env
-
-# 编辑 .env 文件
-nano .env
+MEMORY_DIR="/你的健康记录目录绝对路径"
 ```
 
-**必填环境变量**：
-```bash
-MEMORY_DIR="/root/.openclaw/workspace/memory"
-```
+可选能力：
 
-**可选（用于报告推送）**：
 ```bash
-DINGTALK_WEBHOOK="https://oapi.dingtalk.com/robot/send?access_token=xxx"
-FEISHU_WEBHOOK="https://open.feishu.cn/open-apis/bot/v2/hook/xxx"
-TELEGRAM_BOT_TOKEN="YOUR_BOT_TOKEN"
-TELEGRAM_CHAT_ID="YOUR_CHAT_ID"
+TAVILY_API_KEY="tvly-..."
+DINGTALK_WEBHOOK="https://..."
+FEISHU_WEBHOOK="https://..."
+TELEGRAM_BOT_TOKEN="..."
+TELEGRAM_CHAT_ID="..."
 REPORT_WEB_DIR="/var/www/html/reports"
-REPORT_BASE_URL="https://your-domain.com"
+REPORT_BASE_URL="https://example.com/reports"
+ALLOW_RUNTIME_FONT_DOWNLOAD="false"
 ```
 
-如果本地缺少 `assets/NotoSansSC-VF.ttf`，中文 memory 生成的报告会自动回退为英文 PDF，并在报告中提示原因。若需要恢复中文 PDF，请从 [Health-Mate GitHub 仓库](https://github.com/tankeito/Health-Mate) 下载字体后放到 `assets/NotoSansSC-VF.ttf`。
+注意：
 
-### 步骤 3：初始化用户档案
+- `MEMORY_DIR` 必填
+- shell 脚本在 `MEMORY_DIR` 缺失时会直接退出
+- 只有显式配置了 Tavily、Webhook，或明确允许运行时字体下载时，才会发生外网请求
+
+### 3. 首次运行配置向导
 
 ```bash
-# 运行交互式初始化脚本
-python3 scripts/init_config.py
+python scripts/init_config.py
 ```
 
-脚本将引导您完成：
-1. 姓名与性别
-2. 身高、当前体重、目标体重
-3. 健康状况（胆结石/糖尿病/高血压/减脂等）
-4. 每日饮水目标
-5. 每日步数目标
-6. 报告推送偏好设置
+向导会把配置统一写入 `config/user_config.json`，包括：
 
-### 步骤 4：测试运行
+- 用户基础信息
+- 多病种选择与主病种
+- 评分模块与权重
+- 用药是否参与评分
+- 自定义监测模块
+- 月报门诊建议用到的常居地配置
+
+### 4. 生成报告
 
 ```bash
-# 生成指定日期的日报
-python3 scripts/health_report_pro.py /root/.openclaw/workspace/memory/2026-03-20.md 2026-03-20
+python scripts/health_report_pro.py /path/to/memory/2026-03-20.md 2026-03-20
+python scripts/weekly_report_pro.py 2026-03-20
+python scripts/monthly_report_pro.py 2026-03-20
 ```
 
----
+shell 运行脚本：
 
-## 📝 记忆落盘铁律
+```bash
+scripts/daily_health_report_pro.sh
+scripts/weekly_health_report_pro.sh
+scripts/monthly_health_report_pro.sh
+```
 
-**Health-Mate 强制执行严格的健康日志 Markdown 结构。写入 `MEMORY_DIR` 时，AI 助理必须像“无情的数据记录仪”一样工作。点评与建议只能出现在聊天框里，绝不能写入文件。**
+### 5. 英文镜像与英文报告
 
-### 强制规则
+如果你需要英文版 memory 或英文版 PDF 渲染链路，可以使用：
 
-1. **餐次/饮水/运动** 必须且只能使用带时间的三级标题：`### 标签（约 HH:MM）` 或 `### Label (around HH:MM)`
-2. **食物行** 必须使用标准箭头格式：`- 食物 份量 → 约 XXXkcal`
-3. **饮水块** 必须且只能包含两行，不能额外追加任何状态或说明：
-   ```
-   - 饮水量：XXml
-   - 累计：XXml/目标ml
-   ```
-4. **单次运动** 必须使用带运动类型的三级标题，例如 `### 下午骑行（约 17:17）`，其下只列距离、耗时、消耗
-5. **步数记录** 必须且只能使用一个二级标题：
-   ```
-   ## 今日步数
-   - 总步数：XXXX 步
-   ```
-6. **扩展模块**（如用药记录）允许使用二级标题，但仅包含原始列表数据
-7. **禁止出现** `评估`、`状态`、`总结`、`Assessment`、`Status`、`Summary` 或任何 Emoji
-8. **禁止聊天式评论**、LLM 解释、鼓励性语言或模板外字段出现在文件中
-9. **单块单语言**：中文和英文均有效，但同一块内禁止混用
+```bash
+python scripts/export_memory_en.py
+```
 
-建议将同一份协议同时写入 `soul.md` 与 `SKILL.md`，确保运行时提示与技能说明完全一致。
+这个脚本属于项目的一部分，建议纳入 Git 管理。
 
-### 中文模板（标准格式）
+## 字体说明
+
+推荐把中文字体放在：
+
+- `assets/NotoSansSC-VF.ttf`
+
+如果该字体缺失：
+
+- 报告会自动切换到英文兼容渲染路径
+- PDF 会追加渲染说明
+- 如果你需要中文 PDF，请从项目仓库下载字体并放到 `assets/NotoSansSC-VF.ttf`
+
+仓库地址：
+
+- [Health-Mate GitHub](https://github.com/tankeito/Health-Mate)
+
+## Memory 写入协议
+
+当助手往 `MEMORY_DIR` 写入内容时，必须像“严格记录仪”一样工作。
+
+硬性规则：
+
+- 不允许写点评、建议、总结、Emoji 或聊天腔内容
+- 餐次、饮水、用药、运动事件必须使用三级标题并带时间
+- 饮水块必须保持极简
+- 步数必须固定写在一个二级标题块里
+- 监测模块必须使用稳定的二级标题
+- 同一个记录块里不要混用中英文
+
+示例：
 
 ```markdown
 # 2026-03-20 健康记录
 
-### 早餐（约 08:30）
-- 燕麦片 50g → 约 190kcal
-- 脱脂牛奶 250ml → 约 87kcal
+## 体重记录
+- 晨起空腹：64.4kg
 
-### 上午（约 09:45）
+## 饮水记录
+### 上午（约 08:45）
 - 饮水量：300ml
 - 累计：300ml/2000ml
 
-### 下午骑行（约 17:17）
-- 距离：10 公里
-- 耗时：47 分钟
-- 消耗：约 300kcal
+## 饮食记录
+### 早餐（约 08:50）
+- 燕麦片 50g -> 约 190kcal
+- 脱脂牛奶 250ml -> 约 87kcal
+
+## 运动记录
+### 下午骑行（约 17:10）
+- 距离：10.2km
+- 耗时：42min
+- 消耗：约 290kcal
 
 ## 今日步数
-- 总步数：8500 步
+- 总步数：8200 步
 ```
 
----
+扩展监测模块示例：
 
-## 🤖 命令列表
+```markdown
+## 血压记录
+### 上午（约 08:00）
+- 血压：128/82 mmHg
+- 心率：72 bpm
 
-| 命令 | 说明 | 示例 |
-|------|------|------|
-| `/health` | 生成日报 PDF | `/health 2026-03-20` |
-| `/health summary` | 生成周报 PDF | `/health summary 2026-03-20` |
+## 血糖记录
+### 早餐后（约 10:10）
+- 血糖：7.1 mmol/L
+- 时点：早餐后 2 小时
 
----
+## 身体成分
+- 体重：64.4kg
+- 体脂率：18.6%
 
-## ⚙️ 环境变量清单
-
-| 变量名 | 必填 | 说明 | 示例值 |
-|--------|------|------|--------|
-| `MEMORY_DIR` | ✅ 是 | 存放 Markdown 健康日志的目录 | `/root/.openclaw/workspace/memory` |
-| `TAVILY_API_KEY` | ❌ 否 | Tavily API 密钥，用于点评/方案/周报建议的检索增强回退 | `tvly-dev-xxx` |
-| `DINGTALK_WEBHOOK` | ❌ 否 | 钉钉机器人 Webhook，用于报告推送 | `https://oapi.dingtalk.com/...` |
-| `FEISHU_WEBHOOK` | ❌ 否 | 飞书机器人 Webhook，用于报告推送 | `https://open.feishu.cn/...` |
-| `TELEGRAM_BOT_TOKEN` | ❌ 否 | Telegram Bot Token，用于报告推送 | `YOUR_BOT_TOKEN` |
-| `TELEGRAM_CHAT_ID` | ❌ 否 | Telegram Chat ID，用于报告推送 | `YOUR_CHAT_ID` |
-| `REPORT_WEB_DIR` | ❌ 否 | PDF 输出的本地目录 | `/var/www/html/reports` |
-| `REPORT_BASE_URL` | ❌ 否 | PDF 下载链接的公共域名 | `https://your-domain.com` |
-
----
-
-## 📊 报告结构
-
-### 日报结构
-
-1. **封面页** – 日期、综合评分、星级
-2. **分项评分** – 6 维度（饮食/饮水/体重/症状/运动/依从性）
-3. **健康指标** – BMI、BMR、TDEE 计算
-4. **营养汇总** – 热量与四大营养素（碳水/蛋白质/脂肪/纤维）
-5. **饮水时间轴** – 全天饮水记录
-6. **三餐明细** – 食物项、份量、热量估算
-7. **运动记录** – 活动类型、时长、消耗
-8. **AI 点评** – 个性化健康洞察与建议
-9. **风险预警** – 基于记录数据的健康风险评估
-10. **次日方案** – 饮食/饮水/运动建议清单
-
-### 周报结构
-
-1. **核心概览** – 周平均分、最佳/最差日
-2. **趋势图表** – 体重波动、每日热量摄入、步数统计
-3. **营养环形图** – 平均宏量营养素分布
-4. **AI 深度分析** – 跨天模式识别与干预建议
-
----
-
-## 📦 项目结构
-
-```
-health-mate/
-├── scripts/
-│   ├── health_report_pro.py      # 日报生成器
-│   ├── weekly_report_pro.py      # 周报生成器
-│   ├── export_memory_en.py       # 将中文 memory 规范化导出为英文测试样本
-│   ├── pdf_generator.py          # PDF 渲染引擎
-│   ├── weekly_pdf_generator.py   # 周报 PDF 渲染
-│   ├── i18n.py                   # 双语语言层
-│   ├── constants.py              # 食物热量数据库
-│   ├── init_config.py            # 交互式配置向导
-│   ├── daily_health_report_pro.sh    # 定时任务脚本（日报）
-│   └── weekly_health_report_pro.sh   # 定时任务脚本（周报）
-├── config/
-│   ├── user_config.json          # 用户健康档案
-│   ├── .env                      # 环境变量（已加入 gitignore）
-│   ├── .env.example              # 环境变量模板
-│   ├── pdf_style_config.json     # PDF 样式配置
-│   └── user_config.example.json  # 档案模板
-├── assets/
-│   └── NotoSansSC-VF.ttf         # 可选的本地中文字体文件
-├── logs/                         # 执行日志
-├── reports/                      # 生成的 PDF 报告
-├── README.md                     # 英文文档
-├── README_ZH.md                  # 中文文档
-├── SKILL.md                      # OpenClaw 技能定义
-└── requirements.txt              # Python 依赖
+## 生化记录
+- ALT：34 U/L
+- AST：28 U/L
 ```
 
----
+禁止内容：
 
-## 🔐 隐私与数据保护
+- `评估`
+- `状态`
+- `总结`
+- 鼓励型废话
+- 调试日志
+- 系统日志
+- 日常记录文件里的表格
 
-### 受 `.gitignore` 保护的文件
+## 运行时安全说明
 
-以下文件**严禁提交**到公开仓库：
+本地行为：
 
-- `config/user_config.json` – 个人健康数据
-- `config/.env` – Webhook Token 和私密配置
-- `reports/*.pdf` – 生成的健康报告
-- `logs/*.log` – 执行日志
+- 从 `MEMORY_DIR` 读取 Markdown 记录
+- shell 脚本模式下会读取 `config/.env`
+- 将 PDF 输出到 `reports/`
+- 将日志写入 `logs/`
+- 在需要时可能生成临时英文 memory 镜像
 
-### 推荐实践
+联网行为：
 
-1. **私有仓库** – Fork 时设置为 Private
-2. **定期备份** – 备份配置文件到安全存储
-3. **密钥轮换** – 每 3-6 个月更新 Webhook Token
-4. **沙箱测试** – 先在隔离环境中测试
-5. **日志审计** – 定期检查 Webhook 访问日志
+- 仅在配置了 `TAVILY_API_KEY` 时调用 Tavily
+- 仅在配置了对应凭据时推送 Webhook
+- 仅在 `ALLOW_RUNTIME_FONT_DOWNLOAD=true` 时允许运行时下载字体
 
----
+## 更新日志
 
-## 🔄 版本历史
+### v1.4.0 - 2026-03-21
 
-### v1.3.5 — 2026-03-21
-
-- 🌐 **字体缺失英文回退**：当 `assets/NotoSansSC-VF.ttf` 缺失时，中文来源的日报和周报会自动导出临时英文 memory，并生成带说明的英文 PDF
-- 🔒 **安装与安全说明对齐**：文档已同步当前真实行为：必须显式设置 `MEMORY_DIR`、字体运行时下载默认关闭、不再存在隐藏的 memory 默认回退
-- 📈 **报告细节统一**：周报概览文案、趋势图标题、渲染说明已在文本报告、PDF 和元数据中统一
-- 🏷️ **版本更新**：文档、配置示例和技能元数据统一升级到 `1.3.5`
-
-### v1.3.0 — 2026-03-20
-
-- 🌐 **双语架构**：新增 i18n.py 统一中英文语言层
-- 📝 **记忆协议**：强化反点评规则，提供中英双模板
-- 🔧 **解析增强**：改进双语餐次/饮水/运动块检测
-- 🎨 **PDF 修复**：解决 PDF 中 Emoji 渲染方块乱码 (☒) 问题
-- 💊 **用药追踪**：支持自定义模块（如用药记录）
-- 📚 **文档重构**：完成中英文 README 专业化重写
-
-### v1.2.0 — 2026-03-20
-
-- 🎯 **动态目标**：重构病理参数支持灵活健康目标（如减脂）
-- 🌍 **多语言文档**：新增双语文档和自定义模块支持
-- 🧹 **严格协议**：重写记忆落盘铁律锁定 LLM 输出
-- 🐛 **Bug 修复**：修复 PDF Emoji 渲染和解析容错问题
-
-### v1.1.x — 早期版本
-
-- 周报系统上线（极坐标图表 + 趋势分析）
-- Matplotlib 可视化（营养环形图、饮水柱状图、进度追踪）
-- 中文字体按需手动放入 `assets/`，运行时下载默认关闭
-- 隐私合规更新与安全声明
-
----
-
-## 📄 许可证
-
-MIT License – 详见 [LICENSE](LICENSE) 文件。
-
----
-
-## 📞 技术支持
-
-- **GitHub Issues**: https://github.com/tankeito/Health-Mate/issues
-- **电子邮箱**: tqd354@gmail.com
-- **项目仓库**: https://github.com/tankeito/Health-Mate
+- 新增月报
+- 周报与月报新增症状/用药热力图
+- 新增月报病种专项图表与体重/BMR 趋势图
+- 新增基于常居地的医疗规划输出
+- 更新 README、README_ZH、SKILL 元数据与包元数据

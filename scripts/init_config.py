@@ -242,6 +242,11 @@ activity_level = ask_choice(localize(locale, "请选择活动系数", "Choose th
 dislikes = ask_optional_list(localize(locale, "尽量避免的食物（可选，逗号分隔）", "Foods to avoid when possible (optional, comma-separated)"))
 allergies = ask_optional_list(localize(locale, "过敏食物（可选，逗号分隔）", "Food allergies (optional, comma-separated)"))
 favorite_fruits = ask_optional_list(localize(locale, "常吃或喜欢的水果（可选，逗号分隔）", "Favorite fruits (optional, comma-separated)"))
+print(localize(locale, "为了支持月报中的复查提醒与本地医院推荐，请继续填写常居地。", "To support follow-up reminders and local hospital recommendations in the monthly report, please add your residence details."))
+residence_country = ask_text(localize(locale, "常居国家（例如：中国）", "Residence country (for example: China)"), localize(locale, "请输入国家。", "Please enter a country."))
+residence_province = ask_text(localize(locale, "常居省份 / 州（例如：上海）", "Residence province / state (for example: Shanghai)"), localize(locale, "请输入省份或州。", "Please enter a province or state."))
+residence_city = ask_text(localize(locale, "常居城市（例如：上海）", "Residence city (for example: Shanghai)"), localize(locale, "请输入城市。", "Please enter a city."))
+residence_district = prompt_input(localize(locale, "常居区县 / 区域（可选）", "Residence district / area (optional)"))
 
 print(localize(locale, "\n[步骤 3/4] AI、评分模块和权重", "\n[Step 3/4] AI mode, modules, and weights"))
 print(localize(locale, "说明：", "Notes:"))
@@ -296,7 +301,7 @@ while ask_yes_no(localize(locale, "添加一个自定义模块吗？", "Add a cu
     )
 
 config = {
-    "config_version": "1.3.5",
+    "config_version": "1.4.0",
     "language": locale,
     "user_profile": {
         "name": name,
@@ -311,6 +316,13 @@ config = {
         "activity_level": activity_level,
         "water_target_ml": water_target,
         "step_target": step_target,
+        "residence": {
+            "country": residence_country,
+            "province": residence_province,
+            "city": residence_city,
+            "district": residence_district,
+            "display_name": ("".join([item for item in [residence_province, residence_city, residence_district] if item]) if locale == "zh-CN" else ", ".join([item for item in [residence_district, residence_city, residence_province, residence_country] if item])),
+        },
         "dietary_preferences": {
             "dislike": dislikes,
             "allergies": allergies,
@@ -343,7 +355,8 @@ for line in [
     localize(locale, "1. 每日记录继续写在 Markdown 日记中，系统会优先读取 user_config.json。", "1. Keep daily records in Markdown. The runtime will read user_config.json first."),
     localize(locale, "2. 如果启用了“用药情况”，请在日记里使用二级标题“## 用药情况”并记录时间、药名、剂量。", "2. If Medication is enabled, use a level-2 heading such as '## Medication' and record time, medicine name, and dosage."),
     localize(locale, "3. 自定义模块请使用完全一致的二级标题，例如“## 生化情况”，周报和 PDF 会动态汇总。", "3. For custom modules, use the exact same level-2 heading such as '## Biochemistry'. Weekly reports and PDFs will aggregate them dynamically."),
-    localize(locale, "4. 多病种同时启用时，日报/周报/LLM/Tavily 回退都会基于全部已选目标生成。", "4. When multiple conditions are enabled, daily reports, weekly reports, LLM prompts, and Tavily-assisted fallback all use the full condition set."),
-    localize(locale, "5. 所有配置都已经存入 user_config.json，之后也可以直接手动编辑。", "5. Everything is now stored in user_config.json, and you can edit it directly later."),
+    localize(locale, "4. 多病种同时启用时，日报/周报/月报/LLM/Tavily 回退都会基于全部已选目标生成。", "4. When multiple conditions are enabled, daily, weekly, monthly, LLM, and Tavily-assisted fallback generation all use the full condition set."),
+    localize(locale, "5. 月报中的医院推荐会优先使用“常居地”字段，请在搬家或长期驻留地变化后同步更新。", "5. Monthly hospital suggestions use the residence fields first, so update them whenever your long-term location changes."),
+    localize(locale, "6. 所有配置都已经存入 user_config.json，之后也可以直接手动编辑。", "6. Everything is now stored in user_config.json, and you can edit it directly later."),
 ]:
     print(line)

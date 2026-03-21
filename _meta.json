@@ -2,8 +2,8 @@
     "name": "health-mate",
     "display_name": "Health-Mate",
     "type": "python/app",
-    "version": "1.3.5",
-    "description": "Health-Mate is an executable bilingual Chinese/English OpenClaw health-management skill with local markdown parsing, clearer weekly chart labeling, locale-aware PDF generation, and automatic English fallback when bundled local Chinese font file 'assets/NotoSansSC-VF.ttf' is missing. SECURITY DISCLOSURE: 1. It requires 'MEMORY_DIR' to be explicitly set and exits if that variable is missing. 2. The bundled shell runners read 'config/.env' when present, then write local reports/logs during normal execution. 3. Outbound network requests only occur when webhook/Tavily credentials are configured, or when the user explicitly enables runtime font download via 'ALLOW_RUNTIME_FONT_DOWNLOAD'.",
+    "version": "1.4.0",
+    "description": "Health-Mate is an executable bilingual OpenClaw health-management skill with local Markdown parsing, daily/weekly/monthly PDF generation, weekly and monthly heatmaps, monthly specialty charts, residence-aware medical planning, and optional webhook delivery. SECURITY DISCLOSURE: 1. MEMORY_DIR must be explicitly set; there is no implicit fallback path. 2. The bundled shell runners read config/.env when present and write local reports/logs during normal execution. 3. Outbound network requests occur only when webhook or Tavily credentials are configured, or when runtime font download is explicitly enabled.",
     "author": "tankeito",
     "email": "tqd354@gmail.com",
     "license": "MIT",
@@ -25,37 +25,44 @@
         "http_request"
     ],
     "env": {
-        "MEMORY_DIR": "Required. Explicitly set this to the markdown health-memory directory that the skill should read. The skill now exits if MEMORY_DIR is missing.",
-        "TAVILY_API_KEY": "Optional. Used for Tavily-assisted local fallback in expert commentary, next-day planning, and weekly review suggestions.",
-        "DINGTALK_WEBHOOK": "Optional. If set, the final report payload can be sent to DingTalk.",
-        "FEISHU_WEBHOOK": "Optional. If set, the final report payload can be sent to Feishu.",
-        "TELEGRAM_BOT_TOKEN": "Optional. If set together with TELEGRAM_CHAT_ID, the final report payload can be sent to Telegram.",
-        "TELEGRAM_CHAT_ID": "Optional. Required only when Telegram delivery is enabled.",
+        "MEMORY_DIR": "Required. Explicitly set this to the Markdown health-memory directory the skill should read.",
+        "TAVILY_API_KEY": "Optional. Enables Tavily-assisted fallback guidance and monthly hospital lookup hints.",
+        "DINGTALK_WEBHOOK": "Optional. Enables DingTalk delivery.",
+        "FEISHU_WEBHOOK": "Optional. Enables Feishu delivery.",
+        "TELEGRAM_BOT_TOKEN": "Optional. Enables Telegram delivery when TELEGRAM_CHAT_ID is also configured.",
+        "TELEGRAM_CHAT_ID": "Optional. Required only for Telegram delivery.",
         "REPORT_WEB_DIR": "Optional. Local directory where generated PDFs can be copied for public serving.",
         "REPORT_BASE_URL": "Optional. Public base URL used to build downloadable PDF links.",
-        "ALLOW_RUNTIME_FONT_DOWNLOAD": "Optional. Disabled by default. Set to true only if you explicitly allow fallback download of NotoSansSC-VF.ttf when no bundled/system CJK font is available."
+        "ALLOW_RUNTIME_FONT_DOWNLOAD": "Optional. Disabled by default. Set to true only if you explicitly allow runtime fallback download of NotoSansSC-VF.ttf."
     },
     "commands": [
         {
             "trigger": "/health",
             "description": "Generate the localized daily Health-Mate report.",
             "usage": "/health [date]",
-            "example": "/health 2026-03-15"
+            "example": "/health 2026-03-20"
         },
         {
             "trigger": "/health summary",
-            "description": "Generate the localized weekly Health-Mate review.",
+            "description": "Generate the localized weekly Health-Mate report.",
             "usage": "/health summary [date]",
-            "example": "/health summary 2026-03-15"
+            "example": "/health summary 2026-03-20"
+        },
+        {
+            "trigger": "/health month",
+            "description": "Generate the localized monthly Health-Mate report.",
+            "usage": "/health month [date]",
+            "example": "/health month 2026-03-20"
         }
     ],
     "features": [
         "Executable local Python scripts and shell runners, not an instruction-only prompt bundle",
         "Bilingual Chinese/English parsing, prompts, and report generation",
-        "Strict memory-write protocol for reliable markdown parsing",
-        "Localized daily and weekly PDF reports with charts, multi-condition support, and automatic English fallback when the bundled local Chinese font is unavailable",
-        "Custom scoring modules and additional monitoring sections including medication and lab-style sections",
-        "Optional outbound network behavior limited to Tavily, webhook delivery, and explicit opt-in fallback font download"
+        "Localized daily, weekly, and monthly PDF reports with weekly/monthly heatmaps and monthly specialty charts",
+        "Residence-aware monthly medical follow-up guidance and clinic suggestions",
+        "Custom scoring modules and additional monitoring sections including medication and lab-style modules",
+        "Optional outbound network behavior limited to Tavily, webhook delivery, and explicit opt-in font download",
+        "English-compatible rendering fallback when the bundled Chinese font is unavailable"
     ],
     "tags": [
         "health",

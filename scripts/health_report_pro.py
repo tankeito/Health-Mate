@@ -418,9 +418,11 @@ def normalize_user_config(raw_config):
         existing = normalized_condition_standards.get(canonical_key, {})
         normalized_condition_standards[canonical_key] = deep_merge_dict(existing, value)
     merged["condition_standards"] = deep_merge_dict(base.get("condition_standards", {}), normalized_condition_standards)
-    merged["config_version"] = "1.3.5"
+    merged["config_version"] = "1.4.0"
     merged["ai_generation"] = deep_merge_dict(clone_ai_generation_defaults(), raw_config.get("ai_generation", {}))
     merged["scoring"] = {"modules": normalize_scoring_modules(raw_config, locale)}
+    merged.setdefault("integrations", {"tavily_api_key": ""})
+    merged["integrations"] = deep_merge_dict({"tavily_api_key": ""}, merged.get("integrations", {}))
     merged.setdefault("report_preferences", {"append_custom_sections": True})
     merged["report_preferences"] = deep_merge_dict({"append_custom_sections": True}, merged.get("report_preferences", {}))
     return merged
@@ -448,6 +450,26 @@ def module_is_enabled(config, module_id):
 
 def get_generation_settings(config, key):
     return deep_merge_dict(clone_ai_generation_defaults().get(key, {}), config.get("ai_generation", {}).get(key, {}))
+
+
+def get_tavily_api_key(config=None):
+    env_key = str(os.environ.get("TAVILY_API_KEY", "") or "").strip()
+    if env_key:
+        return env_key
+
+    runtime_config = config
+    if runtime_config is None:
+        try:
+            runtime_config = load_user_config()
+        except Exception:
+            runtime_config = {}
+
+    integrations = runtime_config.get("integrations", {}) if isinstance(runtime_config, dict) else {}
+    return str(integrations.get("tavily_api_key") or "").strip()
+
+
+def has_tavily_api_key(config=None):
+    return bool(get_tavily_api_key(config))
 
 
 def generation_source_label(locale, source):
@@ -606,7 +628,7 @@ def prepare_font_compatible_memory(requested_locale, source_dir, default_memory_
 def _get_default_config():
     locale = "zh-CN"
     return {
-        "config_version": "1.3.5",
+        "config_version": "1.4.0",
         "language": "zh-CN",
         "user_profile": {
             "name": "Demo User",
@@ -621,6 +643,13 @@ def _get_default_config():
             "activity_level": 1.2,
             "water_target_ml": 2000,
             "step_target": 8000,
+            "residence": {
+                "country": "China",
+                "province": "",
+                "city": "",
+                "district": "",
+                "display_name": "",
+            },
             "dietary_preferences": {
                 "dislike": ["seafood"],
                 "allergies": ["seafood"],
@@ -640,6 +669,7 @@ def _get_default_config():
         "scoring_weights": {"diet": 0.45, "water": 0.35, "weight": 0.20, "exercise_bonus": 0.10},
         "exercise_standards": {"weekly_target_minutes": 150},
         "ai_generation": clone_ai_generation_defaults(),
+        "integrations": {"tavily_api_key": ""},
         "report_preferences": {"append_custom_sections": True},
     }
 
@@ -1353,6 +1383,151 @@ def run_local_llm(prompt, system_prompt, settings, locale, timeout_key, failure_
     return None
 
 
+SEARCH_NOISE_TERMS = (
+    "返回顶部按钮",
+    "返回顶部",
+    "倍速",
+    "播放",
+    "收藏",
+    "分享",
+    "关注",
+    "交流",
+    "视频",
+    "门诊好评",
+    "累计挂号",
+    "精选内容",
+    "点击展开",
+    "展开全文",
+    "阅读全文",
+    "相关推荐",
+    "立即预约",
+    "在线问诊",
+    "广告",
+)
+SEARCH_BAD_PATTERNS = (
+    r"(?:\[\d+\]){2,}",
+    r"(?:表|图)\s*\d",
+    r"(?:Table|Figure)\s*\d",
+    r"注释[:：]",
+    r"\bDOI\b",
+    r"\bet al\.\b",
+    r"[Α-Ωα-ω]",
+    r"[Ѐ-ӿ]",
+)
+
+
+def strip_search_noise(text):
+    raw = str(text or "")
+    if not raw:
+        return ""
+    raw = re.sub(r"https?://\S+|www\.\S+", "", raw)
+    raw = re.sub(r"(?:\b\d+:\d+\b\s*){1,3}", " ", raw)
+    raw = re.sub(r"^\s*(?:\d+[.)、]\s*)+", "", raw)
+    raw = re.sub(r"^\s*\d+\s+", "", raw)
+    raw = re.sub(r"\[\d+\]", "", raw)
+    raw = re.sub(r"(?:表|图|Table|Figure)\s*[-\d.]+", " ", raw, flags=re.IGNORECASE)
+    raw = re.sub("|".join(re.escape(term) for term in SEARCH_NOISE_TERMS), " ", raw, flags=re.IGNORECASE)
+    raw = re.sub(r"[|<>#@]+", " ", raw)
+    raw = re.sub(r"[•·]{2,}", " ", raw)
+    raw = re.sub(r"[.。…]{4,}", "…", raw)
+    raw = re.sub(r"\s+", " ", raw).strip(" |，,.;；、-")
+    return raw
+
+
+def matches_search_locale(text, locale):
+    cleaned = str(text or "").strip()
+    if not cleaned:
+        return False
+    locale = resolve_locale(locale=locale)
+    if locale == "zh-CN":
+        return len(re.findall(r"[\u4e00-\u9fff]", cleaned)) >= 8
+    return len(re.findall(r"[A-Za-z]{3,}", cleaned)) >= 5
+
+
+def has_actionable_health_keywords(text, locale):
+    cleaned = str(text or "")
+    zh_keywords = ("低脂", "脂肪", "纤维", "饮水", "补水", "运动", "步行", "步数", "症状", "用药", "体重", "血压", "血糖", "胆", "蔬菜", "豆类", "粗粮")
+    en_keywords = ("low-fat", "fat", "fiber", "hydration", "water", "exercise", "walk", "steps", "symptom", "medication", "weight", "blood pressure", "glucose", "vegetable", "whole grain")
+    if resolve_locale(locale=locale) == "zh-CN":
+        return any(keyword in cleaned for keyword in zh_keywords)
+    lowered = cleaned.lower()
+    return any(keyword in lowered for keyword in en_keywords)
+
+
+def has_recipe_guidance_keywords(text, locale):
+    cleaned = str(text or "")
+    zh_keywords = ("低脂", "纤维", "蔬菜", "豆类", "粗粮", "蛋白", "清蒸", "少油", "饱腹")
+    en_keywords = ("low-fat", "fiber", "vegetable", "beans", "whole grain", "protein", "steam", "low oil", "satiety")
+    if resolve_locale(locale=locale) == "zh-CN":
+        return any(keyword in cleaned for keyword in zh_keywords)
+    lowered = cleaned.lower()
+    return any(keyword in lowered for keyword in en_keywords)
+
+
+def has_exercise_guidance_keywords(text, locale):
+    cleaned = str(text or "")
+    zh_keywords = ("步行", "快走", "运动", "活动", "骑行", "拉伸", "饭后")
+    en_keywords = ("walk", "exercise", "activity", "cycling", "stretch", "after dinner")
+    if resolve_locale(locale=locale) == "zh-CN":
+        return any(keyword in cleaned for keyword in zh_keywords)
+    lowered = cleaned.lower()
+    return any(keyword in lowered for keyword in en_keywords)
+
+
+def is_readable_search_excerpt(text, locale):
+    cleaned_text = strip_search_noise(text)
+    if not cleaned_text:
+        return False
+    if cleaned_text.lstrip().startswith(("+", "•")):
+        return False
+    if cleaned_text.rstrip().endswith(("e.g.", "e.g", "for example", "for exampl…")):
+        return False
+    compact = re.sub(r"\s+", "", cleaned_text)
+    if len(compact) < 14:
+        return False
+    if any(re.search(pattern, cleaned_text, re.IGNORECASE) for pattern in SEARCH_BAD_PATTERNS):
+        return False
+    useful_chars = len(re.findall(r"[A-Za-z0-9\u4e00-\u9fff]", compact))
+    weird_chars = len(re.findall(r"[^A-Za-z0-9\u4e00-\u9fff.,;:!?%()（）/+℃ \\-]", cleaned_text))
+    if useful_chars / max(1, len(compact)) < 0.62:
+        return False
+    if weird_chars > max(3, len(compact) // 16):
+        return False
+    if re.search(r"(?:\b\d{2,3}\b[\s,.;]*){3,}", cleaned_text):
+        return False
+    if len(re.findall(r"[，、, ]", cleaned_text)) >= 6 and not re.search(r"[。！？.!?；;:：]", cleaned_text):
+        return False
+    if re.search(r"(好评率|接诊量|平均响应|福報購|人間福報|蔬食譜|蔬知識|蔬新聞|蔬視頻)", cleaned_text, re.IGNORECASE):
+        return False
+    if not has_actionable_health_keywords(cleaned_text, locale):
+        return False
+    return matches_search_locale(cleaned_text, locale)
+
+
+def clean_search_excerpt(text, locale, max_length=140):
+    raw = strip_search_noise(text)
+    if not raw:
+        return ""
+
+    parts = []
+    for sentence in re.split(r"(?<=[。！？!?])\s+|(?<=[.;；])\s+", raw):
+        candidate = sentence.strip(" -")
+        if not candidate:
+            continue
+        if is_readable_search_excerpt(candidate, locale):
+            if len(candidate) <= max_length:
+                return candidate
+            parts.append(candidate)
+
+    if is_readable_search_excerpt(raw, locale):
+        parts.append(raw)
+
+    if not parts:
+        return ""
+    clipped = parts[0][: max_length - 1].rstrip(" ,.;，；、")
+    return clipped + ("…" if len(parts[0]) > max_length else "")
+
+
 def generate_ai_comment(health_data, config):
     """Generate an AI insight, with a local fallback when LLM is unavailable."""
     locale = resolve_locale(config)
@@ -1427,14 +1602,18 @@ def generate_ai_comment(health_data, config):
     else:
         comments.append(t(locale, "fallback_comment_steps_low", value=steps))
 
-    if TAVILY_API_KEY:
-        query = f"{condition_text} daily care tips fat fiber hydration activity"
-        tavily_results = tavily_search(query, max_results=2)
+    if has_tavily_api_key(config):
+        query = (
+            f"{condition_text} 患者教育 低脂 饮水 膳食纤维 运动 日常管理"
+            if locale == "zh-CN"
+            else f"{condition_text} patient education low-fat hydration fiber activity daily care"
+        )
+        tavily_results = tavily_search(query, max_results=2, config=config)
         references = []
         for result in tavily_results:
-            content = re.sub(r'\s+', ' ', str(result.get('content', '') or '')).strip()
+            content = clean_search_excerpt(str(result.get('content', '') or ''), locale, max_length=120)
             if content:
-                references.append(content[:120] + ("..." if len(content) > 120 else ""))
+                references.append(content)
         if references:
             lead = "外部资料补充：" if locale == "zh-CN" else "External note: "
             comments.append(lead + " ".join(references[:2]))
@@ -1443,15 +1622,18 @@ def generate_ai_comment(health_data, config):
     return " ".join(comments), "fallback"
 
 # ==================== AI next-day planning ====================
-def tavily_search(query, max_results=3):
+def tavily_search(query, max_results=3, config=None):
     """Call Tavily for external context when the API key is available."""
     import urllib.request
     url = "https://api.tavily.com/search"
+    api_key = get_tavily_api_key(config)
+    if not api_key:
+        return []
 
     for attempt in range(3):
         try:
             data = json.dumps({
-                "api_key": TAVILY_API_KEY,
+                "api_key": api_key,
                 "query": query,
                 "search_depth": "basic",
                 "max_results": max_results
@@ -1499,15 +1681,23 @@ def generate_ai_plan(health_data, config):
     recipes = []
     exercises = []
 
-    if TAVILY_API_KEY and any(item in shortcomings for item in [t(locale, "shortcoming_fat_low"), t(locale, "shortcoming_fat_high")]):
-        recipe_query = localized_recipe_query(locale, condition_text)
-        recipe_results = tavily_search(recipe_query, max_results=2)
-        recipes = [r.get('content', '') for r in recipe_results[:2]]
+    if has_tavily_api_key(config) and any(item in shortcomings for item in [t(locale, "shortcoming_fat_low"), t(locale, "shortcoming_fat_high")]):
+        recipe_query = localized_recipe_query(locale, condition_text) + (" 患者教育" if locale == "zh-CN" else " patient education")
+        recipe_results = tavily_search(recipe_query, max_results=2, config=config)
+        recipes = [
+            clean_search_excerpt(r.get('content', ''), locale, max_length=120)
+            for r in recipe_results[:2]
+        ]
+        recipes = [item for item in recipes if item and has_recipe_guidance_keywords(item, locale)]
 
-    if TAVILY_API_KEY and t(locale, "shortcoming_exercise_low") in shortcomings:
-        exercise_query = localized_exercise_query(locale, condition_text)
-        exercise_results = tavily_search(exercise_query, max_results=2)
-        exercises = [r.get('content', '') for r in exercise_results[:2]]
+    if has_tavily_api_key(config) and t(locale, "shortcoming_exercise_low") in shortcomings:
+        exercise_query = localized_exercise_query(locale, condition_text) + (" 患者教育" if locale == "zh-CN" else " patient education")
+        exercise_results = tavily_search(exercise_query, max_results=2, config=config)
+        exercises = [
+            clean_search_excerpt(r.get('content', ''), locale, max_length=120)
+            for r in exercise_results[:2]
+        ]
+        exercises = [item for item in exercises if item and has_exercise_guidance_keywords(item, locale)]
 
     preferences = user_profile.get('dietary_preferences', {})
     localized_dislike = localize_profile_list(locale, preferences.get('dislike', []))
@@ -1598,9 +1788,9 @@ def generate_ai_plan(health_data, config):
     if t(locale, "shortcoming_exercise_low") in shortcomings:
         plan['notes'].append(t(locale, "fallback_note_exercise_low"))
     if recipes:
-        plan['notes'].append(("检索建议：" if locale == "zh-CN" else "Search note: ") + re.sub(r'\s+', ' ', recipes[0]).strip()[:140])
+        plan['notes'].append(("检索建议：" if locale == "zh-CN" else "Search note: ") + recipes[0])
     if exercises:
-        plan['notes'].append(("运动参考：" if locale == "zh-CN" else "Exercise note: ") + re.sub(r'\s+', ' ', exercises[0]).strip()[:140])
+        plan['notes'].append(("运动参考：" if locale == "zh-CN" else "Exercise note: ") + exercises[0])
     return plan, "fallback_tavily" if recipes or exercises else "fallback"
 
 def get_star_string(score):
@@ -1916,25 +2106,37 @@ def render_risk_text(risks, locale):
 
 
 TEXT_REPORT_ICONS = {
-    'daily_report_heading': '',
-    'overall_score_title': '',
-    'item_summary_title': '',
-    'diet_label': '',
-    'water_label': '',
-    'weight_label': '',
-    'symptom_label': '',
-    'exercise_label': '',
-    'adherence_label': '',
-    'ai_comment_title': '',
-    'details_title': '',
-    'meal_section': '',
-    'water_section': '',
-    'exercise_section': '',
-    'next_day_plan_title': '',
-    'diet_plan': '',
-    'water_plan': '',
-    'exercise_plan': '',
-    'special_attention': '',
+    'daily_report_heading': '🌅',
+    'overall_score_title': '🏆',
+    'item_summary_title': '📊',
+    'diet_label': '🍽',
+    'water_label': '💧',
+    'weight_label': '⚖',
+    'symptom_label': '🩺',
+    'exercise_label': '🏃',
+    'adherence_label': '✅',
+    'medication_label': '💊',
+    'ai_comment_title': '🧠',
+    'details_title': '📝',
+    'meal_section': '🍱',
+    'water_section': '🚰',
+    'exercise_section': '🚴',
+    'risk_alert_title': '⚠️',
+    'next_day_plan_title': '🎯',
+    'diet_plan': '🥗',
+    'water_plan': '💦',
+    'exercise_plan': '👟',
+    'special_attention': '🔔',
+}
+
+TEXT_REPORT_MODULE_ICON_KEYS = {
+    'diet': 'diet_label',
+    'water': 'water_label',
+    'weight': 'weight_label',
+    'symptom': 'symptom_label',
+    'exercise': 'exercise_label',
+    'adherence': 'adherence_label',
+    'medication': 'medication_label',
 }
 
 
@@ -1972,7 +2174,9 @@ def generate_text_report(health_data, config, date):
     compact_ai_comment = re.sub(r'[\u2605\u2606]', '', ai_comment).replace('\n', ' ').strip()
     score_lines = []
     for module in score_report.get('modules', []):
-        score_lines.append(f"- {module.get('title', module.get('id', ''))}: {get_star_string(module.get('raw', 0))} {module.get('raw', 0)}/100")
+        module_title = module.get('title', module.get('id', ''))
+        icon_key = TEXT_REPORT_MODULE_ICON_KEYS.get(module.get('id'))
+        score_lines.append(f"- {with_text_icon(icon_key, module_title) if icon_key else module_title}: {get_star_string(module.get('raw', 0))} {module.get('raw', 0)}/100")
         if module.get('detail_text'):
             score_lines.append(f"  {module['detail_text']}")
     score_summary = "\n".join(score_lines)
@@ -1980,7 +2184,7 @@ def generate_text_report(health_data, config, date):
     medication_text = ''
     if module_is_enabled(config, 'medication'):
         medication_lines = health_data.get('medication_records', [])
-        medication_title = default_module_title(locale, 'medication')
+        medication_title = with_text_icon('medication_label', default_module_title(locale, 'medication'))
         medication_body = '\n'.join(medication_lines) if medication_lines else t(locale, 'no_record')
         medication_text = f"\n\n**{medication_title}**\n{medication_body}"
 
@@ -2017,7 +2221,7 @@ _{generation_source_label(locale, ai_comment_source or 'fallback')}_
 **{with_text_icon('exercise_section', t(locale, 'exercise_section'))}**
 {generate_exercise_detail(health_data, locale)}{medication_text}{custom_text}
 
-### {t(locale, 'risk_alerts')}
+### {with_text_icon('risk_alert_title', t(locale, 'risk_alerts'))}
 {render_risk_text(risks, locale)}
 _{generation_source_label(locale, risk_source)}_
 

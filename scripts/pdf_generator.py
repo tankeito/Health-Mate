@@ -209,6 +209,27 @@ def get_font_prop():
     system_font = find_system_cjk_font()
     return fm.FontProperties(fname=system_font) if system_font else None
 
+
+def _style_matplotlib_text(text_obj, font_prop=None, *, color=None, fontsize=None, fontweight="bold"):
+    resolved_color = color if color is not None else text_obj.get_color()
+    if color is not None:
+        text_obj.set_color(color)
+    if fontsize is not None:
+        text_obj.set_fontsize(fontsize)
+    if font_prop:
+        text_obj.set_fontproperties(font_prop)
+    if fontweight:
+        text_obj.set_fontweight(fontweight)
+    outline_color = C_TEXT_MAIN_STR if str(resolved_color).lower() in {"#ffffff", "white"} else "white"
+    text_obj.set_path_effects([path_effects.withStroke(linewidth=1.0, foreground=outline_color, alpha=0.65)])
+
+
+def _apply_axis_tick_style(ax, font_prop=None, *, x_color=C_TEXT_MAIN_STR, y_color=C_TEXT_MAIN_STR, fontsize=8):
+    for label in ax.get_xticklabels():
+        _style_matplotlib_text(label, font_prop, color=x_color, fontsize=fontsize)
+    for label in ax.get_yticklabels():
+        _style_matplotlib_text(label, font_prop, color=y_color, fontsize=fontsize)
+
 def create_nutrition_chart(nutrition, locale):
     if not MATPLOTLIB_AVAILABLE: return None
     try:
@@ -227,12 +248,10 @@ def create_nutrition_chart(nutrition, locale):
             wedgeprops=dict(width=0.4, edgecolor='w'),
         )
         for label_text in texts:
-            label_text.set_color(C_TEXT_MUTED_STR)
-            label_text.set_fontsize(9)
-            if my_font: label_text.set_fontproperties(my_font)
+            _style_matplotlib_text(label_text, my_font, color=C_TEXT_MAIN_STR, fontsize=9.5)
         for at in autotexts:
             at.set_color("#FFFFFF")
-            at.set_fontsize(9)
+            at.set_fontsize(9.2)
             at.set_fontweight("bold")
             at.set_path_effects([path_effects.withStroke(linewidth=2, foreground=C_TEXT_MAIN_STR)])
             if my_font: at.set_fontproperties(my_font)
@@ -247,7 +266,7 @@ def create_nutrition_chart(nutrition, locale):
             fontweight='bold',
             color=C_TEXT_MAIN_STR,
         )
-        if my_font: center_text.set_fontproperties(my_font)
+        _style_matplotlib_text(center_text, my_font, color=C_TEXT_MAIN_STR, fontsize=12)
         plt.tight_layout()
         temp_img = tempfile.NamedTemporaryFile(delete=False, suffix='.png')
         plt.savefig(temp_img.name, transparent=True, dpi=150)
@@ -276,8 +295,8 @@ def create_water_chart(water_records, target_ml, locale):
             if remaining > 0: c_list.append(C_BORDER_STR)
             ax1.pie(sizes, colors=c_list, startangle=90, wedgeprops=dict(width=0.3, edgecolor='w', linewidth=1.5))
             
-        t_center = ax1.text(0, 0, t(locale, 'water_chart_center', current=total_drank, target=target), ha='center', va='center', fontsize=11, fontweight='bold', color=C_TEXT_MAIN_STR)
-        if my_font: t_center.set_fontproperties(my_font)
+        t_center = ax1.text(0, 0, t(locale, 'water_chart_center', current=total_drank, target=target), ha='center', va='center', fontsize=11.2, fontweight='bold', color=C_TEXT_MAIN_STR)
+        _style_matplotlib_text(t_center, my_font, color=C_TEXT_MAIN_STR, fontsize=11.2)
         hours = [0, 3, 6, 9, 12, 15, 18, 21, 24]
         ax2.set_xticks(hours)
         ax2.set_xticklabels(['0', '3', '6', '9', '12', '15', '18', '21', '0'])
@@ -309,15 +328,15 @@ def create_water_chart(water_records, target_ml, locale):
                 bars = ax2.bar(bin_pos, amt, bottom=current_bottom, color=color, width=1.2, alpha=0.9, edgecolor='w', linewidth=0.5)
                 
                 if len(amounts) == 1:
-                    t_bar = ax2.text(bin_pos, current_bottom + amt + 15, f"{amt}", ha='center', va='bottom', fontsize=8, color=C_TEXT_MAIN_STR)
+                    t_bar = ax2.text(bin_pos, current_bottom + amt + 15, f"{amt}", ha='center', va='bottom', fontsize=8.2, color=C_TEXT_MAIN_STR, fontweight='bold')
                 else:
-                    t_bar = ax2.text(bin_pos + 0.8, current_bottom + amt/2, f"{amt}", ha='left', va='center', fontsize=8, color=C_TEXT_MAIN_STR)
-                if my_font: t_bar.set_fontproperties(my_font)
+                    t_bar = ax2.text(bin_pos + 0.8, current_bottom + amt/2, f"{amt}", ha='left', va='center', fontsize=8.2, color=C_TEXT_MAIN_STR, fontweight='bold')
+                _style_matplotlib_text(t_bar, my_font, color=C_TEXT_MAIN_STR, fontsize=8.2)
                 current_bottom += amt
             
             if len(amounts) > 1:
                 t_total = ax2.text(bin_pos, current_bottom + 15, t(locale, 'water_chart_total', amount=current_bottom), ha='center', va='bottom', fontsize=8, color=C_TEXT_MAIN_STR, fontweight='bold')
-                if my_font: t_total.set_fontproperties(my_font)
+                _style_matplotlib_text(t_total, my_font, color=C_TEXT_MAIN_STR, fontsize=8)
             
             max_y = max(max_y, current_bottom)
         
@@ -336,12 +355,10 @@ def create_water_chart(water_records, target_ml, locale):
         ax2.set_yticks(range(step, y_limit + step, step))
         ax2.set_ylim(0, max_y + (step if max_y < 800 else max_y * 0.3))
         
-        ax2.tick_params(axis='y', labelleft=True, colors=C_TEXT_MUTED_STR, labelsize=8)
-        ax2.tick_params(axis='x', colors=C_TEXT_MUTED_STR)
+        ax2.tick_params(axis='y', labelleft=True, colors=C_TEXT_MAIN_STR, labelsize=8)
+        ax2.tick_params(axis='x', colors=C_TEXT_MAIN_STR)
         ax2.yaxis.grid(True, linestyle='--', alpha=0.4, color=C_BORDER_STR)
-        
-        if my_font:
-            for label in ax2.get_xticklabels(): label.set_fontproperties(my_font)
+        _apply_axis_tick_style(ax2, my_font, x_color=C_TEXT_MAIN_STR, y_color=C_TEXT_MAIN_STR, fontsize=8)
 
         plt.tight_layout()
         temp_img = tempfile.NamedTemporaryFile(delete=False, suffix='.png')
@@ -399,16 +416,16 @@ def create_exercise_chart(exercise_data, steps, step_target=8000, locale="zh-CN"
                 ax.plot([0, max_bg], [i, i], color=track_color, linewidth=12, solid_capstyle='round', zorder=1)
                 ax.plot([0, cal], [i, i], color=step_color, linewidth=12, solid_capstyle='round', zorder=2)
                 text_str = t(locale, 'step_progress', current=int(cal), target=int(tgt))
-                t_val = ax.text(max_bg * 1.05, i, text_str, ha='left', va='center', fontsize=9, color=C_TEXT_MUTED_STR, zorder=3)
+                t_val = ax.text(max_bg * 1.05, i, text_str, ha='left', va='center', fontsize=9, color=C_TEXT_MAIN_STR, fontweight='bold', zorder=3)
             else:
                 ax.plot([0, max_bg], [i, i], color=chart_color, linewidth=12, solid_capstyle='round', zorder=1)
                 if in_txt:
                     t_in = ax.text(max_bg * 0.02, i, in_txt, ha='left', va='center', fontsize=9, color=C_TEXT_MAIN_STR, fontweight='bold', zorder=3)
-                    if my_font: t_in.set_fontproperties(my_font)
+                    _style_matplotlib_text(t_in, my_font, color=C_TEXT_MAIN_STR, fontsize=9)
                 text_str = t(locale, 'calories_unit', value=int(cal))
-                t_val = ax.text(max_bg * 1.05, i, text_str, ha='left', va='center', fontsize=9, color=C_TEXT_MUTED_STR, zorder=3)
+                t_val = ax.text(max_bg * 1.05, i, text_str, ha='left', va='center', fontsize=9, color=C_TEXT_MAIN_STR, fontweight='bold', zorder=3)
 
-            if my_font: t_val.set_fontproperties(my_font)
+            _style_matplotlib_text(t_val, my_font, color=C_TEXT_MAIN_STR, fontsize=9)
 
         ax.set_yticks(y_pos)
         ax.set_yticklabels(labels)
@@ -422,9 +439,7 @@ def create_exercise_chart(exercise_data, steps, step_target=8000, locale="zh-CN"
         ax.spines['left'].set_visible(False)
         ax.tick_params(axis='y', colors=C_TEXT_MAIN_STR, length=0, pad=10) 
         ax.tick_params(axis='x', bottom=False, labelbottom=False) 
-        
-        if my_font:
-            for label in ax.get_yticklabels(): label.set_fontproperties(my_font)
+        _apply_axis_tick_style(ax, my_font, x_color=C_TEXT_MAIN_STR, y_color=C_TEXT_MAIN_STR, fontsize=9)
 
         plt.tight_layout()
         temp_img = tempfile.NamedTemporaryFile(delete=False, suffix='.png')
@@ -682,7 +697,8 @@ def generate_pdf_report(data, profile, scores, nutrition, macros, risks, plan, o
     section_idx = 7
     has_medication_module = any(module.get('id') == 'medication' for module in score_modules)
     if has_medication_module:
-        story.append(Paragraph(f"{section_idx}. {localize('\u7528\u836f\u60c5\u51b5', 'Medication')}", heading_style))
+        medication_title = localize('\u7528\u836f\u60c5\u51b5', 'Medication')
+        story.append(Paragraph(f"{section_idx}. {medication_title}", heading_style))
         section_idx += 1
         if medication_records:
             for item in medication_records:

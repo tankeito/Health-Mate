@@ -29,12 +29,13 @@ print = console_print
 
 from health_report_pro import (
     REPORTS_DIR,
-    TAVILY_API_KEY,
     build_multi_condition_tip,
     build_score_report,
+    clean_search_excerpt as shared_clean_search_excerpt,
     force_config_locale,
     find_custom_section_items,
     generation_source_label,
+    has_tavily_api_key,
     get_condition_standards,
     get_conditions_display_name,
     get_generation_settings,
@@ -63,10 +64,41 @@ from weekly_pdf_generator import generate_weekly_pdf_report
 validate_environment()
 
 MEMORY_DIR = os.environ.get("MEMORY_DIR", "")
+CUSTOM_SECTION_IGNORE_HINTS = (
+    "今日目标",
+    "dailytarget",
+    "目标",
+    "review",
+    "昨日回顾",
+    "今日汇总",
+    "summary",
+    "系统开发与优化记录",
+    "工作日志",
+    "suggestion",
+    "建议",
+    "提醒",
+    "note",
+    "备注",
+    "午餐建议记录",
+    "午餐选择确认",
+    "优化讨论",
+    "工作地点",
+)
 
 
 def localize(locale, zh_text, en_text):
     return zh_text if resolve_locale(locale=locale) == "zh-CN" else en_text
+
+
+def normalize_name(value):
+    text = re.sub(r"[*_`]+", "", str(value or "")).strip().lower()
+    text = re.sub(r"[^a-z0-9\u4e00-\u9fff]+", "", text)
+    return text
+
+
+def should_ignore_custom_section(title):
+    normalized = normalize_name(title)
+    return any(normalize_name(hint) in normalized for hint in CUSTOM_SECTION_IGNORE_HINTS if hint)
 
 
 def safe_average(values):
@@ -84,6 +116,10 @@ def dedupe_preserve_order(items):
         output.append(normalized)
         seen.add(normalized)
     return output
+
+
+def clean_search_excerpt(text, locale, max_length=160):
+    return shared_clean_search_excerpt(text, locale, max_length=max_length)
 
 
 def get_week_dates(target_date_str):
@@ -281,6 +317,7 @@ def aggregate_weekly_data(week_dates, config, locale=None, memory_dir=None):
         "symptom_days": 0,
         "symptom_events": 0,
         "medication_days": 0,
+        "monitoring_days": 0,
         "medication_enabled": medication_enabled,
     }
 
@@ -293,10 +330,16 @@ def aggregate_weekly_data(week_dates, config, locale=None, memory_dir=None):
         file_path = os.path.join(memory_dir, f"{date_str}.md")
         daily_data = parse_memory_file(file_path)
         daily_data["date"] = daily_data.get("date") or date_str
+        filtered_custom_sections = {
+            header: items
+            for header, items in (daily_data.get("custom_sections", {}) or {}).items()
+            if not should_ignore_custom_section(header)
+        }
+        daily_data["custom_sections"] = filtered_custom_sections
 
-        merge_dynamic_custom_sections(custom_rollup, daily_data.get("custom_sections", {}))
+        merge_dynamic_custom_sections(custom_rollup, filtered_custom_sections)
         for stats in custom_rollup.values():
-            items = find_custom_section_items(daily_data.get("custom_sections", {}), stats.get("section_title", stats.get("title", "")))
+            items = find_custom_section_items(filtered_custom_sections, stats.get("section_title", stats.get("title", "")))
             if items:
                 stats["days_recorded"] += 1
                 stats["items"] += len(items)
@@ -307,6 +350,7 @@ def aggregate_weekly_data(week_dates, config, locale=None, memory_dir=None):
         symptom_keywords = daily_data.get("symptom_keywords", [])
         medication_records = daily_data.get("medication_records", [])
         weight_value = daily_data.get("weight_morning")
+        monitoring_present = bool(weight_value is not None or filtered_custom_sections)
         has_data = any([
             bool(daily_data.get("meals")),
             bool(daily_data.get("water_records")),
@@ -317,6 +361,7 @@ def aggregate_weekly_data(week_dates, config, locale=None, memory_dir=None):
             water_total > 0,
             steps > 0,
             weight_value is not None,
+            monitoring_present,
         ])
 
         if has_data:
@@ -331,6 +376,8 @@ def aggregate_weekly_data(week_dates, config, locale=None, memory_dir=None):
             weekly_data["symptom_events"] += len(symptom_keywords)
         if medication_records:
             weekly_data["medication_days"] += 1
+        if monitoring_present:
+            weekly_data["monitoring_days"] += 1
         if water_total >= water_target:
             weekly_data["water_goal_days"] += 1
         if steps >= step_target:
@@ -365,6 +412,7 @@ def aggregate_weekly_data(week_dates, config, locale=None, memory_dir=None):
             "weight": weight_value,
             "symptom_count": len(symptom_keywords),
             "medication_count": len(medication_records),
+            "monitoring_count": sum(len(items) for items in filtered_custom_sections.values()) + (1 if weight_value is not None else 0),
         })
 
     divisor = max(1, weekly_data["observed_days"])
@@ -384,6 +432,14 @@ def aggregate_weekly_data(week_dates, config, locale=None, memory_dir=None):
     weekly_data["avg_fiber"] = sum(weekly_data["fiber"]) / divisor
     weekly_data["avg_total_score"] = safe_average(scored_days)
     weekly_data["avg_diet_score"] = safe_average(diet_days)
+    medication_expected = medication_enabled or weekly_data["medication_days"] > 0
+    weekly_data["macro_scores"] = {
+        "diet": round(weekly_data["avg_diet_score"], 1),
+        "water": round(weekly_data["water_goal_days"] / divisor * 100, 1),
+        "exercise": round(((weekly_data["step_goal_days"] / divisor) * 0.65 + (weekly_data["exercise_days"] / divisor) * 0.35) * 100, 1),
+        "medication": 100.0 if not medication_expected else round(weekly_data["medication_days"] / divisor * 100, 1),
+        "monitoring": round(weekly_data["monitoring_days"] / divisor * 100, 1),
+    }
     weekly_data["custom_section_stats"] = sorted(
         custom_rollup.values(),
         key=lambda item: (item.get("days_recorded", 0), item.get("items", 0), item.get("title", "")),
@@ -434,18 +490,18 @@ def build_weekly_fallback_insights(weekly_data, profile, locale):
     plan_lines = [f"- {item}" for item in focus[:4]]
     source = "fallback"
 
-    if TAVILY_API_KEY and weekly_data.get("gap_topics"):
+    if has_tavily_api_key(config) and weekly_data.get("gap_topics"):
         query = localize(
             locale,
-            f"{condition_text} 一周健康管理建议 {' '.join(weekly_data['gap_topics'][:3])}",
-            f"{condition_text} weekly self-management tips {' '.join(weekly_data['gap_topics'][:3])}",
+            f"{condition_text} 患者教育 一周健康管理 {' '.join(weekly_data['gap_topics'][:3])} 建议",
+            f"{condition_text} patient education weekly self-management tips {' '.join(weekly_data['gap_topics'][:3])}",
         )
-        search_results = tavily_search(query, max_results=2)
+        search_results = tavily_search(query, max_results=2, config=config)
         snippets = []
         for result in search_results:
-            content = re.sub(r"\s+", " ", str(result.get("content", "") or "")).strip()
+            content = clean_search_excerpt(str(result.get("content", "") or ""), locale, max_length=160)
             if content:
-                snippets.append(content[:160] + ("..." if len(content) > 160 else ""))
+                snippets.append(content)
         if snippets:
             review_lines.append(localize(locale, "检索补充观点：", "Retrieved external note:"))
             review_lines.extend([f"- {snippet}" for snippet in snippets[:1]])
@@ -527,86 +583,89 @@ def get_ai_weekly_insights(weekly_data, profile, config, locale):
 
 def generate_weekly_text_report(weekly_data, profile, ai_review, ai_plan, locale, review_source, plan_source):
     """Render the weekly text message body."""
+    def heading(title, icon):
+        return f"{icon} {title}"
+
     render_notice = str(weekly_data.get("render_notice") or "").strip()
     profile_lines = [
-        f"- {localize(locale, '监测人', 'Name')}: {profile.get('name', t(locale, 'default_name'))}",
-        f"- {localize(locale, '管理目标', 'Conditions')}: {weekly_data.get('condition_text', localize(locale, '综合健康管理', 'General health management'))}",
-        f"- {localize(locale, '年龄', 'Age')}: {profile.get('age', '-')}",
-        f"- {localize(locale, '身高', 'Height')}: {profile.get('height_cm', '-')}cm",
-        f"- {localize(locale, '当前体重', 'Current weight')}: {format_weight(locale, weekly_data.get('latest_weight') or profile.get('current_weight_kg'))}",
-        f"- {localize(locale, '目标体重', 'Target weight')}: {format_weight(locale, profile.get('target_weight_kg'))}",
-        f"- {localize(locale, '饮水目标', 'Hydration target')}: {profile.get('water_target_ml', 2000)}ml",
-        f"- {localize(locale, '步数目标', 'Step target')}: {profile.get('step_target', 8000)}",
+        f"- 👤 {localize(locale, '监测人', 'Name')}: {profile.get('name', t(locale, 'default_name'))}",
+        f"- 🎯 {localize(locale, '管理目标', 'Conditions')}: {weekly_data.get('condition_text', localize(locale, '综合健康管理', 'General health management'))}",
+        f"- 🧬 {localize(locale, '年龄', 'Age')}: {profile.get('age', '-')}",
+        f"- 📏 {localize(locale, '身高', 'Height')}: {profile.get('height_cm', '-')}cm",
+        f"- ⚖️ {localize(locale, '当前体重', 'Current weight')}: {format_weight(locale, weekly_data.get('latest_weight') or profile.get('current_weight_kg'))}",
+        f"- 🥅 {localize(locale, '目标体重', 'Target weight')}: {format_weight(locale, profile.get('target_weight_kg'))}",
+        f"- 💧 {localize(locale, '饮水目标', 'Hydration target')}: {profile.get('water_target_ml', 2000)}ml",
+        f"- 👟 {localize(locale, '步数目标', 'Step target')}: {profile.get('step_target', 8000)}",
     ]
 
     summary_lines = [
-        f"- {localize(locale, '周均综合评分', 'Average overall score')}: {weekly_data.get('avg_total_score', 0):.1f}/100",
-        f"- {t(locale, 'weekly_avg_weight_change', value=format_weight_delta(locale, weekly_data['weight_change']))}",
-        f"- {t(locale, 'weekly_avg_calories_line', value=weekly_data['avg_calories'])}",
-        f"- {t(locale, 'weekly_avg_water_line', value=weekly_data['avg_water'])}",
-        f"- {t(locale, 'weekly_avg_steps_line', value=weekly_data['avg_steps'])}",
-        f"- {localize(locale, '饮食达标天数', 'Diet goal days')}: {weekly_data.get('diet_goal_days', 0)}/7",
-        f"- {localize(locale, '饮水达标天数', 'Hydration goal days')}: {weekly_data.get('water_goal_days', 0)}/7",
-        f"- {localize(locale, '步数达标天数', 'Step goal days')}: {weekly_data.get('step_goal_days', 0)}/7",
-        f"- {localize(locale, '症状天数', 'Symptom days')}: {weekly_data.get('symptom_days', 0)}/7",
-        f"- {t(locale, 'weekly_symptom_count_line', value=weekly_data['symptom_events'])}",
+        f"- 🏆 {localize(locale, '周均综合评分', 'Average overall score')}: {weekly_data.get('avg_total_score', 0):.1f}/100",
+        f"- ⚖️ {t(locale, 'weekly_avg_weight_change', value=format_weight_delta(locale, weekly_data['weight_change']))}",
+        f"- 🔥 {t(locale, 'weekly_avg_calories_line', value=weekly_data['avg_calories'])}",
+        f"- 💧 {t(locale, 'weekly_avg_water_line', value=weekly_data['avg_water'])}",
+        f"- 👟 {t(locale, 'weekly_avg_steps_line', value=weekly_data['avg_steps'])}",
+        f"- 🍽️ {localize(locale, '饮食达标天数', 'Diet goal days')}: {weekly_data.get('diet_goal_days', 0)}/7",
+        f"- 🚰 {localize(locale, '饮水达标天数', 'Hydration goal days')}: {weekly_data.get('water_goal_days', 0)}/7",
+        f"- 🏃 {localize(locale, '步数达标天数', 'Step goal days')}: {weekly_data.get('step_goal_days', 0)}/7",
+        f"- 🩺 {localize(locale, '症状天数', 'Symptom days')}: {weekly_data.get('symptom_days', 0)}/7",
+        f"- 📍 {t(locale, 'weekly_symptom_count_line', value=weekly_data['symptom_events'])}",
     ]
     if weekly_data.get("medication_enabled"):
-        summary_lines.append(f"- {localize(locale, '用药记录天数', 'Medication log days')}: {weekly_data.get('medication_days', 0)}/7")
+        summary_lines.append(f"- 💊 {localize(locale, '用药记录天数', 'Medication log days')}: {weekly_data.get('medication_days', 0)}/7")
     if weekly_data.get("best_day"):
-        summary_lines.append(f"- {localize(locale, '本周最佳日', 'Best day')}: {summarize_day(weekly_data.get('best_day'), locale)}")
+        summary_lines.append(f"- 🌟 {localize(locale, '本周最佳日', 'Best day')}: {summarize_day(weekly_data.get('best_day'), locale)}")
     if weekly_data.get("focus_day"):
-        summary_lines.append(f"- {localize(locale, '重点复盘日', 'Focus day')}: {summarize_day(weekly_data.get('focus_day'), locale)}")
+        summary_lines.append(f"- 🎯 {localize(locale, '重点复盘日', 'Focus day')}: {summarize_day(weekly_data.get('focus_day'), locale)}")
 
     custom_lines = []
     for section in weekly_data.get("custom_section_stats", []):
         if section.get("days_recorded", 0) <= 0:
             continue
-        custom_lines.append(f"- {section['title']}: {localize(locale, '记录', 'logged')} {section['days_recorded']} {localize(locale, '天', 'days')}, {localize(locale, '条目', 'items')} {section.get('items', 0)}")
+        custom_lines.append(f"- 🧪 {section['title']}: {localize(locale, '记录', 'logged')} {section['days_recorded']} {localize(locale, '天', 'days')}, {localize(locale, '条目', 'items')} {section.get('items', 0)}")
 
     report_lines = [
-        f"## {t(locale, 'weekly_text_heading', start_date=weekly_data['start_date'], end_date=weekly_data['end_date'])}",
+        f"## {heading(t(locale, 'weekly_text_heading', start_date=weekly_data['start_date'], end_date=weekly_data['end_date']), '🗓️')}",
         "",
-        f"### {localize(locale, '个人信息', 'Profile')}",
+        f"### {heading(localize(locale, '个人信息', 'Profile'), '👤')}",
         *profile_lines,
         "",
-        f"### {t(locale, 'weekly_summary_title')}",
+        f"### {heading(t(locale, 'weekly_summary_title'), '📊')}",
         *summary_lines,
     ]
 
     if render_notice:
         report_lines.extend([
             "",
-            f"### {t(locale, 'render_notice_title')}",
+            f"### {heading(t(locale, 'render_notice_title'), 'ℹ️')}",
             render_notice,
         ])
 
     report_lines.extend([
         "",
-        f"### {localize(locale, '本周亮点', 'Strengths This Week')}",
+        f"### {heading(localize(locale, '本周亮点', 'Strengths This Week'), '🌟')}",
         *[f"- {item}" for item in weekly_data.get("strengths", [])],
         "",
-        f"### {localize(locale, '待改进项', 'Needs Attention')}",
+        f"### {heading(localize(locale, '待改进项', 'Needs Attention'), '⚠️')}",
         *[f"- {item}" for item in weekly_data.get("gaps", [])],
         "",
-        f"### {localize(locale, '下周重点', 'Focus For Next Week')}",
+        f"### {heading(localize(locale, '下周重点', 'Focus For Next Week'), '🎯')}",
         *[f"- {item}" for item in weekly_data.get("next_focus", [])],
     ])
 
     if custom_lines:
         report_lines.extend([
             "",
-            f"### {localize(locale, '额外监测项目', 'Additional Monitoring')}",
+            f"### {heading(localize(locale, '额外监测项目', 'Additional Monitoring'), '🧪')}",
             *custom_lines,
         ])
 
     report_lines.extend([
         "",
-        f"### {t(locale, 'weekly_review_section')}",
+        f"### {heading(t(locale, 'weekly_review_section'), '🧠')}",
         ai_review.strip(),
         f"_{generation_source_label(locale, review_source)}_",
         "",
-        f"### {t(locale, 'weekly_plan_section')}",
+        f"### {heading(t(locale, 'weekly_plan_section'), '🗺️')}",
         ai_plan.strip(),
         f"_{generation_source_label(locale, plan_source)}_",
     ])
