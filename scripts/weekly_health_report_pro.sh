@@ -8,6 +8,12 @@ LOGS_DIR="${PROJECT_ROOT}/logs"
 
 mkdir -p "${LOGS_DIR}"
 
+# ========== Cron 环境修复 ==========
+# Cron 不加载 ~/.bashrc，需显式设置 PATH 确保 openclaw CLI 可用
+export PATH="/root/.nvm/versions/node/v22.22.0/bin:/root/.local/bin:/root/bin:/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin:/usr/local/bin:/usr/bin:/bin:/root/.npm-global/bin"
+export NVM_DIR="/root/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+
 if [ -f "${CONFIG_DIR}/.env" ]; then
     set -a
     source "${CONFIG_DIR}/.env"
