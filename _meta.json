@@ -3,7 +3,7 @@
     "display_name": "Health-Mate",
     "type": "python/app",
     "version": "1.4.0",
-    "description": "Health-Mate is an executable bilingual OpenClaw health-management skill with local Markdown parsing, daily/weekly/monthly PDF generation, weekly and monthly heatmaps, monthly specialty charts, residence-aware medical planning, and optional webhook delivery. SECURITY DISCLOSURE: 1. MEMORY_DIR must be explicitly set; there is no implicit fallback path. 2. The bundled shell runners read config/.env when present and write local reports/logs during normal execution. 3. Outbound network requests occur only when webhook or Tavily credentials are configured, or when runtime font download is explicitly enabled.",
+    "description": "Health-Mate is an executable bilingual OpenClaw health-management skill with local Markdown parsing, daily/weekly/monthly PDF generation, weekly and monthly heatmaps, a monthly healthy-day donut chart, specialty charts, residence-aware hospital-and-doctor planning, and optional webhook delivery. SECURITY DISCLOSURE: 1. MEMORY_DIR must be explicitly set; there is no implicit fallback path. 2. The bundled shell runners read config/.env when present and write local reports/logs during normal execution. 3. Outbound network requests occur only when webhook or Tavily credentials are configured, or when runtime font download is explicitly enabled.",
     "author": "tankeito",
     "email": "tqd354@gmail.com",
     "license": "MIT",
@@ -58,8 +58,8 @@
     "features": [
         "Executable local Python scripts and shell runners, not an instruction-only prompt bundle",
         "Bilingual Chinese/English parsing, prompts, and report generation",
-        "Localized daily, weekly, and monthly PDF reports with weekly/monthly heatmaps and monthly specialty charts",
-        "Residence-aware monthly medical follow-up guidance and clinic suggestions",
+        "Localized daily, weekly, and monthly PDF reports with weekly/monthly heatmaps, a monthly healthy-day donut chart, and monthly specialty charts",
+        "Residence-aware monthly medical follow-up guidance and grouped hospital-and-doctor suggestions",
         "Custom scoring modules and additional monitoring sections including medication and lab-style modules",
         "Optional outbound network behavior limited to Tavily, webhook delivery, and explicit opt-in font download",
         "English-compatible rendering fallback when the bundled Chinese font is unavailable"

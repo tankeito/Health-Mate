@@ -61,6 +61,19 @@ from monthly_pdf_generator import generate_monthly_pdf_report
 validate_environment()
 
 MEMORY_DIR = os.environ.get("MEMORY_DIR", "")
+MAX_HOSPITAL_RECOMMENDATIONS = 5
+TOP_TIER_HOSPITAL_KEYWORDS = (
+    "华西医院",
+    "协和医院",
+    "湘雅医院",
+    "瑞金医院",
+    "中山医院",
+    "华山医院",
+    "仁济医院",
+    "齐鲁医院",
+    "西京医院",
+    "同济医院",
+)
 CUSTOM_SECTION_IGNORE_HINTS = (
     "今日目标",
     "dailytarget",
@@ -624,6 +637,7 @@ def aggregate_monthly_data(month_dates: List[str], config: dict, locale: Optiona
         "end_date": month_dates[-1],
         "month_key": month_dates[0][:7],
         "dates": month_dates,
+        "calendar_days": len(month_dates),
         "conditions": conditions,
         "condition_text": condition_text,
         "primary_condition": primary_condition,
@@ -938,19 +952,38 @@ def build_specialty_charts(monthly_data: dict, config: dict, locale: str) -> Lis
                 )
 
     symptom_distribution = monthly_data.get("symptom_distribution", {})
-    if symptom_distribution:
-        top_labels = list(symptom_distribution.items())[:5]
-        distribution_text = "、".join(f"{label} {count}次" for label, count in top_labels) if locale == "zh-CN" else ", ".join(f"{label} {count}x" for label, count in top_labels)
+    total_days = int(monthly_data.get("calendar_days", len(monthly_data.get("dates", [])) or 0) or 0)
+    symptom_days_count = int(monthly_data.get("symptom_days", 0) or 0)
+    healthy_days = max(total_days - symptom_days_count, 0)
+    top_labels = list(symptom_distribution.items())[:3]
+    top_symptom_text = (
+        "、".join(f"{label} {count}次" for label, count in top_labels)
+        if resolve_locale(locale=locale) == "zh-CN"
+        else ", ".join(f"{label} {count}x" for label, count in top_labels)
+    )
+    if total_days > 0:
+        completion_rate = int(healthy_days / max(total_days, 1) * 100)
+        symptom_legend_text = (
+            localize(locale, f"出现不适：{symptom_days_count} 天（{top_symptom_text or '本月未细分症状'}）", f"Symptoms present: {symptom_days_count} days ({top_symptom_text or 'no symptom subtype logged'})")
+            if symptom_days_count > 0
+            else localize(locale, "出现不适：0 天", "Symptoms present: 0 days")
+        )
         charts.append(
             {
                 "type": "symptom_distribution",
-                "title": localize(locale, "症状分布：本月不适类型占比", "Symptom mix: monthly discomfort distribution"),
-                "subtitle": localize(locale, "帮助区分“什么时候不舒服”与“具体是怎么不舒服”。", "This complements the timeline by showing what kinds of symptoms appeared most often."),
+                "title": localize(locale, "健康达标环形图：本月健康天数 vs 出现不适天数", "Healthy-day donut: symptom-free days vs symptom days"),
+                "subtitle": localize(locale, "以当月总天数为基数，直观看清健康无症状天数与出现不适天数的比例。", "This donut uses the full month as the baseline so healthy days and symptom days are easier to compare."),
                 "distribution": symptom_distribution,
+                "calendar_days": total_days,
+                "healthy_days": healthy_days,
+                "symptom_days": symptom_days_count,
+                "completion_rate": completion_rate,
+                "healthy_legend": localize(locale, f"健康无症状：{healthy_days} 天", f"Healthy symptom-free: {healthy_days} days"),
+                "symptom_legend": symptom_legend_text,
                 "summary": localize(
                     locale,
-                    f"本月记录到的症状类型主要集中在：{distribution_text}。如果症状从腹胀逐步转向明显疼痛，建议把诱因和持续时间记得更细。",
-                    f"The recorded symptom mix was led by: {distribution_text}. If the pattern shifts from bloating toward clearer pain, log triggers and duration in more detail next month.",
+                    f"本月共 {total_days} 天，其中 {healthy_days} 天未记录不适，健康达标约 {completion_rate:.0f}%。{f'出现不适的 {symptom_days_count} 天主要表现为：{top_symptom_text}。' if top_symptom_text else ''}",
+                    f"There were {total_days} days this month, with {healthy_days} symptom-free days and a healthy-day completion rate of about {completion_rate:.0f}%. {f'Symptom days were mainly driven by: {top_symptom_text}.' if top_symptom_text else ''}",
                 ),
             }
         )
@@ -1063,7 +1096,7 @@ def build_follow_up_reminders(monthly_data: dict, profile: dict, locale: str) ->
 def extract_doctor_name(text: str) -> str:
     raw_text = str(text or "")
     patterns = [
-        r"([\u4e00-\u9fff]{2,3})(主任医师|副主任医师|主任|教授|医生)",
+        r"([一-鿿]{2,4}?)\s*(副主任医师|主任医师|主治医师|副教授|教授|主任|副主任|医生|医师)",
         r"(Dr\.\s+[A-Z][a-z]+\s+[A-Z][a-z]+)",
     ]
     for pattern in patterns:
@@ -1078,14 +1111,14 @@ def extract_doctor_name(text: str) -> str:
 def extract_hospital_name(text: str) -> str:
     raw_text = str(text or "")
     patterns = [
-        r"([\u4e00-\u9fff]{2,24}(?:大学附属医院|附属医院|医院|医学中心|中医院|人民医院|妇幼保健院|医疗中心))",
+        r"([一-鿿]{2,24}(?:大学附属医院|附属医院|医院|医学中心|中医院|人民医院|妇幼保健院|医疗中心))",
         r"([A-Z][A-Za-z\s]+(?:Hospital|Medical Center|Clinic))",
     ]
     for pattern in patterns:
         match = re.search(pattern, raw_text)
         if match:
             hospital = match.group(1).strip()
-            hospital = re.sub(r"^[\u4e00-\u9fff]{1,12}(?:主任医师|副主任医师|医生|医师)", "", hospital).strip()
+            hospital = re.sub(r"^[一-鿿]{1,12}(?:主任医师|副主任医师|医生|医师)", "", hospital).strip()
             return hospital
     return ""
 
@@ -1121,7 +1154,7 @@ def matches_locale_text(text: str, locale: str) -> bool:
     if not cleaned:
         return False
     if resolve_locale(locale=locale) == "zh-CN":
-        return len(re.findall(r"[\u4e00-\u9fff]", cleaned)) >= 8
+        return len(re.findall(r"[一-鿿]", cleaned)) >= 4
     return len(re.findall(r"[A-Za-z]{3,}", cleaned)) >= 5
 
 
@@ -1138,8 +1171,8 @@ def is_readable_text(value: str, locale: str) -> bool:
         return False
     if any(re.search(pattern, text, re.IGNORECASE) for pattern in SEARCH_BAD_PATTERNS):
         return False
-    useful_chars = len(re.findall(r"[A-Za-z0-9\u4e00-\u9fff]", compact))
-    weird_chars = len(re.findall(r"[^A-Za-z0-9\u4e00-\u9fff.,;:!?%()（）/+℃ \\-]", text))
+    useful_chars = len(re.findall(r"[A-Za-z0-9一-鿿]", compact))
+    weird_chars = len(re.findall(r"[^A-Za-z0-9一-鿿.,;:!?%()（）/+℃ \\-]", text))
     if useful_chars / max(1, len(compact)) < 0.62:
         return False
     if weird_chars > max(3, len(compact) // 16):
@@ -1177,7 +1210,7 @@ def is_valid_hospital_name(name: str) -> bool:
         return False
     if re.search(r"(?:去医院|去门诊|看医生|挂号|就诊)$", hospital):
         return False
-    if len(re.findall(r"[\u4e00-\u9fffA-Za-z]", hospital)) < 4:
+    if len(re.findall(r"[一-鿿A-Za-z]", hospital)) < 4:
         return False
     return bool(re.search(r"(医院|医学中心|中医院|医疗中心|Hospital|Medical Center|Clinic)", hospital, re.IGNORECASE))
 
@@ -1204,6 +1237,9 @@ def clean_hospital_reason(text: str, locale: str, max_length: int = 100) -> str:
         return ""
     if re.search(r"(推荐专家|推荐医院|相关问诊|在线问诊|医院咨询|挂号平台|医院介绍)", raw, re.IGNORECASE):
         return ""
+    list_segments = [segment.strip() for segment in re.split(r"[;；]", raw) if segment.strip()]
+    if len(list_segments) >= 3 and all(len(segment) <= 12 for segment in list_segments[:5]):
+        return ""
     if len(raw) > 42 and not re.search(r"[。！？.!?；;:：]", raw):
         return ""
     if re.search(r"(好评率|接诊量|平均响应|国内一流|全国领先|top\s*ranked)", raw, re.IGNORECASE):
@@ -1217,12 +1253,408 @@ def clean_hospital_doctor(text: str, locale: str) -> str:
     doctor = trim_text(strip_search_noise(extract_doctor_name(text) or ""), 24)
     if doctor and not re.search(r"(外科|内科|门诊|中心|肝胆|心内|内分泌|营养科|运动医学).*(医生|医师|专家)$", doctor):
         return doctor
+    direct = trim_text(strip_search_noise(str(text or "")), 24)
+    if re.fullmatch(r"[一-鿿]{2,4}(?:\s*(?:主任医师|副主任医师|主任|副主任|教授|副教授|医生|医师))?", direct):
+        return re.sub(r"\s+", "", direct)
+    if re.fullmatch(r"[一-鿿]{2,4}(?:主任医师|副主任医师|主任|副主任|教授|副教授|医生|医师)?", direct):
+        return direct
+    if re.fullmatch(r"Dr\.\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2}", direct):
+        return direct
     cleaned = strip_search_noise(text)
-    if re.search(r"(专家|specialist|主任医师|副主任医师)", cleaned, re.IGNORECASE):
-        name_match = re.search(r"([\u4e00-\u9fff]{2,3}(?:主任医师|副主任医师|教授))", cleaned)
+    if re.search(r"(专家|specialist|主任医师|副主任医师|教授|副教授)", cleaned, re.IGNORECASE):
+        name_match = re.search(r"([一-鿿]{2,4}\s*(?:主任医师|副主任医师|主任|副主任|教授|副教授|医生|医师))", cleaned)
         if name_match:
-            return trim_text(name_match.group(1), 24)
+            return trim_text(re.sub(r"\s+", "", name_match.group(1)), 24)
     return localize(locale, "优先预约专家门诊", "Prioritize specialist clinic")
+
+
+def is_placeholder_doctor_name(text: str) -> bool:
+    token = str(text or "").strip().lower()
+    placeholders = {
+        "",
+        "优先预约专家门诊",
+        "优先预约专病门诊",
+        "先做门诊评估，再决定是否转上级医院",
+        "prioritize specialist clinic",
+        "prioritize specialty clinic",
+        "start with clinic evaluation and escalate if needed",
+    }
+    return token in placeholders
+
+
+def has_named_doctor(text: str) -> bool:
+    doctor = str(text or "").strip()
+    if is_placeholder_doctor_name(doctor):
+        return False
+    return bool(
+        re.search(r"[一-鿿]{2,4}\s*(?:主任医师|副主任医师|主任|副主任|教授|副教授|医生|医师)", doctor)
+        or re.search(r"Dr\.\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2}", doctor)
+    )
+
+
+def clean_doctor_specialty(text: str, locale: str, max_length: int = 72) -> str:
+    raw = strip_search_noise(text)
+    if not raw:
+        return ""
+    raw = re.sub(r"^(?:医生擅长|擅长方向|擅长|Doctor specialty|Specialty|Expertise)[:：]?\s*", "", raw, flags=re.IGNORECASE)
+    raw = trim_text(raw, max_length)
+    if len(raw) < 6:
+        return ""
+    if re.search(r"(推荐医院|医院介绍|在线问诊|相关问诊|挂号平台)", raw, re.IGNORECASE):
+        return ""
+    if not matches_locale_text(raw, locale):
+        return ""
+    return raw
+
+
+def clean_doctor_title(text: str, locale: str, max_length: int = 40) -> str:
+    raw = strip_search_noise(text)
+    if not raw:
+        return ""
+    raw = re.sub(r"^(?:医生职称|职称|Title)[:：]?\s*", "", raw, flags=re.IGNORECASE)
+    raw = trim_text(raw, max_length)
+    if re.search(r"(挂号|门诊|排班|schedule|fee|费用)", raw, re.IGNORECASE):
+        return ""
+    return raw
+
+
+def clean_registration_fee(text: str, locale: str, max_length: int = 42) -> str:
+    raw = strip_search_noise(text)
+    if not raw:
+        return localize(locale, "以医院最新挂号页面为准", "Check the hospital's latest registration page")
+    raw = re.sub(r"^(?:挂号费|费用|Fee|Registration fee)[:：]?\s*", "", raw, flags=re.IGNORECASE)
+    raw = trim_text(raw, max_length)
+    if re.search(r"(http|www\.|返回顶部|倍速|播放)", raw, re.IGNORECASE):
+        return localize(locale, "以医院最新挂号页面为准", "Check the hospital's latest registration page")
+    return raw
+
+
+def clean_clinic_schedule(text: str, locale: str, max_length: int = 48) -> str:
+    raw = strip_search_noise(text)
+    if not raw:
+        return localize(locale, "以医院最新排班为准", "Check the hospital's latest clinic schedule")
+    raw = re.sub(r"^(?:坐诊时间|门诊时间|排班|Schedule|Clinic schedule)[:：]?\s*", "", raw, flags=re.IGNORECASE)
+    raw = trim_text(raw, max_length)
+    if re.search(r"(http|www\.|返回顶部|倍速|播放)", raw, re.IGNORECASE):
+        return localize(locale, "以医院最新排班为准", "Check the hospital's latest clinic schedule")
+    return raw
+
+
+def clean_hospital_grade(text: str, locale: str, max_length: int = 48) -> str:
+    raw = strip_search_noise(text)
+    if not raw:
+        return ""
+    raw = re.sub(r"^(?:医院等级|等级|Grade|Hospital grade)[:：]?\s*", "", raw, flags=re.IGNORECASE)
+    return trim_text(raw, max_length)
+
+
+def clean_hospital_address(text: str, locale: str, max_length: int = 72) -> str:
+    raw = strip_search_noise(text)
+    if not raw:
+        return ""
+    raw = re.sub(r"^(?:地址|医院地址|Address)[:：]?\s*", "", raw, flags=re.IGNORECASE)
+    if re.search(r"(http|www\.|返回顶部|倍速|播放)", raw, re.IGNORECASE):
+        return ""
+    return trim_text(raw, max_length)
+
+
+def clean_booking_method(text: str, locale: str, max_length: int = 56) -> str:
+    raw = strip_search_noise(text)
+    if not raw:
+        return localize(locale, "建议查看医院官方挂号平台", "Check the hospital's official booking channel")
+    raw = re.sub(r"^(?:挂号方式|预约方式|Booking|Booking method)[:：]?\s*", "", raw, flags=re.IGNORECASE)
+    if re.search(r"(http|www\.|返回顶部|倍速|播放)", raw, re.IGNORECASE):
+        return localize(locale, "建议查看医院官方挂号平台", "Check the hospital's official booking channel")
+    return trim_text(raw, max_length)
+
+
+def split_doctor_identity(doctor_text: str, explicit_title: str = "") -> tuple[str, str]:
+    raw = strip_search_noise(doctor_text)
+    title = clean_doctor_title(explicit_title, "zh-CN")
+    if not raw and not title:
+        return "", ""
+    match = re.match(
+        r"^([一-鿿]{2,4}?)\s*(一级专家|二级专家|副主任医师|主任医师|主治医师|住院医师|副教授|教授|医师|医生)$",
+        raw,
+    )
+    if match:
+        name = match.group(1)
+        inferred_title = match.group(2)
+        return name, title or inferred_title
+    if raw.startswith("Dr. "):
+        return raw, title
+    return raw, title
+
+
+def star_string(level: int) -> str:
+    count = max(1, min(int(level or 0), 5))
+    return "★" * count
+
+
+def infer_hospital_star_rating(item: dict, primary_condition: str) -> int:
+    score = hospital_authority_score(item, primary_condition)
+    if score >= 180:
+        return 5
+    if score >= 100:
+        return 4
+    return 3
+
+
+def infer_doctor_star_rating(doctor_title: str, doctor_text: str = "") -> int:
+    blob = f"{doctor_title} {doctor_text}".strip()
+    if re.search(r"(副主任医师|副教授)", blob):
+        return 4
+    if re.search(r"(一级专家|主任医师|教授)", blob):
+        return 5
+    if re.search(r"(主治医师|医师|医生)", blob):
+        return 3
+    return 3 if has_named_doctor(doctor_text) else 2
+
+
+def infer_hospital_grade(hospital: str, hospital_strength: str, locale: str) -> str:
+    blob = f"{hospital} {hospital_strength}"
+    if any(keyword in hospital for keyword in TOP_TIER_HOSPITAL_KEYWORDS) or re.search(r"(顶级三甲|全国顶尖|国家医学中心)", blob):
+        return localize(locale, "三级甲等（全国顶尖）", "Top-tier public tertiary hospital")
+    if re.search(r"(省级|大学附属|附属医院|三甲)", blob):
+        return localize(locale, "三级甲等（省级重点）", "Provincial or university-affiliated tertiary hospital")
+    return localize(locale, "三级甲等", "Public tertiary hospital")
+
+
+def group_hospital_recommendations(recommendations: List[dict], primary_condition: str, locale: str) -> List[dict]:
+    groups: List[dict] = []
+    index_map: Dict[str, int] = {}
+    for item in recommendations[:MAX_HOSPITAL_RECOMMENDATIONS]:
+        hospital = str(item.get("hospital", "") or "").strip()
+        if not hospital:
+            continue
+        group_index = index_map.get(hospital)
+        if group_index is None:
+            hospital_stars = int(item.get("hospital_rating") or infer_hospital_star_rating(item, primary_condition))
+            groups.append(
+                {
+                    "hospital": hospital,
+                    "hospital_stars": star_string(hospital_stars),
+                    "hospital_grade": item.get("hospital_grade") or infer_hospital_grade(hospital, str(item.get("hospital_strength", "") or ""), locale),
+                    "hospital_strength": item.get("hospital_strength", "") or item.get("reason", ""),
+                    "hospital_address": item.get("hospital_address", ""),
+                    "booking_method": item.get("booking_method") or localize(locale, "建议查看医院官方挂号平台", "Check the hospital's official booking channel"),
+                    "doctors": [],
+                    "_seen_doctors": set(),
+                }
+            )
+            index_map[hospital] = len(groups) - 1
+            group_index = index_map[hospital]
+
+        group = groups[group_index]
+        if not group.get("hospital_address") and item.get("hospital_address"):
+            group["hospital_address"] = item.get("hospital_address")
+        if (not group.get("booking_method") or "官方挂号平台" in str(group.get("booking_method"))) and item.get("booking_method"):
+            group["booking_method"] = item.get("booking_method")
+        if not group.get("hospital_strength") and item.get("hospital_strength"):
+            group["hospital_strength"] = item.get("hospital_strength")
+        doctor_text = str(item.get("doctor", "") or "").strip()
+        doctor_name, inferred_title = split_doctor_identity(doctor_text, str(item.get("doctor_title", "") or ""))
+        doctor_title = clean_doctor_title(item.get("doctor_title", "") or inferred_title, locale) or inferred_title
+        doctor_name = doctor_name or doctor_text
+        doctor_stars = star_string(int(item.get("doctor_rating") or infer_doctor_star_rating(doctor_title, doctor_text)))
+        doctor_key = f"{doctor_name}|{doctor_title}|{item.get('department', '')}"
+        if doctor_key in group["_seen_doctors"]:
+            continue
+        group["_seen_doctors"].add(doctor_key)
+        group["doctors"].append(
+            {
+                "department": item.get("department", ""),
+                "doctor_name": doctor_name,
+                "doctor_title": doctor_title,
+                "doctor_stars": doctor_stars,
+                "doctor_display": localize(
+                    locale,
+                    f"{doctor_name}【{doctor_title or '医生'}】（{doctor_stars}）",
+                    f"{doctor_name} [{doctor_title or 'Doctor'}] ({doctor_stars})",
+                ),
+                "doctor_specialty": item.get("doctor_specialty", ""),
+                "registration_fee": item.get("registration_fee") or localize(locale, "以医院最新挂号页面为准", "Check the hospital's latest registration page"),
+                "clinic_schedule": item.get("clinic_schedule") or localize(locale, "以医院最新排班为准", "Check the hospital's latest clinic schedule"),
+                "reason": item.get("reason", ""),
+            }
+        )
+
+    for group in groups:
+        group.pop("_seen_doctors", None)
+    return groups
+
+
+def contains_generic_hospital_label(text: str) -> bool:
+    raw = str(text or "").strip().lower()
+    if not raw:
+        return False
+    return bool(
+        re.search(
+            r"(省级三甲综合医院|医学院附属三甲医院|区域医疗中心|key hospital|regional medical center|"
+            r"provincial tertiary hospital|university-affiliated tertiary hospital|tertiary hospital in)",
+            raw,
+            re.IGNORECASE,
+        )
+    )
+
+
+def build_hospital_strength(hospital: str, primary_condition: str, locale: str) -> str:
+    name = str(hospital or "")
+    lowered = name.lower()
+    teaching = any(token in name for token in ("大学", "附属", "医学院")) or "affiliated" in lowered
+    national = any(token in name for token in ("国家医学中心", "国家区域医疗中心"))
+    medical_center = any(token in name for token in ("医学中心", "医疗中心")) or "medical center" in lowered
+    tertiary = any(token in name for token in ("三甲", "三级甲等", "省级")) or "tertiary" in lowered
+
+    if primary_condition == "gallstones":
+        if national:
+            return localize(locale, "国家级或区域级肝胆专科资源更强，复杂胆囊疾病与手术评估经验通常更充足。", "National or regional hepatobiliary centers usually offer deeper experience for complex gallbladder disease and surgical decision-making.")
+        if teaching:
+            return localize(locale, "教学型三甲医院通常具备更完整的肝胆影像、微创外科与多学科协作能力。", "Teaching tertiary hospitals usually provide stronger hepatobiliary imaging, minimally invasive surgery, and multidisciplinary support.")
+        if medical_center or tertiary:
+            return localize(locale, "公立三甲综合检查与外科资源较全，便于把彩超、肝功能和门诊复盘放在同一条路径里完成。", "Public tertiary hospitals offer stronger diagnostics and surgical support, which helps keep ultrasound, liver tests, and clinic review on one coordinated pathway.")
+        return localize(locale, "综合专科能力较稳，适合先完成门诊评估再决定后续复查或干预节奏。", "This hospital offers stable multidisciplinary capacity for an initial specialist review before deciding on further follow-up or intervention.")
+    if primary_condition == "hypertension":
+        if teaching or national:
+            return localize(locale, "心血管专科与长期随访资源更成熟，适合复杂血压波动和多药方案评估。", "Cardiovascular subspecialty and long-term follow-up resources are stronger here for complex blood-pressure variability and multi-drug management.")
+        return localize(locale, "适合完成高血压门诊复盘、靶器官风险筛查和后续用药调整。", "This hospital is suitable for hypertension-clinic review, target-organ risk screening, and medication adjustment.")
+    if primary_condition == "diabetes":
+        if teaching or national:
+            return localize(locale, "内分泌、营养与并发症筛查协作更完整，适合做系统化糖代谢管理。", "Endocrinology, nutrition, and complication-screening coordination are usually stronger here for structured diabetes management.")
+        return localize(locale, "适合完成血糖趋势复盘、HbA1c 优化和并发症筛查安排。", "This hospital fits glucose-trend review, HbA1c optimization, and complication-screening planning.")
+    if primary_condition == "fat_loss":
+        return localize(locale, "临床营养与运动医学协作更适合平台期、恢复不足或体脂管理复盘。", "Clinical nutrition and sports-medicine support is a better fit for plateau review, recovery issues, and body-fat management.")
+    return localize(locale, "综合诊疗能力较稳，适合先做门诊评估后再决定复查或转诊路径。", "This hospital offers stable general specialty support for an initial clinic review before deciding on follow-up or referral.")
+
+
+def build_doctor_specialty(primary_condition: str, department: str, locale: str) -> str:
+    department_text = str(department or "")
+    if primary_condition == "gallstones":
+        return localize(locale, "胆结石与慢性胆囊炎评估、腹腔镜胆囊手术、围手术期管理。", "Gallstones and chronic cholecystitis assessment, laparoscopic gallbladder surgery, and perioperative management.")
+    if primary_condition == "hypertension":
+        return localize(locale, "高血压分层管理、动态血压解读、联合降压方案调整。", "Hypertension stratification, ambulatory blood-pressure interpretation, and combination therapy adjustment.")
+    if primary_condition == "diabetes":
+        return localize(locale, "血糖分层管理、药物方案优化、并发症筛查与长期随访。", "Glucose stratification, medication optimization, complication screening, and long-term follow-up.")
+    if primary_condition == "fat_loss":
+        return localize(locale, "体重体脂平台期评估、营养处方、训练恢复与代谢管理。", "Weight and body-fat plateau review, nutrition prescription, training recovery, and metabolic management.")
+    return localize(locale, f"{department_text} 相关门诊评估与长期管理。", f"{department_text} clinic review and longer-term management.")
+
+
+def build_region_specific_hospital_fallbacks(
+    residence_text: str,
+    primary_condition: str,
+    default_department: str,
+    locale: str,
+) -> List[dict]:
+    normalized_residence = str(residence_text or "")
+    if "成都" in normalized_residence and primary_condition == "gallstones":
+        return [
+            {
+                "hospital": localize(locale, "四川大学华西医院", "West China Hospital, Sichuan University"),
+                "department": localize(locale, "肝胆胰外科 / 肝胆外科", "Hepatopancreatobiliary surgery / hepatobiliary surgery"),
+                "doctor": localize(locale, "王文涛主任医师", "Dr. Wang Wentao"),
+                "doctor_title": localize(locale, "主任医师 / 教授", "Chief physician / professor"),
+                "hospital_strength": localize(locale, "顶级三甲教学医院，肝胆胰外科、影像、麻醉和微创手术平台都很强。", "Top-tier tertiary teaching hospital with elite hepatobiliary imaging, anesthesia, and minimally invasive surgery support."),
+                "hospital_grade": localize(locale, "三级甲等（全国顶尖）", "Top-tier public tertiary hospital"),
+                "hospital_address": localize(locale, "成都市武侯区国学巷 37 号", "No. 37 Guoxue Alley, Wuhou District, Chengdu"),
+                "booking_method": localize(locale, "华医通 APP / 微信公众号", "Huayitong app / WeChat official account"),
+                "doctor_specialty": localize(locale, "复杂肝胆管结石、胆囊结石、慢性胆囊炎与肝胆胰外科手术评估。", "Focuses on complex biliary stones, gallbladder disease, chronic cholecystitis, and hepatobiliary surgical planning."),
+                "registration_fee": localize(locale, "特需门诊（约 300-500 元）", "Premium clinic (about CNY 300-500)"),
+                "clinic_schedule": localize(locale, "建议优先查看华医通最新排班；如开放 MDT 门诊可优先预约。", "Check the latest Huayitong schedule first; prioritize MDT clinic slots when available."),
+                "reason": localize(locale, "适合像当前这样既要结合彩超连续随访，又要评估慢性胆囊炎是否进入手术窗口的情况；如果后续出现反复发作，也更适合在这里统一做影像、门诊和手术时机判断。", "A strong fit when ultrasound follow-up, chronic cholecystitis control, and surgical timing all need review together."),
+                "url": "",
+            },
+            {
+                "hospital": localize(locale, "四川大学华西医院", "West China Hospital, Sichuan University"),
+                "department": localize(locale, "肝胆胰外科 / 肝胆外科", "Hepatopancreatobiliary surgery / hepatobiliary surgery"),
+                "doctor": localize(locale, "胡佳副教授", "Dr. Hu Jia"),
+                "doctor_title": localize(locale, "副教授 / 副主任医师", "Associate professor / associate chief physician"),
+                "hospital_strength": localize(locale, "顶级三甲教学医院，疑难胆囊胆道疾病和微创外科评估经验丰富。", "Top-tier tertiary teaching hospital with deep experience in complex gallbladder disease and minimally invasive surgery."),
+                "hospital_grade": localize(locale, "三级甲等（全国顶尖）", "Top-tier public tertiary hospital"),
+                "hospital_address": localize(locale, "成都市武侯区国学巷 37 号", "No. 37 Guoxue Alley, Wuhou District, Chengdu"),
+                "booking_method": localize(locale, "华医通 APP / 微信公众号", "Huayitong app / WeChat official account"),
+                "doctor_specialty": localize(locale, "复杂胆囊胆道疾病、腹腔镜与机器人微创外科评估。", "Specializes in complex gallbladder and biliary disease, including laparoscopic and robotic surgery."),
+                "registration_fee": localize(locale, "专家门诊（约 100-200 元）", "Specialist clinic (about CNY 100-200)"),
+                "clinic_schedule": localize(locale, "建议查看华医通最新排班，优先关注肝胆胰外科专病门诊。", "Check the latest Huayitong schedule and monitor hepatopancreatobiliary specialty clinic slots."),
+                "reason": localize(locale, "如果后续症状反复、需要重点评估微创手术路径，或者想更细地比较保守治疗与腹腔镜方案，这类病例与该医生的专长更契合。", "Especially suitable if symptoms recur and a minimally invasive surgical pathway needs closer evaluation."),
+                "url": "",
+            },
+            {
+                "hospital": localize(locale, "四川大学华西医院", "West China Hospital, Sichuan University"),
+                "department": localize(locale, "肝胆胰外科 / 肝胆外科", "Hepatopancreatobiliary surgery / hepatobiliary surgery"),
+                "doctor": localize(locale, "徐珽副主任医师", "Dr. Xu Ting"),
+                "doctor_title": localize(locale, "副主任医师", "Associate chief physician"),
+                "hospital_strength": localize(locale, "顶级三甲教学医院，胆胰专病与复杂胆道问题的综合判断能力更强。", "Top-tier tertiary teaching hospital with stronger integrated review for biliary and pancreatic complexity."),
+                "hospital_grade": localize(locale, "三级甲等（全国顶尖）", "Top-tier public tertiary hospital"),
+                "hospital_address": localize(locale, "成都市武侯区国学巷 37 号", "No. 37 Guoxue Alley, Wuhou District, Chengdu"),
+                "booking_method": localize(locale, "华医通 APP / 微信公众号", "Huayitong app / WeChat official account"),
+                "doctor_specialty": localize(locale, "胆道结石、胆胰疾病与复杂胆道外科评估。", "Focuses on biliary stones, pancreatobiliary disease, and complex biliary surgical evaluation."),
+                "registration_fee": localize(locale, "专科门诊（约 50-100 元）", "Specialty clinic (about CNY 50-100)"),
+                "clinic_schedule": localize(locale, "建议查看华医通最新排班；首诊通常先挂专科门诊即可。", "Check the latest Huayitong schedule; a specialty clinic slot is usually enough for the first visit."),
+                "reason": localize(locale, "适合需要把胆道结石风险、影像变化、胆囊炎反复情况和后续外科策略放在一起复盘的患者，尤其适合先做结构化评估再决定是否升级到更高阶专家门诊。", "Useful when biliary-stone risk, imaging findings, and downstream surgical strategy need to be reviewed together."),
+                "url": "",
+            },
+            {
+                "hospital": localize(locale, "四川省人民医院", "Sichuan Provincial People's Hospital"),
+                "department": localize(locale, "肝胆外科 / 普外科", "Hepatobiliary surgery / general surgery"),
+                "doctor": localize(locale, "周永碧主任医师", "Dr. Zhou Yongbi"),
+                "doctor_title": localize(locale, "主任医师", "Chief physician"),
+                "hospital_strength": localize(locale, "省级公立三甲，肝胆外科成熟，微创和围手术期协作比较稳定。", "Provincial public tertiary hospital with mature hepatobiliary surgery and steady perioperative coordination."),
+                "hospital_grade": localize(locale, "三级甲等（省级重点）", "Provincial key tertiary hospital"),
+                "hospital_address": localize(locale, "成都市青羊区一环路西二段 32 号", "No. 32 Section 2 West 1st Ring Road, Qingyang District, Chengdu"),
+                "booking_method": localize(locale, "微信公众号 / 现场挂号", "WeChat official account / on-site registration"),
+                "doctor_specialty": localize(locale, "胆囊结石、微创保胆取石与胆囊炎外科评估。", "Focuses on gallbladder stones, minimally invasive gallbladder-preserving care, and cholecystitis surgery evaluation."),
+                "registration_fee": localize(locale, "专家门诊（约 80-150 元）", "Specialist clinic (about CNY 80-150)"),
+                "clinic_schedule": localize(locale, "建议查看医院最新排班，优先关注肝胆外科专家门诊。", "Check the hospital's latest clinic schedule and prioritize hepatobiliary specialist slots."),
+                "reason": localize(locale, "适合先在省级三甲完成门诊复盘、彩超与肝功能资料整合，再判断是继续保守治疗、尝试更细化的微创方案，还是进入正式手术评估通道。", "A practical tertiary option for deciding between continued conservative care and escalation toward surgery."),
+                "url": "",
+            },
+            {
+                "hospital": localize(locale, "成都市第三人民医院", "Chengdu Third People's Hospital"),
+                "department": localize(locale, "肝胆外科 / 普外科", "Hepatobiliary surgery / general surgery"),
+                "doctor": localize(locale, "李毅医生", "Dr. Li Yi"),
+                "doctor_title": localize(locale, "医生", "Doctor"),
+                "hospital_strength": localize(locale, "本地三甲综合医院，适合就近复诊、补齐检查和术前基础评估。", "Local tertiary general hospital that works well for nearby follow-up, additional testing, and baseline pre-op review."),
+                "hospital_grade": localize(locale, "三级甲等（本地便捷复诊）", "Local tertiary hospital for convenient follow-up"),
+                "hospital_address": localize(locale, "建议查看医院官方地址与院区信息", "Check the hospital's official location and campus details"),
+                "booking_method": localize(locale, "建议查看医院官方挂号平台", "Check the hospital's official booking channel"),
+                "doctor_specialty": localize(locale, "胆石症、胆道外科和门诊随访评估。", "Focuses on gallstone care, biliary surgery, and outpatient follow-up evaluation."),
+                "registration_fee": localize(locale, "普通 / 专科门诊（以医院最新挂号页面为准）", "General or specialty clinic; check the latest hospital registration page"),
+                "clinic_schedule": localize(locale, "以医院最新排班为准", "Check the hospital's latest clinic schedule"),
+                "reason": localize(locale, "适合想兼顾就近复诊和基础外科评估的人群，先把彩超、肝功能和近期症状记录补齐；如果后续需要更复杂的手术决策，再转到更强的上级医院也更顺畅。", "Useful when the patient wants convenient local follow-up first, with escalation to a stronger center if needed."),
+                "url": "",
+            },
+        ]
+    return []
+
+
+def build_condition_care_question(monthly_data: dict, locale: str) -> str:
+    residence_text = monthly_data.get("residence_text", "")
+    primary_condition = monthly_data.get("primary_condition") or (monthly_data.get("conditions") or ["balanced"])[0]
+    ultrasound = monthly_data.get("ultrasound_summary", {}) or {}
+    symptom_days = monthly_data.get("symptom_days", 0)
+    latest_size = ultrasound.get("latest_size_cm")
+    wall_warning = ultrasound.get("wall_warning")
+
+    if primary_condition == "gallstones":
+        if resolve_locale(locale=locale) == "zh-CN":
+            details = []
+            if latest_size:
+                details.append(f"最近结石约 {latest_size:.1f}cm")
+            if symptom_days:
+                details.append(f"本月症状 {symptom_days} 天")
+            if wall_warning:
+                details.append("胆囊壁存在炎症或增厚提示")
+            suffix = f"（{', '.join(details)}）" if details else ""
+            return f"请帮我推荐 {residence_text} 做胆结石或慢性胆囊炎评估/手术比较好的医院和医生，优先肝胆胰外科或肝胆外科{suffix}。"
+        return f"Please recommend strong hospitals and doctors in {residence_text} for gallstone or chronic cholecystitis evaluation or surgery, prioritizing hepatobiliary surgery."
+    if primary_condition == "hypertension":
+        return localize(locale, f"请帮我推荐 {residence_text} 看高血压比较好的医院和医生，优先心内科或高血压专病门诊。", f"Please recommend strong hospitals and doctors in {residence_text} for hypertension care, prioritizing cardiology or hypertension clinics.")
+    if primary_condition == "diabetes":
+        return localize(locale, f"请帮我推荐 {residence_text} 看糖尿病比较好的医院和医生，优先内分泌科或糖尿病专病门诊。", f"Please recommend strong hospitals and doctors in {residence_text} for diabetes care, prioritizing endocrinology or diabetes clinics.")
+    if primary_condition == "fat_loss":
+        return localize(locale, f"请帮我推荐 {residence_text} 做体重体脂管理比较好的医院和医生，优先临床营养科或运动医学门诊。", f"Please recommend strong hospitals and doctors in {residence_text} for weight and body-fat management, prioritizing clinical nutrition or sports medicine.")
+    return localize(locale, f"请帮我推荐 {residence_text} 做健康管理评估比较好的医院和医生。", f"Please recommend strong hospitals and doctors in {residence_text} for general health-management evaluation.")
 
 
 def build_condition_hospital_reason(hospital: str, primary_condition: str, locale: str) -> str:
@@ -1267,15 +1699,46 @@ def normalize_hospital_recommendation(
         28,
     )
     doctor = clean_hospital_doctor(item.get("doctor", "") or item.get("source_excerpt", ""), locale)
+    _, inferred_doctor_title = split_doctor_identity(doctor, str(item.get("doctor_title", "") or ""))
+    doctor_title = clean_doctor_title(item.get("doctor_title", "") or inferred_doctor_title, locale, max_length=42)
     source_excerpt = clean_search_excerpt(item.get("source_excerpt", ""), locale, max_length=140)
-    reason = clean_hospital_reason(item.get("reason", "") or source_excerpt, locale, max_length=100)
+    hospital_strength = clean_hospital_reason(
+        item.get("hospital_strength", "") or item.get("hospital_advantage", "") or "",
+        locale,
+        max_length=96,
+    )
+    if not hospital_strength:
+        hospital_strength = build_hospital_strength(hospital, primary_condition, locale)
+    doctor_specialty = clean_doctor_specialty(
+        item.get("doctor_specialty", "") or item.get("doctor_advantage", "") or item.get("doctor_strength", "") or "",
+        locale,
+        max_length=80,
+    )
+    if not doctor_specialty:
+        doctor_specialty = build_doctor_specialty(primary_condition, department, locale)
+    reason = clean_hospital_reason(item.get("reason", "") or item.get("fit_reason", "") or source_excerpt, locale, max_length=150)
     if not reason:
         reason = fallback_reason or build_condition_hospital_reason(hospital, primary_condition, locale)
+    hospital_grade = clean_hospital_grade(item.get("hospital_grade", "") or item.get("grade", ""), locale, max_length=48)
+    if not hospital_grade:
+        hospital_grade = infer_hospital_grade(hospital, hospital_strength, locale)
+    hospital_address = clean_hospital_address(item.get("hospital_address", "") or item.get("address", ""), locale, max_length=80)
+    booking_method = clean_booking_method(item.get("booking_method", "") or item.get("booking", ""), locale, max_length=60)
+    registration_fee = clean_registration_fee(item.get("registration_fee", "") or item.get("fee", ""), locale, max_length=46)
+    clinic_schedule = clean_clinic_schedule(item.get("clinic_schedule", "") or item.get("schedule", ""), locale, max_length=52)
 
     return {
         "hospital": trim_text(hospital, 32),
         "department": department,
         "doctor": doctor,
+        "doctor_title": doctor_title,
+        "hospital_strength": hospital_strength,
+        "hospital_grade": hospital_grade,
+        "hospital_address": hospital_address,
+        "booking_method": booking_method,
+        "doctor_specialty": doctor_specialty,
+        "registration_fee": registration_fee,
+        "clinic_schedule": clinic_schedule,
         "reason": reason,
         "url": "",
         "source_excerpt": source_excerpt,
@@ -1310,21 +1773,28 @@ def hospital_authority_score(item: dict, primary_condition: str) -> int:
     doctor = str(item.get("doctor", "") or "")
     reason = str(item.get("reason", "") or "")
     excerpt = str(item.get("source_excerpt", "") or "")
+    hospital_strength = str(item.get("hospital_strength", "") or "")
     blob = " ".join([hospital, department, doctor, reason, excerpt]).lower()
 
     score = 0
+    if any(keyword in hospital for keyword in TOP_TIER_HOSPITAL_KEYWORDS):
+        score += 130
     if re.search(r"(三级甲等|三甲)", blob):
         score += 80
     if re.search(r"(国家医学中心|国家区域医疗中心|国家临床重点专科)", blob):
         score += 60
+    if re.search(r"(顶级三甲|全国顶尖|top[- ]tier tertiary|top tertiary)", hospital_strength, re.IGNORECASE):
+        score += 42
     if re.search(r"(大学附属医院|附属医院|医学院附属)", hospital):
         score += 48
     if re.search(r"(医学中心|医疗中心)", hospital):
         score += 30
     if re.search(r"(省人民医院|省立医院|人民医院|中医院)", hospital):
         score += 18
-    if doctor and doctor not in {"优先预约专家门诊", "Prioritize specialist clinic"}:
-        score += 6
+    if has_named_doctor(doctor):
+        score += 18
+    if contains_generic_hospital_label(hospital):
+        score -= 120
 
     for keyword in get_condition_department_keywords(primary_condition):
         if keyword.lower() in department.lower():
@@ -1348,7 +1818,7 @@ def rank_hospital_recommendations(recommendations: List[dict], primary_condition
     return [item for _, _, item in scored]
 
 
-def merge_hospital_recommendations(primary_items: List[dict], fallback_items: List[dict], limit: int = 4) -> List[dict]:
+def merge_hospital_recommendations(primary_items: List[dict], fallback_items: List[dict], limit: int = MAX_HOSPITAL_RECOMMENDATIONS) -> List[dict]:
     merged = []
     seen = set()
     for collection in (primary_items, fallback_items):
@@ -1356,7 +1826,8 @@ def merge_hospital_recommendations(primary_items: List[dict], fallback_items: Li
             hospital = str(item.get("hospital", "") or "").strip()
             if not hospital:
                 continue
-            dedupe_key = hospital.lower()
+            doctor = str(item.get("doctor", "") or "").strip()
+            dedupe_key = f"{hospital.lower()}|{doctor.lower()}" if has_named_doctor(doctor) else hospital.lower()
             if dedupe_key in seen:
                 continue
             merged.append(item)
@@ -1366,17 +1837,34 @@ def merge_hospital_recommendations(primary_items: List[dict], fallback_items: Li
     return merged
 
 
+def merge_and_rank_hospital_recommendations(
+    primary_items: List[dict],
+    secondary_items: List[dict],
+    primary_condition: str,
+    limit: int = MAX_HOSPITAL_RECOMMENDATIONS,
+) -> List[dict]:
+    merged = merge_hospital_recommendations(primary_items, secondary_items, limit=limit * 2)
+    ranked = rank_hospital_recommendations(merged, primary_condition)
+    return ranked[:limit]
+
+
 def build_local_rule_hospital_recommendations(
     residence_label: str,
+    residence_text: str,
     primary_condition: str,
     default_department: str,
     locale: str,
 ) -> List[dict]:
+    region_specific = build_region_specific_hospital_fallbacks(residence_text, primary_condition, default_department, locale)
+    if len(region_specific) >= MAX_HOSPITAL_RECOMMENDATIONS:
+        return region_specific[:MAX_HOSPITAL_RECOMMENDATIONS]
     fallback = [
         {
             "hospital": localize(locale, f"{residence_label} 省级三甲综合医院", f"Provincial tertiary hospital in {residence_label}"),
             "department": default_department,
             "doctor": localize(locale, "优先预约专家门诊", "Prioritize specialist clinic"),
+            "hospital_strength": build_hospital_strength(localize(locale, f"{residence_label} 省级三甲综合医院", f"Provincial tertiary hospital in {residence_label}"), primary_condition, locale),
+            "doctor_specialty": build_doctor_specialty(primary_condition, default_department, locale),
             "reason": build_condition_hospital_reason(localize(locale, f"{residence_label} 省级三甲综合医院", f"Provincial tertiary hospital in {residence_label}"), primary_condition, locale),
             "url": "",
         },
@@ -1384,6 +1872,8 @@ def build_local_rule_hospital_recommendations(
             "hospital": localize(locale, f"{residence_label} 医学院附属三甲医院", f"University-affiliated tertiary hospital in {residence_label}"),
             "department": default_department,
             "doctor": localize(locale, "优先预约专病门诊", "Prioritize specialty clinic"),
+            "hospital_strength": build_hospital_strength(localize(locale, f"{residence_label} 医学院附属三甲医院", f"University-affiliated tertiary hospital in {residence_label}"), primary_condition, locale),
+            "doctor_specialty": build_doctor_specialty(primary_condition, default_department, locale),
             "reason": build_condition_hospital_reason(localize(locale, f"{residence_label} 医学院附属三甲医院", f"University-affiliated tertiary hospital in {residence_label}"), primary_condition, locale),
             "url": "",
         },
@@ -1391,11 +1881,13 @@ def build_local_rule_hospital_recommendations(
             "hospital": localize(locale, f"{residence_label} 区域医疗中心", f"Regional medical center in {residence_label}"),
             "department": default_department,
             "doctor": localize(locale, "先做门诊评估，再决定是否转上级医院", "Start with clinic evaluation and escalate if needed"),
+            "hospital_strength": build_hospital_strength(localize(locale, f"{residence_label} 区域医疗中心", f"Regional medical center in {residence_label}"), primary_condition, locale),
+            "doctor_specialty": build_doctor_specialty(primary_condition, default_department, locale),
             "reason": build_condition_hospital_reason(localize(locale, f"{residence_label} 区域医疗中心", f"Regional medical center in {residence_label}"), primary_condition, locale),
             "url": "",
         },
     ]
-    return fallback
+    return merge_hospital_recommendations(region_specific, fallback, limit=MAX_HOSPITAL_RECOMMENDATIONS)
 
 
 def build_llm_hospital_recommendations(
@@ -1403,6 +1895,7 @@ def build_llm_hospital_recommendations(
     locale: str,
     config: dict,
     condition_queries: Dict[str, dict],
+    evidence_candidates: Optional[List[dict]] = None,
 ) -> List[dict]:
     primary_condition = monthly_data.get("primary_condition") or monthly_data.get("conditions", ["gallstones"])[0]
     primary_meta = condition_queries.get(primary_condition, next(iter(condition_queries.values())))
@@ -1414,25 +1907,56 @@ def build_llm_hospital_recommendations(
         }
         for condition in ordered_conditions
     ]
+    evidence_payload = [
+        {
+            "hospital": item.get("hospital", ""),
+            "department": item.get("department", ""),
+            "doctor_hint": item.get("doctor", "") if has_named_doctor(item.get("doctor", "")) else "",
+            "doctor_title_hint": item.get("doctor_title", ""),
+            "registration_fee_hint": item.get("registration_fee", ""),
+            "clinic_schedule_hint": item.get("clinic_schedule", ""),
+            "snippet": item.get("source_excerpt", ""),
+        }
+        for item in (evidence_candidates or [])[:8]
+    ]
+    care_question = build_condition_care_question(monthly_data, locale)
     prompt = localize(
         locale,
-        f"""请基于以下信息，输出 3-4 条“医院优先、医生其次”的就诊建议，且必须优先推荐权威公立三甲医院。
+        f"""请基于以下信息，输出 5 条“医院优先、医生其次”的就诊建议，且必须优先推荐权威公立三甲医院。
+
+模拟用户原始提问：
+{care_question}
 
 硬性要求：
-1. 推荐顺序必须按“医院权威性 + 与病种契合度”从高到低排序。
-2. 优先级依次为：国家/省级三甲医院、大学附属三甲医院、区域医疗中心。
-3. 推荐流程必须先确定医院，再匹配科室，再补充医生或门诊建议。
+1. 推荐顺序必须严格满足：顶级三甲医院 > 省级/大学附属三甲医院 > 其他三甲医院/区域医疗中心。
+2. 第 1 条推荐必须是当地最强或最具代表性的顶级三甲医院。
+3. 推荐流程必须先确定医院，再匹配科室，再补充医生。
 4. hospital 字段只能写规范医院名称，禁止写描述语、导航词、链接或“当地三甲医院”这类泛称。
-5. doctor 字段只有在较有把握时才写真实医生姓名；不确定时统一写“优先预约专家门诊”。
-6. reason 必须突出医院权威性与和当前病种的契合度，只写一句话，不超过 90 字。
-7. 如果用户存在多病种管理，请优先推荐能覆盖主要风险的综合三甲医院。
-8. 只返回 JSON 数组，不要 Markdown，不要解释。
+5. doctor 字段必须输出真实医生姓名 + 职称；严禁输出“优先预约专家门诊”或类似占位词。如果某条没有把握给出医生姓名，请换另一位更有把握的医生。
+6. hospital_strength 必须概括医院的专科/平台优势，并尽量体现“顶级三甲”或“三甲”层级，不超过 60 字。
+7. hospital_grade 输出医院等级描述，例如“三级甲等（全国顶尖）”。
+8. hospital_address 输出简洁院区地址；booking_method 输出挂号方式。
+9. doctor_title 单独输出医生职称，doctor_specialty 概括该医生擅长方向，不超过 60 字。
+10. registration_fee 尽量输出挂号费区间；clinic_schedule 尽量输出门诊时间。如果不能确认，必须写“以医院最新挂号页面为准”或“以医院最新排班为准”，不要编造具体时间。
+11. reason 必须说明为什么这个“医院 + 医生”组合适合当前患者，突出症状、复查需求或多病种管理契合度，可更详细一些但不超过 140 字。
+12. 如果提供了检索候选，请优先使用其中出现的医院和医生姓名；若检索候选不足，你可以基于你掌握的公开常识补充当地最知名的顶级三甲医院与专家。
+13. 如果用户存在多病种管理，请优先推荐能覆盖主要风险的综合三甲医院。
+14. 若主要病种与手术评估强相关，请优先推荐成熟的外科团队与微创经验丰富的医生。
+15. 只返回 JSON 数组，不要 Markdown，不要解释。
 
 返回字段只能是：
 - hospital
 - department
 - doctor
-- reason
+ - doctor_title
+ - hospital_strength
+ - hospital_grade
+ - hospital_address
+ - booking_method
+ - doctor_specialty
+ - registration_fee
+ - clinic_schedule
+ - reason
 
 用户信息：
 - 常居地：{monthly_data.get('residence_text', '')}
@@ -1443,24 +1967,43 @@ def build_llm_hospital_recommendations(
 - 监测天数：{monthly_data.get('monitoring_days', 0)}
 - 推荐科室提示：{json.dumps(department_hints, ensure_ascii=False)}
 - 复查提醒：{json.dumps(monthly_data.get('follow_up_reminders', [])[:3], ensure_ascii=False)}
+- 检索候选（如有）：{json.dumps(evidence_payload, ensure_ascii=False)}
 """,
-        f"""Generate 3-4 care recommendations in a hospital-first, doctor-second order, and prioritize authoritative public tertiary hospitals.
+        f"""Generate 5 care recommendations in a hospital-first, doctor-second order, and prioritize authoritative public tertiary hospitals.
+
+Simulated user request:
+{care_question}
 
 Hard rules:
-1. Sort results by hospital authority and condition fit, strongest first.
-2. Priority order: national/provincial tertiary hospitals, university-affiliated tertiary hospitals, then regional medical centers.
-3. Choose the hospital first, then the department, then the doctor or clinic suggestion.
+1. The order must strictly be: top-tier tertiary hospital > major provincial or university-affiliated tertiary hospital > other tertiary or regional centers.
+2. The first recommendation must be the strongest or most iconic top-tier tertiary hospital in that city.
+3. Choose the hospital first, then the department, then the doctor.
 4. The hospital field must contain a real hospital name only. No generic labels, navigation text, or links.
-5. Only include a real doctor name when confidence is reasonably high; otherwise use "Prioritize specialist clinic".
-6. The reason must explain hospital authority and disease fit in one concise sentence under 90 characters.
-7. If several conditions coexist, favor hospitals that can cover the main combined risks.
-8. Return JSON array only. No markdown. No explanation.
+5. The doctor field must contain a real doctor name plus title. Never output placeholders such as "Prioritize specialist clinic". If confidence is low for one doctor, replace that item with another doctor you know better.
+6. hospital_strength must summarize the hospital platform or specialty advantage and should ideally reflect whether it is a top-tier tertiary or tertiary center, under 60 characters.
+7. hospital_grade should output the hospital grade, such as "top-tier public tertiary hospital".
+8. hospital_address should be a concise address; booking_method should describe the main booking channel.
+9. doctor_title should be the doctor's title, and doctor_specialty should summarize the doctor's strongest focus in under 60 characters.
+10. registration_fee should provide a fee range when possible; clinic_schedule should provide clinic timing when possible. If either one is uncertain, explicitly say to check the hospital's latest registration page or clinic schedule instead of fabricating details.
+11. reason must explain why this hospital-plus-doctor combination matches the patient, referencing symptoms, follow-up needs, or mixed-condition management, and may be slightly more detailed but stay under 140 characters.
+12. If retrieval candidates are provided, prefer those hospital and doctor names. If those candidates are too thin, you may supplement with widely known public medical knowledge for that city.
+13. If several conditions coexist, favor hospitals that can cover the main combined risks.
+14. If the condition is surgery-oriented, prioritize mature surgical teams and doctors with minimally invasive experience.
+15. Return JSON array only. No markdown. No explanation.
 
 Allowed keys only:
 - hospital
 - department
 - doctor
-- reason
+ - doctor_title
+ - hospital_strength
+ - hospital_grade
+ - hospital_address
+ - booking_method
+ - doctor_specialty
+ - registration_fee
+ - clinic_schedule
+ - reason
 
 User context:
 - Residence: {monthly_data.get('residence_text', '')}
@@ -1471,6 +2014,7 @@ User context:
 - Monitoring days: {monthly_data.get('monitoring_days', 0)}
 - Department hints: {json.dumps(department_hints, ensure_ascii=False)}
 - Follow-up reminders: {json.dumps(monthly_data.get('follow_up_reminders', [])[:3], ensure_ascii=False)}
+- Retrieval candidates (if any): {json.dumps(evidence_payload, ensure_ascii=False)}
 """,
     )
     output = run_local_llm(
@@ -1495,12 +2039,12 @@ User context:
             locale,
             fallback_reason=build_condition_hospital_reason(item.get("hospital", ""), primary_condition, locale),
         )
-        if normalized:
+        if normalized and has_named_doctor(normalized.get("doctor", "")):
             recommendations.append(normalized)
-    return rank_hospital_recommendations(recommendations, primary_condition)[:4]
+    return rank_hospital_recommendations(recommendations, primary_condition)[:MAX_HOSPITAL_RECOMMENDATIONS]
 
 
-def build_tavily_hospital_recommendations(
+def collect_tavily_hospital_evidence(
     monthly_data: dict,
     locale: str,
     config: dict,
@@ -1514,7 +2058,7 @@ def build_tavily_hospital_recommendations(
     primary_condition = monthly_data.get("primary_condition") or monthly_data.get("conditions", ["gallstones"])[0]
     ordered_conditions = [primary_condition] + [item for item in monthly_data.get("conditions", []) if item != primary_condition]
     seen = set()
-    recommendations = []
+    evidence = []
 
     for condition in ordered_conditions:
         meta = condition_queries.get(condition)
@@ -1535,29 +2079,48 @@ def build_tavily_hospital_recommendations(
             dedupe_key = hospital.lower()
             if dedupe_key in seen:
                 continue
-            normalized = normalize_hospital_recommendation(
+            evidence.append(
                 {
-                    "hospital": hospital,
+                    "hospital": trim_text(hospital, 32),
                     "department": meta["department"],
-                    "doctor": f"{hospital} {content}",
+                    "doctor": extract_doctor_name(raw_blob),
                     "reason": clean_hospital_reason(content, locale, max_length=100),
-                    "source_excerpt": clean_search_excerpt(content, locale, max_length=140),
-                },
-                condition,
-                meta["department"],
-                locale,
-                fallback_reason=build_condition_hospital_reason(hospital, condition, locale),
+                    "source_excerpt": clean_search_excerpt(content, locale, max_length=160),
+                    "condition": condition,
+                }
             )
-            if not normalized:
-                continue
-            recommendations.append(normalized)
             seen.add(dedupe_key)
-            if len(recommendations) >= 6:
+            if len(evidence) >= 8:
                 break
-        if len(recommendations) >= 6:
+        if len(evidence) >= 8:
             break
 
-    return rank_hospital_recommendations(recommendations, primary_condition)[:4]
+    return evidence
+
+
+def build_tavily_hospital_recommendations(
+    evidence_candidates: List[dict],
+    monthly_data: dict,
+    locale: str,
+    condition_queries: Dict[str, dict],
+) -> List[dict]:
+    primary_condition = monthly_data.get("primary_condition") or monthly_data.get("conditions", ["gallstones"])[0]
+    primary_meta = condition_queries.get(primary_condition, next(iter(condition_queries.values())))
+    recommendations = []
+    for item in evidence_candidates:
+        condition = item.get("condition") or primary_condition
+        meta = condition_queries.get(condition, primary_meta)
+        normalized = normalize_hospital_recommendation(
+            item,
+            condition,
+            meta["department"],
+            locale,
+            fallback_reason=build_condition_hospital_reason(item.get("hospital", ""), condition, locale),
+        )
+        if not normalized:
+            continue
+        recommendations.append(normalized)
+    return rank_hospital_recommendations(recommendations, primary_condition)[:MAX_HOSPITAL_RECOMMENDATIONS]
 
 
 def refine_hospital_recommendations_with_llm(
@@ -1571,42 +2134,48 @@ def refine_hospital_recommendations_with_llm(
             "hospital": item.get("hospital", ""),
             "department": item.get("department", ""),
             "doctor": item.get("doctor", ""),
+            "doctor_title": item.get("doctor_title", ""),
+            "hospital_strength": item.get("hospital_strength", ""),
+            "hospital_grade": item.get("hospital_grade", ""),
+            "hospital_address": item.get("hospital_address", ""),
+            "booking_method": item.get("booking_method", ""),
+            "doctor_specialty": item.get("doctor_specialty", ""),
+            "registration_fee": item.get("registration_fee", ""),
+            "clinic_schedule": item.get("clinic_schedule", ""),
             "reason": item.get("reason", ""),
             "source_excerpt": item.get("source_excerpt", ""),
         }
-        for item in candidates[:4]
+        for item in candidates[:8]
     ]
     prompt = localize(
         locale,
-        f"""请把以下医院候选严格清洗成 JSON 数组，字段只能保留 hospital、department、doctor、reason。
+        f"""请把以下医院候选严格清洗并补全成 JSON 数组，字段只能保留 hospital、department、doctor、doctor_title、hospital_strength、hospital_grade、hospital_address、booking_method、doctor_specialty、registration_fee、clinic_schedule、reason。
 
 要求：
 1. 你在推荐医院时，必须进行严格的数据清洗。
 2. 严禁输出网页导航文本、视频时间轴或冗长的追踪链接。
-3. 推荐格式必须严格固定为：
-- 医院名称
-- 推荐科室：xxx
-- 推荐医生：xxx
-- 推荐理由：用一句话概括其在肝胆专科的优势，不超过100字。
-4. 只返回 JSON 数组，不要返回 Markdown，不要解释。
-5. 如果医生信息不可靠，请写“优先预约专家门诊”。
-6. 管理目标：{monthly_data.get('condition_text', '')}；常居地：{monthly_data.get('residence_text', '')}。
+3. 优先级必须严格满足：顶级三甲医院 > 三甲医院 > 区域医疗中心。
+4. doctor 必须尽量输出真实医生姓名 + 职称；如果该候选无法可靠给出医生姓名，请直接丢弃该候选，不要用“优先预约专家门诊”之类的占位词。
+5. hospital_strength 概括医院平台或专科优势，不超过 60 字；doctor_specialty 概括医生擅长方向，不超过 60 字；reason 说明和当前患者的契合度，不超过 140 字。
+6. 如果能确认，请补 hospital_grade、hospital_address、booking_method、registration_fee、clinic_schedule；如果不能确认挂号费或坐诊时间，必须写“以医院最新挂号页面为准”或“以医院最新排班为准”，不要编造。
+7. 可以优先利用候选中的真实医院/医生信息；如果候选太弱，可以结合你掌握的公开常识补充同城更权威的公立三甲医院与医生。
+8. 只返回 JSON 数组，不要返回 Markdown，不要解释。
+9. 管理目标：{monthly_data.get('condition_text', '')}；常居地：{monthly_data.get('residence_text', '')}。
 
 候选数据：
 {json.dumps(payload, ensure_ascii=False, indent=2)}""",
-        f"""Clean the following hospital candidates into a strict JSON array. Allowed keys: hospital, department, doctor, reason.
+        f"""Clean and enrich the following hospital candidates into a strict JSON array. Allowed keys: hospital, department, doctor, doctor_title, hospital_strength, hospital_grade, hospital_address, booking_method, doctor_specialty, registration_fee, clinic_schedule, reason.
 
 Rules:
 1. You must aggressively clean the data.
 2. Never output navigation text, video timeline text, or long tracking links.
-3. Keep the final structure equivalent to:
-- Hospital name
-- Department: xxx
-- Doctor: xxx
-- Reason: one concise sentence on specialty fit, under 100 characters.
-4. Return JSON only. No markdown. No explanation.
-5. If the doctor field is unreliable, use "Prioritize specialist clinic".
-6. Condition focus: {monthly_data.get('condition_text', '')}; residence: {monthly_data.get('residence_text', '')}.
+3. The ranking must strictly follow: top-tier tertiary hospital > tertiary hospital > regional medical center.
+4. The doctor field should contain a real doctor name plus title whenever possible. If one candidate cannot support a reliable named doctor, drop that candidate instead of using a placeholder clinic label.
+5. hospital_strength should summarize the hospital advantage in under 60 characters; doctor_specialty should summarize the doctor's focus in under 60 characters; reason should explain patient fit in under 140 characters.
+6. Fill hospital_grade, hospital_address, booking_method, registration_fee, and clinic_schedule when you can. If fee or schedule cannot be confirmed, explicitly say to check the latest hospital registration page or clinic schedule instead of fabricating details.
+7. Prefer the real hospitals and doctors already present in the candidate pool. If the candidate pool is thin, you may supplement with widely known public tertiary hospitals and doctors in the same city.
+8. Return JSON only. No markdown. No explanation.
+9. Condition focus: {monthly_data.get('condition_text', '')}; residence: {monthly_data.get('residence_text', '')}.
 
 Candidate data:
 {json.dumps(payload, ensure_ascii=False, indent=2)}""",
@@ -1636,9 +2205,9 @@ Candidate data:
             locale,
             fallback_reason=build_condition_hospital_reason(item.get("hospital", ""), primary_condition, locale),
         )
-        if normalized:
+        if normalized and has_named_doctor(normalized.get("doctor", "")):
             cleaned.append(normalized)
-    return cleaned[:4]
+    return rank_hospital_recommendations(cleaned, primary_condition)[:MAX_HOSPITAL_RECOMMENDATIONS]
 
 
 def build_hospital_recommendations(monthly_data: dict, profile: dict, locale: str, config: Optional[dict] = None) -> tuple[List[dict], str]:
@@ -1674,13 +2243,9 @@ def build_hospital_recommendations(monthly_data: dict, profile: dict, locale: st
 
     primary_condition = monthly_data.get("primary_condition")
     meta = condition_queries.get(primary_condition, next(iter(condition_queries.values())))
-    fallback = build_local_rule_hospital_recommendations(residence_label, primary_condition, meta["department"], locale)
+    fallback = build_local_rule_hospital_recommendations(residence_label, residence_text, primary_condition, meta["department"], locale)
 
-    llm_recommendations = build_llm_hospital_recommendations(monthly_data, locale, config or {}, condition_queries)
-    if llm_recommendations:
-        return merge_hospital_recommendations(llm_recommendations, fallback, limit=4), "llm"
-
-    tavily_recommendations = build_tavily_hospital_recommendations(
+    tavily_evidence = collect_tavily_hospital_evidence(
         monthly_data,
         locale,
         config or {},
@@ -1688,8 +2253,40 @@ def build_hospital_recommendations(monthly_data: dict, profile: dict, locale: st
         location_hints,
         residence_text,
     )
+
+    llm_evidence_candidates = merge_hospital_recommendations(tavily_evidence, fallback, limit=8)
+    llm_recommendations = build_llm_hospital_recommendations(
+        monthly_data,
+        locale,
+        config or {},
+        condition_queries,
+        evidence_candidates=llm_evidence_candidates,
+    )
+    tavily_recommendations = build_tavily_hospital_recommendations(
+        tavily_evidence,
+        monthly_data,
+        locale,
+        condition_queries,
+    )
+    refined_recommendations = []
+    if not llm_recommendations:
+        refined_recommendations = refine_hospital_recommendations_with_llm(
+            llm_evidence_candidates,
+            monthly_data,
+            config or {},
+            locale,
+        )
+    if llm_recommendations:
+        named_tavily = [item for item in tavily_recommendations if has_named_doctor(item.get("doctor", ""))]
+        secondary = named_tavily if named_tavily else []
+        return merge_and_rank_hospital_recommendations(llm_recommendations, secondary, primary_condition, limit=MAX_HOSPITAL_RECOMMENDATIONS), "llm"
+    if refined_recommendations:
+        secondary = [item for item in tavily_recommendations if has_named_doctor(item.get("doctor", ""))]
+        if not secondary:
+            secondary = [item for item in fallback if has_named_doctor(item.get("doctor", ""))]
+        return merge_and_rank_hospital_recommendations(refined_recommendations, secondary, primary_condition, limit=MAX_HOSPITAL_RECOMMENDATIONS), "llm"
     if tavily_recommendations:
-        return merge_hospital_recommendations(tavily_recommendations, fallback, limit=4), "fallback_tavily"
+        return merge_and_rank_hospital_recommendations(tavily_recommendations, fallback, primary_condition, limit=MAX_HOSPITAL_RECOMMENDATIONS), "fallback_tavily"
 
     return fallback, "fallback"
 
@@ -1909,16 +2506,32 @@ def generate_monthly_text_report(monthly_data: dict, profile: dict, ai_review: s
     specialty_lines = [f"- 📈 {chart.get('title')}: {chart.get('summary')}" for chart in monthly_data.get("specialty_charts", [])[:4]]
     followup_lines = [f"- 🗓️ {item}" for item in monthly_data.get("follow_up_reminders", [])]
     recommendation_lines = []
-    for item in monthly_data.get("hospital_recommendations", [])[:3]:
+    recommendation_groups = monthly_data.get("hospital_recommendation_groups", [])
+    for group in recommendation_groups:
         recommendation_lines.extend(
             [
-                f"- 🏥 {item.get('hospital')}",
-                localize(locale, f"  🧭 推荐科室：{item.get('department')}", f"  🧭 Recommended department: {item.get('department')}"),
-                localize(locale, f"  👨‍⚕️ 推荐医生：{item.get('doctor')}", f"  👨‍⚕️ Recommended doctor: {item.get('doctor')}"),
-                localize(locale, f"  ✨ 推荐理由：{item.get('reason')}", f"  ✨ Recommendation reason: {item.get('reason')}"),
-                "",
+                f"- 🏥 {group.get('hospital')}（{group.get('hospital_stars', '★★★')}）",
+                localize(locale, f"  🧱 医院等级：{group.get('hospital_grade', '-')}", f"  🧱 Hospital grade: {group.get('hospital_grade', '-')}"),
+                localize(locale, f"  🏛 医院优势：{group.get('hospital_strength', '-')}", f"  🏛 Hospital strengths: {group.get('hospital_strength', '-')}"),
             ]
         )
+        if group.get("hospital_address"):
+            recommendation_lines.append(localize(locale, f"  📍 医院地址：{group.get('hospital_address')}", f"  📍 Address: {group.get('hospital_address')}"))
+        if group.get("booking_method"):
+            recommendation_lines.append(localize(locale, f"  🎫 挂号方式：{group.get('booking_method')}", f"  🎫 Booking: {group.get('booking_method')}"))
+        recommendation_lines.append("")
+        for doctor in group.get("doctors", []):
+            recommendation_lines.extend(
+                [
+                    localize(locale, f"  ■ 推荐科室：{doctor.get('department')}", f"  ■ Recommended department: {doctor.get('department')}"),
+                    localize(locale, f"  ■ 推荐医生：{doctor.get('doctor_display')}", f"  ■ Recommended doctor: {doctor.get('doctor_display')}"),
+                    localize(locale, f"  ■ 医生擅长：{doctor.get('doctor_specialty')}", f"  ■ Doctor specialty: {doctor.get('doctor_specialty')}"),
+                    localize(locale, f"  ■ 挂号费：{doctor.get('registration_fee')}", f"  ■ Registration fee: {doctor.get('registration_fee')}"),
+                    localize(locale, f"  ■ 坐诊时间：{doctor.get('clinic_schedule')}", f"  ■ Clinic schedule: {doctor.get('clinic_schedule')}"),
+                    localize(locale, f"  ■ 推荐理由：{doctor.get('reason')}", f"  ■ Recommendation reason: {doctor.get('reason')}"),
+                    "",
+                ]
+            )
 
     report_heading = f"{localize(locale, '健康月报', 'Monthly Health Report')} ({monthly_data.get('month_key')})"
     lines = [
@@ -1995,6 +2608,11 @@ if __name__ == "__main__":
         monthly_data["specialty_charts"] = build_specialty_charts(monthly_data, config, locale)
         monthly_data["follow_up_reminders"] = build_follow_up_reminders(monthly_data, profile_payload, locale)
         monthly_data["hospital_recommendations"], recommendation_source = build_hospital_recommendations(monthly_data, profile_payload, locale, config=config)
+        monthly_data["hospital_recommendation_groups"] = group_hospital_recommendations(
+            monthly_data["hospital_recommendations"],
+            monthly_data.get("primary_condition", "balanced"),
+            locale,
+        )
         monthly_data["custom_monitoring_summary"] = build_custom_monitoring_summary(monthly_data, locale)
         if render_notice:
             monthly_data["render_notice"] = render_notice

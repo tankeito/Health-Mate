@@ -11,6 +11,9 @@ capabilities:
   - pdf_generation
   - http_request
 metadata:
+  openclaw:
+    emoji: "🏥"
+    homepage: "https://github.com/tankeito/Health-Mate"
   clawdbot:
     requires:
       env:
@@ -178,12 +181,13 @@ Forbidden content:
 The monthly report now includes:
 
 - macro adherence radar
+- healthy-day donut chart based on the full calendar month
 - symptom and medication heatmap
 - 30-day weight and BMR trend
 - condition-specific specialty charts
 - AI monthly review
 - follow-up reminders
-- residence-aware hospital suggestions
+- residence-aware hospital-and-doctor suggestions with grouped recommendations, grades, booking hints, and optional fee / schedule fields
 
 If the user manages multiple conditions, the monthly report should combine them instead of collapsing to a single narrow perspective.
 

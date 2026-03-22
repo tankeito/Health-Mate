@@ -1,9 +1,10 @@
 [English](README.md) | 中文
 
-# 🏥 Health-Mate | 个人智能健康管家
+# 🏥 Health-Mate | 面向 OpenClaw 的本地优先智能健康报告系统
 
-> 您的智能健康伴侣，专为 OpenClaw 打造
-> *将日常习惯转化为临床级洞察。精准追踪营养、饮水、运动与病理指标，全自动渲染包含日报、周报、月报的 SaaS 级专业 PDF 报告——且所有数据 100% 本地私有。*
+> 一套真正用于长期健康管理的本地化报告工具。
+>
+> Health-Mate 读取本地 Markdown 健康记录，自动生成健康日报、周报、月报，并支持多病种管理、专项图表、复查提醒、医院医生推荐以及可选的文字推送与 PDF 推送。
 
 [![Version](https://img.shields.io/badge/version-1.4.0-blue.svg)](https://github.com/tankeito/Health-Mate/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -11,94 +12,256 @@
 
 ---
 
-## 🌟 项目概述
+## 🌟 为什么是 Health-Mate
 
-Health-Mate 是一款**生产就绪的双语健康管理技能**，它填补了普通打卡 APP 与临床慢病监测系统之间的技术空白。
+Health-Mate 介于“普通打卡工具”和“临床自我管理仪表盘”之间。
+
+- 🧠 **病种感知**：内置胆结石、高血压、糖尿病、健身减脂和多病种联合管理逻辑
+- 📄 **报告优先**：不仅记录数据，更把数据整理为结构清晰、可复盘、可执行的 PDF 报告
+- 🔒 **本地优先**：解析、评分、规则回退和 PDF 渲染默认都在本地完成
+- 🧩 **高度可扩展**：支持血压、血糖、体脂、生化、用药和自定义监测模块
+- 🌐 **双语支持**：支持中英文报告，并提供缺少中文字体时的英文安全渲染路径
+
+---
+
+## 📑 三类报告能解决什么问题
+
+| 报告类型 | 主要用途 | 核心内容 | 主要回答的问题 |
+| --- | --- | --- | --- |
+| 🌅 健康日报 | 当日复盘、次日调整 | 综合评分、营养图、饮水详情、运动详情、风险预警、次日方案 | 今天做得怎么样？明天怎么改？ |
+| 🗓 健康周报 | 周度趋势复盘 | 周核心指标、热力图、趋势图、亮点、待改进项、下周重点 | 这周哪些行为稳定了？哪些问题在重复出现？ |
+| 📊 健康月报 | 病种深度分析、线下规划 | 雷达图、热力图、30 天趋势、专项图、AI 研判、复查提醒、医院医生建议 | 当前策略是否有效？是否需要门诊复查、进一步评估或升级干预？ |
 
 ---
 
 ## ⚙️ 工作流与底层架构
 
-采用高健壮性的三阶段本地处理管线：
+Health-Mate 采用分层本地处理链路：
 
-1. **数据摄入 (NLP to Markdown)**：OpenClaw 大模型将日常对话式打卡，转化为符合严格正则规范的 Markdown 文本并落盘至 `MEMORY_DIR`。
-
-2. **动态病理计算引擎 (Python)**：依靠高容错正则提取营养、饮水与运动向量。底层算法会根据您的**主病理目标**动态调整评分权重与红线阈值（例如：胆结石模式下严控 40g 脂肪上限，减脂模式下侧重热量缺口）。
-
-3. **渲染与分发引擎**：`Matplotlib` 将枯燥矩阵渲染为精美高清 PDF（支持日报/周报/月报），并可通过 Webhook 自动推送至钉钉/飞书/Telegram。
-
----
-
-## 📑 临床级 SaaS 报告展现
-
-完全在本地离线渲染的商业级医疗可视化报表。Health-Mate 能将原始 Markdown 文本转化为结构严谨的高清 PDF：
-
-- 📅 **健康日报 (细粒度追踪)**：将您的日常打卡转化为全景快照。包含多维度综合星级打分、精美的宏量营养素环形图、24 小时全天候饮水时间轴，以及 AI 靶向驱动的次日行动方案。
-
-- 🗓 **健康周报 (趋势与复盘)**：专为中期健康复盘设计。引入了极具极客范的 GitHub 风格症状与用药热力图 (Heatmap)、7 天体重与热量趋势折线图，以及大模型深度的周度模式识别。
-
-- 📊 **健康月报 (病理深度洞察)**：媲美顶级商业医疗 SaaS 的核心报表。涵盖宏观依从性雷达图、30 天基础代谢 (BMR) 平滑曲线、病理双轴对比图（直观呈现脂肪摄入与症状频次的因果关系）、营养素离散箱线图，以及基于常居地 (LBS) 的线下三甲/专科门诊智能规划建议。
+1. **记忆写入层**
+   OpenClaw 把日常对话式打卡整理为结构化 Markdown，并写入 `MEMORY_DIR`
+2. **结构化解析层**
+   Python 从 Markdown 中提取饮食、饮水、体重、运动、症状、用药、步数与自定义监测数据
+3. **病种评分层**
+   根据主病种和联合病种动态调整阈值、权重、风险判断与提示逻辑
+4. **洞察与渲染层**
+   优先使用 LLM 输出点评和建议；失败时回退到本地规则和可选 Tavily 检索，最后输出文字版摘要与 PDF
 
 ---
 
-## ⚠️ 隐私与安全闭环
+## 🧬 内置病种管理能力
 
-Health-Mate 秉持绝对的"数据本地化"原则。
+当前支持：
 
-- 🔒 **无云端上传**：所有解析、AI 推理回退与 PDF 渲染默认在本地闭环完成。
-- 📂 **内存严格隔离**：必须显式指定 `MEMORY_DIR`。为防止越权读取全局 Agent 记忆，未配置该路径时脚本将直接拦截退出，不再提供隐性兜底。
-- 📡 **外网请求隔离**：仅在您主动配置 Webhook、Tavily API 或开启运行时字体下载时，才会触发对应外网请求。
+- 胆结石 / 慢性胆囊炎
+- 高血压
+- 糖尿病
+- 健身减脂 / 体成分管理
+- 多病种联合管理
+
+病种会影响：
+
+- 热量、脂肪、纤维、饮水、运动等目标区间
+- 评分模块与权重重点
+- AI 点评与次日方案提示词
+- 周报 / 月报复查提醒
+- 月报专项图表选择
+- 月报医院医生推荐逻辑
 
 ---
 
-## ✨ 核心特性
+## 🏥 月报中的医院与医生推荐
 
-- 📈 **SaaS 级全景数据可视化**：一键生成排版精美的日报、周报、月报 PDF。
-- 🏥 **LBS 医疗规划 (NEW)**：结合您的常居地配置与当前病历，AI 每月自动生成复查提醒与本地优选三甲/专科医院门诊建议。
-- 🤖 **多病种联合管理**：内置胆结石、高血压、糖尿病、减脂方案，支持多并发症联合管理与动态靶向干预。
-- 🧩 **模块高度自定义**：支持通过 `user_config.json` 动态挂载生化指标、血压、血糖等自定义监测与打分模块。
-- 🌐 **双语与防乱码降级**：中文字体缺失时，自动生成临时英文 Memory 镜像并渲染带说明的英文 PDF 报告。
+月报中的医疗规划模块采用“医院优先”的推荐策略，而不是只给一个模糊科室。
+
+推荐优先级：
+
+1. **LLM 优先**
+   优先让本地 LLM 生成“医院 → 科室 → 医生”的结构化建议，并尽量输出真实医生姓名与职称
+2. **Tavily 检索兜底**
+   如果 LLM 不可用或结果不足，再从 Tavily 收集本地权威医院候选
+3. **本地规则回退**
+   即使前两层都不可用，也会输出结构化建议；如果内置了城市级知识，会尽量优先输出真实的“医院 + 医生”组合，而不是泛化门诊占位词
+
+排序原则：
+
+- 顶级三甲医院 > 三甲医院 > 区域医疗中心
+- 优先公立三甲、大学附属三甲、国家或区域医疗中心
+- 先评估医院平台实力，再评估科室，再匹配医生
+- 只要证据足够，就优先输出真实医生姓名与职称
+- 结合症状频次、复查提醒、多病种风险做个体化匹配
+
+月报中的推荐内容会尽量输出：
+
+- 医院名称
+- 推荐科室
+- 推荐医生
+- 医院优势
+- 医生擅长
+- 与当前患者情况的契合理由
+
+---
+
+## 📊 月报专项图表示例
+
+月报会根据病种与已有数据动态选择图表。
+
+典型输出包括：
+
+- 胆结石：脂肪摄入 vs 症状频次双轴图
+- 胆结石：脂肪 / 碳水摄入离散度箱线图
+- 胆结石：症状占比环形图
+- 高血压：30 天血压箱线图
+- 糖尿病：血糖监测趋势图
+- 健身减脂：体重与体脂率平滑趋势图
+- 自定义监测：血压、血糖、生化等数值型趋势图
+
+---
+
+## 🔒 隐私与安全边界
+
+Health-Mate 默认遵循“本地优先”的安全边界。
+
+- `MEMORY_DIR` 必须显式配置，不再存在隐式默认目录
+- Markdown 解析、评分和 PDF 渲染默认在本地完成
+- 报告与日志写入当前项目目录
+- 只有在你显式启用时，才会发生出站请求：
+  - Webhook 推送
+  - Tavily 检索
+  - 运行时字体下载
+
+推荐部署方式：
+
+- 使用虚拟环境或容器隔离运行
+- 严格指定 `MEMORY_DIR`
+- 不需要的 webhook / Tavily key 就不要配置
+- 预先放好中文字体，避免运行时下载
 
 ---
 
 ## 🚀 快速开始
 
-### 1. 安装与依赖
+### 1. 安装依赖
+
 ```bash
 git clone https://github.com/tankeito/Health-Mate.git health-mate
 cd health-mate
 pip install -r requirements.txt
 ```
 
-### 2. 环境变量配置 (`config/.env`)
+### 2. 配置环境变量
+
+建议在 `config/.env` 中显式配置：
+
 ```bash
-MEMORY_DIR="/您的绝对路径/memory" # 👈 必填项！
-TAVILY_API_KEY="tvly-..." # 可选：增强型医学检索回退
-DINGTALK_WEBHOOK="https://..." # 可选：多端推送
-ALLOW_RUNTIME_FONT_DOWNLOAD="false" # 可选：允许自动下载缺失字体
+MEMORY_DIR="/绝对路径/health-memory"
+TAVILY_API_KEY="tvly-..."                  # 可选
+DINGTALK_WEBHOOK="https://..."             # 可选
+FEISHU_WEBHOOK="https://..."               # 可选
+TELEGRAM_BOT_TOKEN="..."                   # 可选
+TELEGRAM_CHAT_ID="..."                     # 可选
+REPORT_WEB_DIR="/var/www/html/reports"     # 可选
+REPORT_BASE_URL="https://example.com/reports"
+ALLOW_RUNTIME_FONT_DOWNLOAD="false"
 ```
 
 ### 3. 初始化档案
+
 ```bash
 python scripts/init_config.py
 ```
-*交互式向导：配置您的身高体重、多病种标签、用药打分及常居地（用于医院推荐）。*
 
-### 4. 生成报告 (支持日/周/月)
+初始化向导会把长期配置写入 `config/user_config.json`，包括：
+
+- 用户档案
+- 活跃病种与主病种
+- 评分模块与权重
+- 用药模块开关
+- 常居地
+- 自定义监测模块
+- 报告偏好与 AI 生成偏好
+
+### 4. 生成报告
+
 ```bash
 python scripts/health_report_pro.py /path/to/memory/2026-03-20.md 2026-03-20
 python scripts/weekly_report_pro.py 2026-03-20
 python scripts/monthly_report_pro.py 2026-03-20
 ```
 
+### 5. 可选的定时 shell 入口
+
+```bash
+scripts/daily_health_report_pro.sh
+scripts/weekly_health_report_pro.sh
+scripts/monthly_health_report_pro.sh
+```
+
+### 6. 可选的英文镜像记忆
+
+```bash
+python scripts/export_memory_en.py
+```
+
+适用于：
+
+- 需要英文版 memory 镜像
+- 当前环境缺少中文字体，需要英文渲染路径
+- 想验证中英文日报 / 周报 / 月报的一致性
+
 ---
 
-## 📝 AI 记忆落盘铁律
+## ⚙️ 配置说明
 
-当助手往 `MEMORY_DIR` 写入内容时，必须像"无情的机器记录仪"一样工作。严禁写入点评、建议、总结、Emoji 或聊天腔调。
+### `config/user_config.json`
 
-<details>
-<summary><b>👉 点击展开：大模型必须严格遵守的 Markdown 落地模板</b></summary>
+这是最核心的长期配置文件，负责保存：
+
+- 用户基础信息
+- 病种列表与主病种
+- 启用的评分模块及其权重
+- 用药设置
+- 常居地与地理信息
+- 自定义监测模块
+- 报告偏好
+- AI 生成偏好
+
+### 常见环境变量
+
+| 变量名 | 是否必填 | 作用 |
+| --- | --- | --- |
+| `MEMORY_DIR` | 是 | 指向健康 Markdown 目录 |
+| `TAVILY_API_KEY` | 否 | 启用 Tavily 检索兜底 |
+| `DINGTALK_WEBHOOK` | 否 | 推送文字摘要与 PDF 到钉钉 |
+| `FEISHU_WEBHOOK` | 否 | 推送文字摘要与 PDF 到飞书 |
+| `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` | 否 | 推送文字摘要与 PDF 到 Telegram |
+| `REPORT_WEB_DIR` | 否 | 把 PDF 同步到 Web 目录 |
+| `REPORT_BASE_URL` | 否 | 生成公开访问的 PDF 链接 |
+| `ALLOW_RUNTIME_FONT_DOWNLOAD` | 否 | 允许运行时下载字体 |
+
+---
+
+## 📝 MEMORY 写入协议
+
+Health-Mate 的解析依赖稳定格式。写入 `MEMORY_DIR` 时，LLM 必须像数据记录仪一样克制。
+
+硬性要求：
+
+- 不写点评
+- 不写鼓励语
+- 不写总结
+- 不写 emoji
+- 不写聊天废话
+
+结构要求：
+
+- 饮食、饮水、用药、运动事件必须使用带时间的三级标题
+- 饮水块必须保持简洁稳定
+- 步数必须写在单独的二级标题中
+- 自定义监测模块必须保持稳定标题
+- 避免在同一数据块中混写多种语言
+
+### 最小示例
 
 ```markdown
 # 2026-03-20 健康记录
@@ -124,90 +287,140 @@ python scripts/monthly_report_pro.py 2026-03-20
 
 ## 今日步数
 - 总步数：8200 步
-
-## 用药记录
-- 胆舒胶囊：1 粒
 ```
-</details>
+
+### 可扩展监测模块示例
+
+```markdown
+## 血压记录
+### 上午（约 08:00）
+- 血压：128/82 mmHg
+- 心率：72 bpm
+
+## 血糖记录
+### 早餐后（约 10:10）
+- 血糖：7.1 mmol/L
+- 时点：早餐后 2 小时
+
+## 体成分
+- 体重：64.4kg
+- 体脂：18.6%
+
+## 生化记录
+- ALT：34 U/L
+- AST：28 U/L
+```
+
+禁止写入的内容：
+
+- `评估`
+- `状态`
+- `总结`
+- 鼓励性废话
+- 调试日志
+- 系统日志
 
 ---
 
-## 🔗 更新履历
+## 🔤 字体与双语渲染
+
+推荐中文字体路径：
+
+- `assets/NotoSansSC-VF.ttf`
+
+如果中文字体缺失：
+
+- 系统会切换到英文兼容渲染路径
+- PDF 中会追加渲染说明
+- 若要恢复中文 PDF，请把字体放入 `assets/`
+
+项目地址：
+
+- [Health-Mate GitHub 仓库](https://github.com/tankeito/Health-Mate)
+
+---
+
+## 🧪 常见问题排查
+
+### 1. 提示 `MEMORY_DIR` 未设置
+
+- 当前 shell 入口已不再允许隐式默认目录
+- 请在 `config/.env` 或运行环境里显式设置 `MEMORY_DIR`
+
+### 2. 月报医院医生推荐不够具体
+
+- 先确认 `user_config.json` 中已配置常居地
+- 若想看到医生级推荐，请确认本地 LLM 可用
+- 如需检索增强，请配置 `TAVILY_API_KEY`
+- 如果 LLM 暂时不可用，系统也会优先尝试使用城市级本地规则输出真实医院与医生组合
+
+### 3. 中文 PDF 变成英文版
+
+- 一般说明缺少中文字体
+- 把 `NotoSansSC-VF.ttf` 放入 `assets/` 后重新生成即可
+
+### 4. 没有收到 Webhook 推送
+
+- 检查对应 webhook 环境变量是否已配置
+- 查看 `logs/` 中的执行日志
+
+---
+
+## 📌 更新记录
 
 ### v1.4.0 — 2026-03-21
-- 📅 **月度深度复盘**：全新上线月报 PDF 流程，包含宏观依从性雷达图、30 天体重/BMR 趋势图、脂肪/碳水箱线图及专科病理图表。
-- 🗺 **LBS 门诊规划**：新增基于配置常居地的复查提醒与医院/门诊智能推荐建议。
-- 🌡 **热力图引擎**：周报与月报全面引入 GitHub 风格的症状与用药热力图 (Heatmap)。
-- 🔒 **安全加固**：彻底移除隐性 MEMORY_DIR 兜底路径，必须显式配置以防止越权。
-- 🛡 **高可用回退**：增强了 LLM 失败时的本地断网回退逻辑，确保报告仍能基于真实数据生成输出。
 
-### v1.3.0 — 2026-03-20
-- 🌐 双语架构：新增 i18n.py 统一中英文语言层
-- 📝 记忆协议：强化反点评规则，提供中英双模板
-- 🔧 解析增强：改进双语餐次/饮水/运动块检测
-- 🎨 PDF 修复：解决 PDF 中 Emoji 渲染方块乱码 (☒) 问题
-- 💊 用药追踪：支持自定义模块（如用药记录）
-
-### v1.2.0 — 2026-03-20
-- 🎯 动态目标：重构病理参数支持灵活健康目标（如减脂）
-- 🌍 多语言文档：新增双语文档和自定义模块支持
-- 🧹 严格协议：重写记忆落盘铁律锁定 LLM 输出
-- 🐛 Bug 修复：修复 PDF Emoji 渲染和解析容错问题
+- 📊 新增完整健康月报工作流与专项图表
+- 🏥 新增基于常居地的复查提醒与医院 / 门诊规划
+- 🌡 新增周报 / 月报的症状与用药热力图
+- 🔒 移除 `MEMORY_DIR` 的隐式回退逻辑
+- 🧠 增强 LLM 失败时的本地规则回退能力
+- 🌐 强化中英文双语输出与英文安全渲染路径
 
 ---
 
-## 📦 项目结构
+## 📁 项目结构
 
-```
+```text
 health-mate/
 ├── scripts/
-│   ├── health_report_pro.py          # 日报生成器
-│   ├── weekly_report_pro.py          # 周报生成器
-│   ├── monthly_report_pro.py         # 月报生成器 (NEW)
-│   ├── pdf_generator.py              # 日报 PDF 渲染引擎
-│   ├── weekly_pdf_generator.py       # 周报 PDF 渲染
-│   ├── monthly_pdf_generator.py      # 月报 PDF 渲染 (NEW)
-│   ├── i18n.py                       # 双语语言层
-│   ├── constants.py                  # 食物热量数据库
-│   ├── init_config.py                # 交互式配置向导
-│   ├── daily_health_report_pro.sh    # 定时任务脚本（日报）
-│   ├── weekly_health_report_pro.sh   # 定时任务脚本（周报）
-│   └── monthly_health_report_pro.sh  # 定时任务脚本（月报）(NEW)
+│   ├── health_report_pro.py
+│   ├── weekly_report_pro.py
+│   ├── monthly_report_pro.py
+│   ├── pdf_generator.py
+│   ├── weekly_pdf_generator.py
+│   ├── monthly_pdf_generator.py
+│   ├── i18n.py
+│   ├── init_config.py
+│   ├── export_memory_en.py
+│   ├── daily_health_report_pro.sh
+│   ├── weekly_health_report_pro.sh
+│   └── monthly_health_report_pro.sh
 ├── config/
-│   ├── user_config.json              # 用户健康档案
-│   ├── .env                          # 环境变量（已加入 gitignore）
-│   ├── .env.example                  # 环境变量模板
-│   ├── pdf_style_config.json         # PDF 样式配置
-│   └── user_config.example.json      # 档案模板
+│   ├── user_config.json
+│   ├── user_config.example.json
+│   ├── .env
+│   └── pdf_style_config.json
 ├── assets/
-│   └── NotoSansSC-VF.ttf             # 中文字体（自动下载）
-├── logs/                             # 执行日志
-├── reports/                          # 生成的 PDF 报告
-├── README.md                         # 英文文档
-├── README_ZH.md                      # 中文文档
-├── SKILL.md                          # OpenClaw 技能定义
-└── requirements.txt                  # Python 依赖
+│   └── NotoSansSC-VF.ttf
+├── logs/
+├── reports/
+├── README.md
+├── README_ZH.md
+├── SKILL.md
+├── _meta.json
+└── requirements.txt
 ```
 
 ---
 
-## 📄 许可证
+## 📄 License
 
-MIT License – 详见 [LICENSE](LICENSE) 文件。
-
----
-
-## 📞 支持与资源
-
-- **GitHub Issues**: https://github.com/tankeito/Health-Mate/issues
-- **Maton 文档**: https://maton.ai/docs
-- **Google Docs API**: https://developers.google.com/workspace/docs/api
-- **电子邮箱**: tqd354@gmail.com
+MIT License，详见 [LICENSE](LICENSE)。
 
 ---
 
-## 🙏 致谢
+## 📬 支持与反馈
 
-- **Maton** – 提供 OAuth 托管的 API 网关
-- **Google Workspace** – 提供强大的 Docs API
-- **OpenClaw** – 提供 AI 助手平台
+- GitHub Issues: [https://github.com/tankeito/Health-Mate/issues](https://github.com/tankeito/Health-Mate/issues)
+- GitHub 仓库: [https://github.com/tankeito/Health-Mate](https://github.com/tankeito/Health-Mate)

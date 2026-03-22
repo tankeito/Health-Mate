@@ -20,7 +20,7 @@ from reportlab.lib.utils import ImageReader
 from reportlab.platypus import Image, KeepTogether, PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from i18n import condition_name, format_weight, resolve_locale
-from pdf_generator import clean_html_tags, get_font_prop, register_chinese_font
+from pdf_generator import clean_html_tags, get_font_prop, register_chinese_font, stars_to_text
 
 try:
     import matplotlib.patches as mpatches
@@ -396,49 +396,88 @@ def create_weight_bmr_trend_chart(records: List[dict], profile: dict, locale: st
         return None
 
 
-def create_symptom_distribution_chart(distribution: Dict[str, int], locale: str) -> Optional[str]:
-    if not MATPLOTLIB_AVAILABLE or not distribution:
+def create_symptom_distribution_chart(chart: Dict[str, object], locale: str) -> Optional[str]:
+    if not MATPLOTLIB_AVAILABLE:
         return None
 
     try:
         font_prop = get_font_prop()
-        top_items = list(distribution.items())[:5]
-        if not top_items:
+        distribution = chart.get("distribution", {}) if isinstance(chart, dict) else {}
+        total_days = int(chart.get("calendar_days", 0) or 0) if isinstance(chart, dict) else 0
+        symptom_days = int(chart.get("symptom_days", 0) or 0) if isinstance(chart, dict) else 0
+        healthy_days = int(chart.get("healthy_days", max(total_days - symptom_days, 0)) or 0) if isinstance(chart, dict) else 0
+        if total_days <= 0:
             return None
+        completion_rate = float(chart.get("completion_rate", healthy_days / max(total_days, 1) * 100) or 0) if isinstance(chart, dict) else 0
+        healthy_label = (
+            chart.get("healthy_legend")
+            if isinstance(chart, dict)
+            else localize(locale, f"健康无症状：{healthy_days} 天", f"Healthy symptom-free: {healthy_days} days")
+        )
+        symptom_label = (
+            chart.get("symptom_legend")
+            if isinstance(chart, dict)
+            else localize(locale, f"出现不适：{symptom_days} 天", f"Symptoms present: {symptom_days} days")
+        )
 
-        labels = [item[0] for item in top_items][::-1]
-        values = [int(item[1]) for item in top_items][::-1]
-        total = max(1, sum(values))
-        colors = ["#BFDBFE", "#93C5FD", "#60A5FA", "#3B82F6", "#1D4ED8"][-len(values) :]
-
-        fig_height = max(1.15, len(labels) * 0.6 + 0.35)
-        fig, ax = plt.subplots(figsize=(7.4, fig_height))
+        fig, ax = plt.subplots(figsize=(7.8, 4.0))
         fig.patch.set_alpha(0)
-        bars = ax.barh(range(len(labels)), values, color=colors, edgecolor="white", height=0.58)
-        ax.set_yticks(range(len(labels)))
-        ax.set_yticklabels(labels, color=C_TEXT_MAIN, fontsize=9)
-        xlabel = ax.set_xlabel(localize(locale, "出现次数", "Occurrences"), color=C_TEXT_MAIN)
-        ax.tick_params(axis="x", colors=C_TEXT_MAIN, labelsize=8)
-        ax.grid(axis="x", color=C_GRID, linestyle="--", alpha=0.35)
-        ax.spines["top"].set_visible(False)
-        ax.spines["right"].set_visible(False)
-        ax.spines["left"].set_visible(False)
-        ax.spines["bottom"].set_color(C_BORDER)
-        _apply_tick_font(ax, font_prop)
-        _style_text(xlabel, font_prop, color=C_TEXT_MAIN)
+        wedges, _ = ax.pie(
+            [healthy_days, max(symptom_days, 0)],
+            startangle=90,
+            counterclock=False,
+            colors=[C_SUCCESS, C_WARNING if symptom_days > 0 else C_EMPTY],
+            wedgeprops={"width": 0.34, "edgecolor": "white", "linewidth": 2},
+        )
+        ax.set(aspect="equal")
+        ax.axis("off")
 
-        for bar, value in zip(bars, values):
-            percent = value / total * 100
-            text = ax.text(
-                bar.get_width() + 0.08,
-                bar.get_y() + bar.get_height() / 2,
-                localize(locale, f"{value} 次 ({percent:.0f}%)", f"{value} ({percent:.0f}%)"),
-                va="center",
-                ha="left",
-                fontsize=8,
-                color=C_TEXT_MAIN,
+        center_title = ax.text(
+            0,
+            0.10,
+            localize(locale, "健康达标", "Healthy days"),
+            ha="center",
+            va="center",
+            fontsize=11,
+            color=C_TEXT_MUTED,
+        )
+        _style_text(center_title, font_prop, color=C_TEXT_MUTED, fontsize=11)
+        center_value = ax.text(
+            0,
+            -0.08,
+            localize(locale, f"{completion_rate:.0f}%", f"{completion_rate:.0f}%"),
+            ha="center",
+            va="center",
+            fontsize=18,
+            color=C_TEXT_MAIN,
+        )
+        _style_text(center_value, font_prop, color=C_TEXT_MAIN, fontsize=18)
+
+        top_items = list((distribution or {}).items())[:2]
+        if top_items and symptom_days > 0:
+            symptom_detail = (
+                "、".join(f"{label} {count}次" for label, count in top_items)
+                if resolve_locale(locale=locale) == "zh-CN"
+                else ", ".join(f"{label} {count}x" for label, count in top_items)
             )
-            _style_text(text, font_prop, color=C_TEXT_MAIN, fontsize=8)
+            symptom_label = localize(
+                locale,
+                f"出现不适：{symptom_days} 天（{symptom_detail}）",
+                f"Symptoms present: {symptom_days} days ({symptom_detail})",
+            )
+
+        legend = ax.legend(
+            wedges,
+            [healthy_label, symptom_label],
+            loc="center left",
+            bbox_to_anchor=(1.02, 0.5),
+            frameon=False,
+            fontsize=8.8,
+            handlelength=1.2,
+            handletextpad=0.6,
+            borderaxespad=0.0,
+        )
+        _style_legend(legend, font_prop, fontsize=8.8)
 
         return _save_figure(fig)
     except Exception:
@@ -838,7 +877,7 @@ def generate_monthly_pdf_report(
         if chart_type == "gallstones":
             return create_gallstone_correlation_chart(chart.get("records", []), locale, fat_target=chart.get("fat_target"))
         if chart_type == "symptom_distribution":
-            return create_symptom_distribution_chart(chart.get("distribution", {}), locale)
+            return create_symptom_distribution_chart(chart, locale)
         if chart_type == "intake_boxplot":
             return create_intake_boxplot(chart.get("records", []), locale)
         if chart_type == "hypertension":
@@ -926,7 +965,7 @@ def generate_monthly_pdf_report(
                 if chart_path:
                     temp_images.append(chart_path)
                     if chart.get("type") == "symptom_distribution":
-                        story.append(_build_chart_image(chart_path, 15.5, 3.6))
+                        story.append(_build_chart_image(chart_path, 15.8, 4.3))
                     else:
                         story.append(_build_chart_image(chart_path, 16.0, 5.0))
                 story.append(Spacer(1, 0.08 * cm))
@@ -1001,22 +1040,44 @@ def generate_monthly_pdf_report(
             story.append(Paragraph(localize(locale, "复查提醒", "Follow-up Reminders"), sub_heading_style))
             add_bullet_lines(followups)
 
-        recommendations = monthly_data.get("hospital_recommendations", [])
+        recommendation_groups = monthly_data.get("hospital_recommendation_groups", [])
         story.append(Paragraph(localize(locale, "医院与门诊建议", "Hospital and Clinic Suggestions"), sub_heading_style))
-        if recommendations:
-            for item in recommendations:
-                title = clean_html_tags(item.get('hospital', '-'))
-                doctor_text = clean_html_tags(item.get("doctor") or localize(locale, "优先预约专家门诊", "Prioritize specialist clinic"))
-                department_text = clean_html_tags(item.get("department") or "-")
-                reason_text = clean_html_tags(item.get("reason") or "")
-                bullets = [
-                    localize(locale, f"推荐科室：{department_text}", f"Recommended department: {department_text}"),
-                    localize(locale, f"推荐医生：{doctor_text}", f"Recommended doctor: {doctor_text}"),
-                    localize(locale, f"推荐理由：{reason_text}", f"Recommendation reason: {reason_text}"),
+        if recommendation_groups:
+            for group_index, group in enumerate(recommendation_groups):
+                hospital_title = clean_html_tags(group.get("hospital", "-"))
+                if group_index == 0:
+                    hospital_title = localize(locale, f"{hospital_title}（首推）", f"{hospital_title} (Top Choice)")
+                hospital_stars_html = stars_to_text(group.get("hospital_stars", ""))
+                story.append(Paragraph(f"<b>{hospital_title}</b> {hospital_stars_html}", card_title_style))
+                hospital_lines = [
+                    localize(locale, f"医院等级：{group.get('hospital_grade', '-')}", f"Hospital grade: {group.get('hospital_grade', '-')}"),
+                    localize(locale, f"医院优势：{group.get('hospital_strength', '-')}", f"Hospital strengths: {group.get('hospital_strength', '-')}"),
                 ]
-                story.append(Paragraph(f"<b>{title}</b>", card_title_style))
-                add_bullet_lines(bullets)
-                story.append(Spacer(1, 0.1 * cm))
+                if group.get("hospital_address"):
+                    hospital_lines.append(localize(locale, f"医院地址：{group.get('hospital_address')}", f"Address: {group.get('hospital_address')}"))
+                if group.get("booking_method"):
+                    hospital_lines.append(localize(locale, f"挂号方式：{group.get('booking_method')}", f"Booking: {group.get('booking_method')}"))
+                add_bullet_lines(hospital_lines)
+                for doctor in group.get("doctors", []):
+                    doctor_name = clean_html_tags(doctor.get("doctor_name", "-"))
+                    doctor_title = clean_html_tags(doctor.get("doctor_title", localize(locale, "医生", "Doctor")))
+                    doctor_stars_html = stars_to_text(doctor.get("doctor_stars", ""))
+                    doctor_heading = localize(
+                        locale,
+                        f"{doctor_name}【{doctor_title}】",
+                        f"{doctor_name} [{doctor_title}]",
+                    )
+                    story.append(Paragraph(f"<b>{doctor_heading}</b> {doctor_stars_html}", normal_style))
+                    doctor_lines = [
+                        localize(locale, f"推荐科室：{doctor.get('department', '-')}", f"Recommended department: {doctor.get('department', '-')}"),
+                        localize(locale, f"医生擅长：{doctor.get('doctor_specialty', '-')}", f"Doctor specialty: {doctor.get('doctor_specialty', '-')}"),
+                        localize(locale, f"挂号费：{doctor.get('registration_fee', '-')}", f"Registration fee: {doctor.get('registration_fee', '-')}"),
+                        localize(locale, f"坐诊时间：{doctor.get('clinic_schedule', '-')}", f"Clinic schedule: {doctor.get('clinic_schedule', '-')}"),
+                        localize(locale, f"推荐理由：{doctor.get('reason', '-')}", f"Recommendation reason: {doctor.get('reason', '-')}"),
+                    ]
+                    add_bullet_lines(doctor_lines)
+                    story.append(Spacer(1, 0.08 * cm))
+                story.append(Spacer(1, 0.08 * cm))
         else:
             story.append(
                 Paragraph(
