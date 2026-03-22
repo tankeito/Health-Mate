@@ -27,7 +27,7 @@ def console_print(*args, sep=" ", end="\n", file=sys.stdout, flush=False):
 
 print = console_print
 
-from health_report_pro import (
+from daily_health_report_pro import (
     REPORTS_DIR,
     build_multi_condition_tip,
     build_score_report,
@@ -119,7 +119,14 @@ def dedupe_preserve_order(items):
 
 
 def clean_search_excerpt(text, locale, max_length=160):
-    return shared_clean_search_excerpt(text, locale, max_length=max_length)
+    snippet = shared_clean_search_excerpt(text, locale, max_length=max_length)
+    snippet = re.sub(r"[，,、;；:：]+\s*[。\.]+$", "", snippet or "").strip()
+    snippet = re.sub(r"[，,、;；:：\.。!！?？]+$", "", snippet or "").strip()
+    if not snippet:
+        return ""
+    if resolve_locale(locale=locale) == "zh-CN":
+        return snippet if re.search(r"[。！？!?]$", snippet) else snippet + "。"
+    return snippet if re.search(r"[.!?]$", snippet) else snippet + "."
 
 
 def get_week_dates(target_date_str):

@@ -9,7 +9,7 @@ import re
 from typing import Dict, Iterable, Optional
 
 DEFAULT_LOCALE = "zh-CN"
-SUPPORTED_LOCALES = {"zh-CN", "en-US"}
+SUPPORTED_LOCALES = {"zh-CN", "en-US", "ja-JP"}
 
 LOCALE_ALIASES = {
     "zh": "zh-CN",
@@ -25,6 +25,11 @@ LOCALE_ALIASES = {
     "en_us": "en-US",
     "english": "en-US",
     "英文": "en-US",
+    "ja": "ja-JP",
+    "ja-jp": "ja-JP",
+    "ja_jp": "ja-JP",
+    "japanese": "ja-JP",
+    "日本語": "ja-JP",
 }
 
 TEXTS: Dict[str, Dict[str, str]] = {
@@ -761,7 +766,8 @@ def resolve_locale(config: Optional[dict] = None, locale: Optional[str] = None) 
 
 def t(locale: Optional[str], key: str, **kwargs) -> str:
     resolved = resolve_locale(locale=locale)
-    template = TEXTS.get(resolved, {}).get(key) or TEXTS[DEFAULT_LOCALE].get(key) or key
+    fallback_locale = resolved if resolved in TEXTS else ("en-US" if resolved == "ja-JP" else DEFAULT_LOCALE)
+    template = TEXTS.get(resolved, {}).get(key) or TEXTS.get(fallback_locale, {}).get(key) or TEXTS[DEFAULT_LOCALE].get(key) or key
     return template.format(**kwargs)
 
 

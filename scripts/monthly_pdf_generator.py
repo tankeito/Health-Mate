@@ -20,7 +20,7 @@ from reportlab.lib.utils import ImageReader
 from reportlab.platypus import Image, KeepTogether, PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from i18n import condition_name, format_weight, resolve_locale
-from pdf_generator import clean_html_tags, get_font_prop, register_chinese_font, stars_to_text
+from daily_pdf_generator import clean_html_tags, get_font_prop, register_chinese_font, stars_to_text, build_numbered_canvasmaker
 
 try:
     import matplotlib.patches as mpatches
@@ -289,16 +289,18 @@ def create_symptom_heatmap(daily_records: List[dict], locale: str, min_weeks: in
         legend_kwargs = {
             "handles": legend_items,
             "loc": "upper center",
-            "bbox_to_anchor": (0.5, -0.2),
+            "bbox_to_anchor": (0.5, -0.26),
             "frameon": False,
             "ncol": 2,
-            "fontsize": 6.5,
-            "columnspacing": 1.6,
-            "handlelength": 1.2,
+            "fontsize": 6.7,
+            "columnspacing": 2.2,
+            "handlelength": 1.35,
+            "handletextpad": 0.55,
+            "borderaxespad": 0.0,
         }
         legend = ax.legend(**legend_kwargs)
-        _style_legend(legend, font_prop, fontsize=6.5)
-        fig.subplots_adjust(bottom=0.26)
+        _style_legend(legend, font_prop, fontsize=6.7)
+        fig.subplots_adjust(bottom=0.31)
 
         return _save_figure(fig)
     except Exception:
@@ -800,7 +802,7 @@ def generate_monthly_pdf_report(
     recommendation_source: str = "fallback",
 ) -> None:
     locale = resolve_locale(locale=locale)
-    font_name = register_chinese_font()
+    font_name = register_chinese_font(locale)
     render_notice = str(monthly_data.get("render_notice") or "").strip()
 
     doc = SimpleDocTemplate(
@@ -1100,7 +1102,7 @@ def generate_monthly_pdf_report(
         )
         story.append(Paragraph(f"{profile_condition_title(profile, locale)} - Health-Mate", footer_style))
 
-        doc.build(story)
+        doc.build(story, canvasmaker=build_numbered_canvasmaker(font_name))
     finally:
         for image_path in temp_images:
             if image_path and os.path.exists(image_path):

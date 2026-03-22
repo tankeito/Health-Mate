@@ -4,6 +4,7 @@
 
 import os
 import math
+import re
 import tempfile
 from datetime import datetime
 from reportlab.lib import colors
@@ -15,7 +16,7 @@ from reportlab.lib.units import cm
 from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
 from reportlab.lib.utils import ImageReader
 
-from pdf_generator import register_chinese_font, get_font_prop, clean_html_tags
+from daily_pdf_generator import register_chinese_font, get_font_prop, clean_html_tags, build_numbered_canvasmaker, StatusBadge
 from i18n import condition_name, format_weight, format_weight_delta, resolve_locale, t, weight_unit
 from monthly_pdf_generator import create_macro_radar_chart, create_symptom_heatmap
 
@@ -32,12 +33,17 @@ except ImportError:
 C_PRIMARY = "#2563EB"
 C_SUCCESS = "#10B981"
 C_WARNING = "#F59E0B"
+C_DANGER = "#EF4444"
 C_TEXT_MAIN = "#1E293B"
 C_TEXT_MUTED = "#64748B"
 C_BORDER = "#E2E8F0"
 C_BG_HEAD = "#F8FAFC"
+C_PRIMARY_SOFT = "#BFDBFE"
+C_SUCCESS_SOFT = "#A7F3D0"
+C_WARNING_SOFT = "#FED7AA"
 
 C_CARB, C_PROTEIN, C_FAT = "#3B82F6", "#10B981", "#F59E0B"
+BULLET_PREFIX_RE = re.compile(r"^(?:[-*•●■▪▫◦‣]+)\s*")
 
 
 def localize(locale, zh_text, en_text):
@@ -84,6 +90,20 @@ def _style_legend(legend, font_prop=None, fontsize=8):
         return
     for text in legend.get_texts():
         _style_matplotlib_text(text, font_prop, fontsize=fontsize)
+
+
+def _weekly_status_badge(status_text, font_name):
+    text = clean_html_tags(status_text)
+    lowered = text.lower()
+    success_keywords = {"达标", "正常", "无症状", "active", "achieved", "excellent", "stable", "good"}
+    warning_keywords = {"待改进", "偏低", "不足", "low", "under", "needs", "improvement", "down", "up"}
+    if any(keyword in lowered or keyword in text for keyword in success_keywords):
+        fill = HexColor(C_SUCCESS)
+    elif any(keyword in lowered or keyword in text for keyword in warning_keywords):
+        fill = HexColor(C_WARNING)
+    else:
+        fill = HexColor(C_PRIMARY)
+    return StatusBadge(text, fill, font_name=font_name, max_width=3.45 * cm, height=0.72 * cm)
 
 
 def _build_chart_image(path: str, max_width_cm: float, max_height_cm: float, h_align: str = "CENTER") -> Image:
@@ -194,19 +214,33 @@ def create_trend_line_chart(dates, values, title):
         print(f"WARNING: trend line generation failed: {e}")
         return None
 
-def create_bar_trend_chart(dates, values, target, color, title, ylabel):
+def create_bar_trend_chart(dates, values, target, title, ylabel, hit_color, miss_color, over_color=None):
     if not MATPLOTLIB_AVAILABLE: return None
     try:
         my_font = get_font_prop()
         fig, ax = plt.subplots(figsize=(8, 3))
-        
-        bars = ax.bar(dates, values, color=color, width=0.4, alpha=0.85, zorder=2)
-        
+
+        normalized_values = [max(0, float(value or 0)) for value in values]
+        bar_colors = []
+        for value in normalized_values:
+            if target and target > 0:
+                if over_color is not None:
+                    bar_colors.append(over_color if value > target else hit_color)
+                else:
+                    bar_colors.append(hit_color if value >= target else miss_color)
+            else:
+                bar_colors.append(hit_color)
+        bars = ax.bar(dates, normalized_values, color=bar_colors, width=0.46, alpha=0.92, zorder=2)
+
         if target and target > 0:
             ax.axhline(y=target, color=C_WARNING, linestyle='--', alpha=0.8, linewidth=1.5, zorder=1)
-            t_tgt = ax.text(len(dates)-0.5, target, f"{target}", color=C_WARNING, va='bottom', ha='right', fontsize=9, fontweight='bold')
+            t_tgt = ax.text(len(dates)-0.42, target, f"{int(round(target))}", color=C_WARNING, va='bottom', ha='right', fontsize=8.6, fontweight='bold')
             _style_matplotlib_text(t_tgt, my_font, color=C_WARNING, fontsize=9)
-            
+
+        if ylabel:
+            ylabel_obj = ax.set_ylabel(ylabel, color=C_TEXT_MUTED)
+            _style_matplotlib_text(ylabel_obj, my_font, color=C_TEXT_MUTED, fontsize=8.4)
+
         ax.spines['top'].set_visible(False)
         ax.spines['right'].set_visible(False)
         ax.spines['left'].set_visible(False)
@@ -215,14 +249,14 @@ def create_bar_trend_chart(dates, values, target, color, title, ylabel):
         ax.tick_params(axis='x', colors=C_TEXT_MAIN, labelsize=8)
         ax.yaxis.grid(True, linestyle='--', alpha=0.3, color=C_BORDER, zorder=0)
         _apply_axis_tick_style(ax, my_font)
-        
-        max_val = max(values + [target if target else 0])
-        ax.set_ylim(0, max_val * 1.2)
-        
+
+        max_val = max(normalized_values + [target if target else 0, 1])
+        ax.set_ylim(0, max_val * 1.22)
+
         title_obj = ax.set_title(title, color=C_TEXT_MAIN, loc='left', pad=15, fontweight='bold')
         _style_matplotlib_text(title_obj, my_font, color=C_TEXT_MAIN)
 
-        plt.tight_layout()
+        plt.tight_layout(pad=1.0)
         temp_img = tempfile.NamedTemporaryFile(delete=False, suffix='.png')
         plt.savefig(temp_img.name, transparent=True, dpi=200)
         plt.close(fig)
@@ -240,23 +274,32 @@ def create_weekly_nutrition_chart(calories, protein, fat, carb, locale):
         carb_kcal, protein_kcal, fat_kcal = carb * 4, protein * 4, fat * 9
         if carb_kcal + protein_kcal + fat_kcal <= 0: return None
         
-        fig, ax = plt.subplots(figsize=(5, 3), subplot_kw=dict(aspect="equal"))
-        wedges, texts, autotexts = ax.pie([carb_kcal, protein_kcal, fat_kcal], labels=[t(locale, 'carb'), t(locale, 'protein'), t(locale, 'fat')], colors=[C_CARB, C_PROTEIN, C_FAT], autopct='%1.1f%%', startangle=90, wedgeprops=dict(width=0.4, edgecolor='w'))
+        fig, ax = plt.subplots(figsize=(5.2, 3.25), subplot_kw=dict(aspect="equal"))
+        wedges, texts, autotexts = ax.pie(
+            [carb_kcal, protein_kcal, fat_kcal],
+            labels=[t(locale, 'carb'), t(locale, 'protein'), t(locale, 'fat')],
+            colors=[C_CARB, C_PROTEIN, C_FAT],
+            autopct='%1.1f%%',
+            pctdistance=0.84,
+            labeldistance=1.05,
+            startangle=90,
+            wedgeprops=dict(width=0.4, edgecolor='w')
+        )
         
         for label_text in texts:
-            _style_matplotlib_text(label_text, my_font, color=C_TEXT_MAIN, fontsize=9)
+            _style_matplotlib_text(label_text, my_font, color=C_TEXT_MAIN, fontsize=9.2)
         for auto_text in autotexts:
             auto_text.set_color("#FFFFFF")
-            auto_text.set_fontsize(9)
+            auto_text.set_fontsize(8.0)
             auto_text.set_fontweight("bold")
-            auto_text.set_path_effects([path_effects.withStroke(linewidth=2, foreground=C_TEXT_MAIN)])
+            auto_text.set_path_effects([path_effects.withStroke(linewidth=2.2, foreground="black")])
             if my_font:
                 auto_text.set_fontproperties(my_font)
 
-        center_text = ax.text(0, 0, t(locale, 'weekly_nutrition_center', calories=int(calories)), ha='center', va='center', fontsize=10, fontweight='bold', color=C_TEXT_MAIN)
-        _style_matplotlib_text(center_text, my_font, color=C_TEXT_MAIN, fontsize=10)
+        center_text = ax.text(0, 0, t(locale, 'weekly_nutrition_center', calories=int(calories)), ha='center', va='center', fontsize=10.6, fontweight='bold', color=C_TEXT_MAIN)
+        _style_matplotlib_text(center_text, my_font, color=C_TEXT_MAIN, fontsize=10.6, fontweight="bold")
         
-        plt.tight_layout()
+        plt.tight_layout(pad=1.0)
         temp_img = tempfile.NamedTemporaryFile(delete=False, suffix='.png')
         plt.savefig(temp_img.name, transparent=True, dpi=200)
         plt.close(fig)
@@ -267,7 +310,7 @@ def create_weekly_nutrition_chart(calories, protein, fat, carb, locale):
 
 def generate_weekly_pdf_report(weekly_data, profile, ai_review, ai_plan, output_path, locale="zh-CN", review_source="fallback", plan_source="fallback"):
     locale = resolve_locale(locale=locale)
-    font_name = register_chinese_font()
+    font_name = register_chinese_font(locale)
     render_notice = str(weekly_data.get("render_notice") or "").strip()
     doc = SimpleDocTemplate(output_path, pagesize=A4, rightMargin=2*cm, leftMargin=2*cm, topMargin=2*cm, bottomMargin=2*cm, title=t(locale, 'weekly_report_title'))
     styles = getSampleStyleSheet()
@@ -298,17 +341,46 @@ def generate_weekly_pdf_report(weekly_data, profile, ai_review, ai_plan, output_
         }
         return labels.get(source or "fallback", labels["fallback"])
 
-    def append_lines(text):
+    def normalize_report_line(text):
+        clean = clean_html_tags(text).strip()
+        if not clean:
+            return ""
+        clean = BULLET_PREFIX_RE.sub("", clean).strip()
+        clean = re.sub(r"[，,、;；:：]+\s*[。\.]+$", "", clean)
+        clean = re.sub(r"[，,、;；:：\.。!！?？]+$", "", clean)
+        if not clean:
+            return ""
+        if locale == "zh-CN" and re.search(r"[A-Za-z\u4e00-\u9fff]$", clean):
+            clean += "。"
+        elif locale != "zh-CN" and re.search(r"[A-Za-z0-9]$", clean):
+            clean += "."
+        return clean
+
+    def append_lines(text, bullet_variant="neutral"):
+        append_lines_to_story(story, text, bullet_variant=bullet_variant)
+
+    def append_lines_to_story(target_story, text, bullet_variant="neutral"):
+        bullet_map = {
+            "success": (C_SUCCESS, "●"),
+            "warning": (C_WARNING, "●"),
+            "neutral": (C_PRIMARY, "•"),
+        }
+        bullet_color, bullet_symbol = bullet_map.get(bullet_variant, bullet_map["neutral"])
         for para in str(text or "").split("\n"):
             clean = clean_html_tags(para).strip()
             if not clean or clean.startswith("["):
                 continue
-            if clean.startswith("-") or clean.startswith("*"):
-                clean = clean[1:].strip()
-                story.append(Paragraph(f"<font color='{C_PRIMARY}'>■</font> {clean}", normal_style))
+            if BULLET_PREFIX_RE.match(clean):
+                clean = normalize_report_line(BULLET_PREFIX_RE.sub("", clean, count=1))
+                if not clean:
+                    continue
+                target_story.append(Paragraph(f"<font color='{bullet_color}'>{bullet_symbol}</font> {clean}", normal_style))
             else:
-                story.append(Paragraph(clean, normal_style))
-            story.append(Spacer(1, 0.08*cm))
+                clean = normalize_report_line(clean)
+                if not clean:
+                    continue
+                target_story.append(Paragraph(clean, normal_style))
+            target_story.append(Spacer(1, 0.08*cm))
 
     story = []
     temp_images = []
@@ -371,27 +443,28 @@ def generate_weekly_pdf_report(weekly_data, profile, ai_review, ai_plan, output_
 
     summary_rows = [
         [t(locale, 'dimension'), t(locale, 'value'), t(locale, 'health_status')],
-        [localize(locale, '周均综合评分', 'Average overall score'), f"{weekly_data.get('avg_total_score', 0):.1f}/100", t(locale, 'excellent') if weekly_data.get('avg_total_score', 0) >= 80 else t(locale, 'needs_improvement')],
-        [t(locale, 'average_weight'), format_weight(locale, weekly_data.get('avg_weight')), t(locale, 'stable') if abs(weekly_data.get('weight_change', 0)) <= 0.3 else (t(locale, 'down') if weekly_data.get('weight_change', 0) < 0 else t(locale, 'up'))],
-        [t(locale, 'average_calories'), f"{weekly_data.get('avg_calories', 0):.0f} kcal", t(locale, 'normal')],
-        [t(locale, 'average_water'), f"{weekly_data.get('avg_water', 0):.0f} ml", t(locale, 'achieved') if weekly_data.get('water_goal_days', 0) >= 5 else t(locale, 'under_target')],
-        [t(locale, 'average_steps'), f"{weekly_data.get('avg_steps', 0):.0f}", t(locale, 'active') if weekly_data.get('step_goal_days', 0) >= 4 else t(locale, 'low')],
-        [localize(locale, '症状/用药记录', 'Symptoms / medication'), f"{weekly_data.get('symptom_days', 0)} / {weekly_data.get('medication_days', 0)}", localize(locale, '需结合复盘', 'Review together')],
+        [localize(locale, '周均综合评分', 'Average overall score'), f"{weekly_data.get('avg_total_score', 0):.1f}/100", _weekly_status_badge(t(locale, 'excellent') if weekly_data.get('avg_total_score', 0) >= 80 else t(locale, 'needs_improvement'), font_name)],
+        [t(locale, 'average_weight'), format_weight(locale, weekly_data.get('avg_weight')), _weekly_status_badge(t(locale, 'stable') if abs(weekly_data.get('weight_change', 0)) <= 0.3 else (t(locale, 'down') if weekly_data.get('weight_change', 0) < 0 else t(locale, 'up')), font_name)],
+        [t(locale, 'average_calories'), f"{weekly_data.get('avg_calories', 0):.0f} kcal", _weekly_status_badge(t(locale, 'normal'), font_name)],
+        [t(locale, 'average_water'), f"{weekly_data.get('avg_water', 0):.0f} ml", _weekly_status_badge(t(locale, 'achieved') if weekly_data.get('water_goal_days', 0) >= 5 else t(locale, 'under_target'), font_name)],
+        [t(locale, 'average_steps'), f"{weekly_data.get('avg_steps', 0):.0f}", _weekly_status_badge(t(locale, 'active') if weekly_data.get('step_goal_days', 0) >= 4 else t(locale, 'low'), font_name)],
+        [localize(locale, '症状/用药记录', 'Symptoms / medication'), f"{weekly_data.get('symptom_days', 0)} / {weekly_data.get('medication_days', 0)}", _weekly_status_badge(localize(locale, '无症状' if weekly_data.get('symptom_days', 0) == 0 else '需结合复盘', 'No symptoms' if weekly_data.get('symptom_days', 0) == 0 else 'Review together'), font_name)],
     ]
     summary_table = Table(summary_rows, colWidths=[4.5*cm, 4.5*cm, 6*cm])
     summary_table.setStyle(TableStyle(table_style))
     story.append(summary_table)
     story.append(Spacer(1, 0.3*cm))
 
-    story.append(Paragraph(f"3. {localize(locale, '本周亮点与重点', 'Highlights And Focus')}", heading_style))
-    story.append(Paragraph(f"<b>{localize(locale, '本周亮点', 'Strengths This Week')}</b>", normal_style))
-    append_lines("\n".join(f"- {item}" for item in weekly_data.get("strengths", [])[:4]))
-    story.append(Spacer(1, 0.1*cm))
-    story.append(Paragraph(f"<b>{localize(locale, '待改进项', 'Needs Attention')}</b>", normal_style))
-    append_lines("\n".join(f"- {item}" for item in weekly_data.get("gaps", [])[:4]))
-    story.append(Spacer(1, 0.1*cm))
-    story.append(Paragraph(f"<b>{localize(locale, '下周重点', 'Focus For Next Week')}</b>", normal_style))
-    append_lines("\n".join(f"- {item}" for item in weekly_data.get("next_focus", [])[:4]))
+    highlights_block = [Paragraph(f"3. {localize(locale, '本周亮点与重点', 'Highlights And Focus')}", heading_style)]
+    highlights_block.append(Paragraph(f"<b>{localize(locale, '本周亮点', 'Strengths This Week')}</b>", normal_style))
+    append_lines_to_story(highlights_block, "\n".join(f"- {item}" for item in weekly_data.get("strengths", [])[:4]), bullet_variant="success")
+    highlights_block.append(Spacer(1, 0.1*cm))
+    highlights_block.append(Paragraph(f"<b>{localize(locale, '待改进项', 'Needs Attention')}</b>", normal_style))
+    append_lines_to_story(highlights_block, "\n".join(f"- {item}" for item in weekly_data.get("gaps", [])[:4]), bullet_variant="warning")
+    highlights_block.append(Spacer(1, 0.1*cm))
+    highlights_block.append(Paragraph(f"<b>{localize(locale, '下周重点', 'Focus For Next Week')}</b>", normal_style))
+    append_lines_to_story(highlights_block, "\n".join(f"- {item}" for item in weekly_data.get("next_focus", [])[:4]), bullet_variant="neutral")
+    story.append(KeepTogether(highlights_block))
 
     custom_rows = [section for section in weekly_data.get("custom_section_stats", []) if section.get("days_recorded", 0) > 0]
     if custom_rows:
@@ -417,7 +490,16 @@ def generate_weekly_pdf_report(weekly_data, profile, ai_review, ai_plan, output_
 
     bmr_val = (10 * (profile.get('current_weight_kg', 65)) + 6.25 * profile.get('height_cm', 172) - 5 * profile.get('age', 34) + (5 if str(profile.get('gender', 'male')).lower() == 'male' else -161))
     tdee_val = int(bmr_val * profile.get('activity_level', 1.2))
-    cal_chart = create_bar_trend_chart(short_dates, weekly_data['calories'], tdee_val, C_WARNING, t(locale, 'calorie_trend_title'), t(locale, 'calories'))
+    cal_chart = create_bar_trend_chart(
+        short_dates,
+        weekly_data['calories'],
+        tdee_val,
+        t(locale, 'calorie_trend_title'),
+        t(locale, 'calories'),
+        hit_color="#FB923C",
+        miss_color=C_WARNING_SOFT,
+        over_color=C_DANGER,
+    )
     if cal_chart:
         temp_images.append(cal_chart)
         story.append(Paragraph(f"<b>{t(locale, 'weekly_chart_calorie_label')}</b>", chart_label_style))
@@ -432,14 +514,30 @@ def generate_weekly_pdf_report(weekly_data, profile, ai_review, ai_plan, output_
         story.append(img)
         story.append(Spacer(1, 0.2*cm))
 
-    step_chart = create_bar_trend_chart(short_dates, weekly_data['steps'], profile.get('step_target', 8000), C_PRIMARY, t(locale, 'step_trend_title'), t(locale, 'average_steps'))
+    step_chart = create_bar_trend_chart(
+        short_dates,
+        weekly_data['steps'],
+        profile.get('step_target', 8000),
+        t(locale, 'step_trend_title'),
+        t(locale, 'average_steps'),
+        hit_color=C_PRIMARY,
+        miss_color=C_PRIMARY_SOFT,
+    )
     if step_chart:
         temp_images.append(step_chart)
         story.append(Paragraph(f"<b>{t(locale, 'weekly_chart_step_label')}</b>", chart_label_style))
         story.append(_build_chart_image(step_chart, 14.0, 5.25))
         story.append(Spacer(1, 0.2*cm))
 
-    water_chart = create_bar_trend_chart(short_dates, weekly_data['water_intakes'], profile.get('water_target_ml', 2000), C_SUCCESS, t(locale, 'water_trend_title'), t(locale, 'average_water'))
+    water_chart = create_bar_trend_chart(
+        short_dates,
+        weekly_data['water_intakes'],
+        profile.get('water_target_ml', 2000),
+        t(locale, 'water_trend_title'),
+        t(locale, 'average_water'),
+        hit_color=C_SUCCESS,
+        miss_color=C_SUCCESS_SOFT,
+    )
     if water_chart:
         temp_images.append(water_chart)
         story.append(Paragraph(f"<b>{t(locale, 'weekly_chart_water_label')}</b>", chart_label_style))
@@ -447,18 +545,18 @@ def generate_weekly_pdf_report(weekly_data, profile, ai_review, ai_plan, output_
         story.append(Spacer(1, 0.2*cm))
 
     story.append(Paragraph(f"5. {t(locale, 'weekly_ai_review_title')}", heading_style))
-    append_lines(ai_review)
+    append_lines(ai_review, bullet_variant="neutral")
     story.append(Paragraph(source_text(review_source), source_note_style))
 
     story.append(Paragraph(f"6. {t(locale, 'weekly_next_plan_title')}", heading_style))
-    append_lines(ai_plan)
+    append_lines(ai_plan, bullet_variant="neutral")
     story.append(Paragraph(source_text(plan_source), source_note_style))
 
     story.append(Spacer(1, 0.16*cm))
     story.append(Paragraph(localize(locale, f"报告生成时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", f"Report generated at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"), footer_style))
     story.append(Paragraph(f"{profile_condition_title(profile, locale)} - Health-Mate", footer_style))
 
-    doc.build(story)
+    doc.build(story, canvasmaker=build_numbered_canvasmaker(font_name))
     for img in temp_images:
         try:
             os.remove(img)

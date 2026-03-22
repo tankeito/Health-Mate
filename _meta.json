@@ -3,7 +3,7 @@
     "display_name": "Health-Mate",
     "type": "python/app",
     "version": "1.4.1",
-    "description": "Health-Mate is an executable bilingual OpenClaw health-management skill with local Markdown parsing, strict memory-write templates for LLM output, daily/weekly/monthly PDF generation, weekly and monthly heatmaps, a monthly healthy-day donut chart, specialty charts, residence-aware hospital-and-doctor planning, and optional webhook delivery. SECURITY DISCLOSURE: 1. MEMORY_DIR must be explicitly set; there is no implicit fallback path. 2. The bundled shell runners read config/.env when present and write local reports/logs during normal execution. 3. Outbound network requests occur only when webhook or Tavily credentials are configured, or when runtime font download is explicitly enabled. 4. Before upgrades or reinstalls, users should back up config/user_config.json and config/.env because some platform workflows may reset local configuration files.",
+    "description": "Health-Mate is an executable OpenClaw health-management skill with local Markdown parsing, strict memory-write templates for LLM output, daily/weekly/monthly PDF generation, healthy-day heatmaps, monthly specialty charts, hospital-and-doctor planning, and optional webhook delivery. Security disclosure: 1. MEMORY_DIR must be explicitly set. 2. Bundled shell runners read config/.env when present and write local reports/logs during normal execution. 3. Outbound network requests occur only when webhook or Tavily credentials are configured, or when runtime font download is explicitly enabled. 4. Users should back up config/user_config.json and config/.env before upgrades because some platform flows may reset local configuration files.",
     "author": "tankeito",
     "email": "tqd354@gmail.com",
     "license": "MIT",
@@ -33,7 +33,7 @@
         "TELEGRAM_CHAT_ID": "Optional. Required only for Telegram delivery.",
         "REPORT_WEB_DIR": "Optional. Local directory where generated PDFs can be copied for public serving.",
         "REPORT_BASE_URL": "Optional. Public base URL used to build downloadable PDF links.",
-        "ALLOW_RUNTIME_FONT_DOWNLOAD": "Optional. Disabled by default. Set to true only if you explicitly allow runtime fallback download of NotoSansSC-VF.ttf."
+        "ALLOW_RUNTIME_FONT_DOWNLOAD": "Optional. Disabled by default. Set to true only if you explicitly allow runtime fallback font download."
     },
     "commands": [
         {
@@ -56,13 +56,14 @@
         }
     ],
     "features": [
-        "Executable local Python scripts and shell runners, not an instruction-only prompt bundle",
-        "Bilingual Chinese/English parsing, prompts, and report generation with strict recorder-style memory templates",
-        "Localized daily, weekly, and monthly PDF reports with weekly/monthly heatmaps, a monthly healthy-day donut chart, and monthly specialty charts",
-        "Residence-aware monthly medical follow-up guidance and grouped hospital-and-doctor suggestions",
+        "Executable local Python scripts and shell runners, not a prompt-only package",
+        "Chinese and English report generation with strict recorder-style memory templates",
+        "Daily, weekly, and monthly PDF reports with trend charts, heatmaps, and specialty monthly visuals",
+        "Monthly hospital-and-doctor planning with LLM-first, Tavily-assisted, and local fallback modes",
         "Custom scoring modules and additional monitoring sections including medication and lab-style modules",
-        "Optional outbound network behavior limited to Tavily, webhook delivery, and explicit opt-in font download",
-        "English-compatible rendering fallback when the bundled Chinese font is unavailable",
+        "Explicit MEMORY_DIR handling with no implicit fallback path in the shell runners",
+        "English-safe rendering fallback when the Chinese font is missing",
+        "Bundled Japanese documentation and local Japanese font asset for `1.4.1`",
         "Upgrade-sensitive local config flow; users should back up config/user_config.json and config/.env before reinstalling or upgrading"
     ],
     "tags": [
@@ -72,9 +73,10 @@
         "hydration",
         "fitness",
         "openclaw",
-        "bilingual",
         "pdf",
         "webhook",
-        "local-files"
+        "local-files",
+        "weekly-report",
+        "monthly-report"
     ]
 }

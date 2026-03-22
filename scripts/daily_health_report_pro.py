@@ -141,7 +141,7 @@ from i18n import (
     water_period_name,
     weight_unit,
 )
-from pdf_generator import generate_pdf_report as generate_pdf_report_impl, has_local_cjk_font
+from daily_pdf_generator import generate_pdf_report as generate_pdf_report_impl, has_local_cjk_font
 
 validate_environment()
 
@@ -418,7 +418,7 @@ def normalize_user_config(raw_config):
         existing = normalized_condition_standards.get(canonical_key, {})
         normalized_condition_standards[canonical_key] = deep_merge_dict(existing, value)
     merged["condition_standards"] = deep_merge_dict(base.get("condition_standards", {}), normalized_condition_standards)
-    merged["config_version"] = "1.4.0"
+    merged["config_version"] = "1.4.1"
     merged["ai_generation"] = deep_merge_dict(clone_ai_generation_defaults(), raw_config.get("ai_generation", {}))
     merged["scoring"] = {"modules": normalize_scoring_modules(raw_config, locale)}
     merged.setdefault("integrations", {"tavily_api_key": ""})
@@ -568,10 +568,11 @@ def force_config_locale(config, locale):
 
 
 def build_font_render_notice(locale):
+    font_path = "assets/NotoSansJP-VF.ttf" if resolve_locale(locale=locale) == "ja-JP" else "assets/NotoSansSC-VF.ttf"
     return t(
         locale,
         "font_missing_english_fallback",
-        path="assets/NotoSansSC-VF.ttf",
+        path=font_path,
         url=FONT_DOWNLOAD_HELP_URL,
     )
 
@@ -604,7 +605,7 @@ def prepare_font_compatible_memory(requested_locale, source_dir, default_memory_
         "memory_file": default_memory_file,
     }
 
-    if requested_locale != "zh-CN" or has_local_cjk_font():
+    if requested_locale not in {"zh-CN", "ja-JP"} or has_local_cjk_font(requested_locale):
         return result
 
     try:
@@ -628,7 +629,7 @@ def prepare_font_compatible_memory(requested_locale, source_dir, default_memory_
 def _get_default_config():
     locale = "zh-CN"
     return {
-        "config_version": "1.4.0",
+        "config_version": "1.4.1",
         "language": "zh-CN",
         "user_profile": {
             "name": "Demo User",
@@ -1560,6 +1561,30 @@ def generate_ai_comment(health_data, config):
         'symptom_keywords': health_data.get('symptom_keywords', []),
     }
     prompt = build_ai_comment_prompt(locale, prompt_context)
+    if locale == "zh-CN":
+        prompt += (
+            "\n\n[排版要求]\n"
+            "请优先使用下面的结构输出，不要写成一整段：\n"
+            "【做得很好的地方】\n"
+            "- xxx\n"
+            "- xxx\n"
+            "【需要关注的隐患】\n"
+            "- xxx\n"
+            "- xxx\n"
+            "每条都要结合当天数据，避免空泛表述。"
+        )
+    else:
+        prompt += (
+            "\n\n[Formatting requirement]\n"
+            "Prefer this structure instead of a dense paragraph:\n"
+            "[What Went Well]\n"
+            "- xxx\n"
+            "- xxx\n"
+            "[Watchouts]\n"
+            "- xxx\n"
+            "- xxx\n"
+            "Each bullet must be grounded in today's actual data."
+        )
     settings = get_generation_settings(config, "expert_commentary")
     output = run_local_llm(
         prompt=prompt,
@@ -1716,6 +1741,18 @@ def generate_ai_plan(health_data, config):
             'exercise_reference': exercises[:1] if exercises else 'none',
         },
     )
+    if locale == "zh-CN":
+        prompt += (
+            "\n\n[输出强化]\n"
+            "diet、water、exercise 三个数组中的每个项目都尽量带明确时间段，"
+            "适合第二天直接照着执行。"
+        )
+    else:
+        prompt += (
+            "\n\n[Output refinement]\n"
+            "Each item in diet, water, and exercise should include a clear time block when possible,"
+            " so it reads like a next-day checklist."
+        )
     settings = get_generation_settings(config, "next_day_plan")
     output = run_local_llm(
         prompt=prompt,
@@ -2490,7 +2527,7 @@ def generate_report(memory_file, date):
 
 if __name__ == '__main__':
     if len(sys.argv) < 3:
-        print("Usage: python3 health_report_pro.py <memory_file> <date>")
+        print("Usage: python3 daily_health_report_pro.py <memory_file> <date>")
         sys.exit(1)
 
     memory_file = sys.argv[1]

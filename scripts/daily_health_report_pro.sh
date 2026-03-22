@@ -19,7 +19,7 @@ fi
 export TZ=Asia/Shanghai
 CURRENT_DATE=$(date +"%Y-%m-%d")
 CURRENT_TIME=$(date +"%H:%M:%S")
-LOG_FILE="${LOG_FILE:-${LOGS_DIR}/health_report_pro.log}"
+LOG_FILE="${LOG_FILE:-${LOGS_DIR}/daily_health_report_pro.log}"
 if [ -z "${MEMORY_DIR:-}" ]; then
     echo "Error: MEMORY_DIR is not set." >> "$LOG_FILE"
     exit 1
@@ -34,7 +34,7 @@ if [ ! -f "$TODAY_FILE" ]; then
     exit 1
 fi
 
-result=$(python3 "${SCRIPT_DIR}/health_report_pro.py" "$TODAY_FILE" "$CURRENT_DATE" 2>&1)
+result=$(python3 "${SCRIPT_DIR}/daily_health_report_pro.py" "$TODAY_FILE" "$CURRENT_DATE" 2>&1)
 echo "$result" >> "$LOG_FILE"
 
 delivery_message=$(echo "$result" | sed -n '/=== DELIVERY_MESSAGE_START ===/,/=== DELIVERY_MESSAGE_END ===/p' | sed '1d;$d')
