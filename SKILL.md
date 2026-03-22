@@ -1,7 +1,7 @@
 ---
 name: health-mate
 display_name: Health-Mate
-version: 1.4.0
+version: 1.4.1
 type: python/app
 description: "Executable bilingual OpenClaw health-report skill. It reads Markdown logs from an explicitly configured MEMORY_DIR, generates daily, weekly, and monthly PDF reports, and only performs Tavily, webhook, or font-download network activity when the corresponding runtime options are enabled."
 install: pip install -r requirements.txt
@@ -74,6 +74,19 @@ Optional:
 - `REPORT_BASE_URL`
 - `ALLOW_RUNTIME_FONT_DOWNLOAD`
 
+## Upgrade And Backup Notice
+
+Before upgrading or reinstalling this skill, back up:
+
+- `config/user_config.json`
+- `config/.env`
+- any local font file you manually placed under `assets/`
+
+Important:
+
+- some platform upgrade or reinstall flows may overwrite, reset, or remove local configuration files
+- after an upgrade, re-check `MEMORY_DIR`, report preferences, scoring modules, webhook settings, and Tavily settings before running scheduled jobs again
+
 ## Local And Network Behavior
 
 Expected local file I/O:
@@ -143,6 +156,50 @@ Core template:
 ## Today Steps
 - Total steps: 8500 steps
 ```
+
+Chinese core template:
+
+```markdown
+# 2026-03-20 健康记录
+
+## 体重记录
+- 晨起空腹：64.4kg
+
+## 饮水记录
+### 上午（约 08:45）
+- 饮水量：300ml
+- 累计：300ml/2000ml
+
+## 饮食记录
+### 早餐（约 08:50）
+- 燕麦片 50g -> 约 190kcal
+- 脱脂牛奶 250ml -> 约 87kcal
+
+## 运动记录
+### 下午骑行（约 17:10）
+- 距离：10.2km
+- 耗时：42min
+- 消耗：约 290kcal
+
+## 今日步数
+- 总步数：8200 步
+
+## 用药记录
+- 胆舒胶囊：1 粒
+```
+
+Chinese monitoring-module constraints:
+
+- `## 血压记录` / `## 血糖记录` / `## 体成分` / `## 生化记录` must stay as stable level-2 titles
+- numeric monitoring blocks should use stable item labels such as `- 血压：128/82 mmHg`, `- 血糖：7.1 mmol/L`, `- ALT：34 U/L`
+- do not mix commentary into monitoring blocks
+- do not turn monitoring blocks into tables
+- do not rename the same monitoring module on different days unless the user intentionally changed the module name
+
+Recommended LLM instruction:
+
+- paste the English or Chinese template above directly into your system prompt, `soul.md`, or memory-write policy so the model stays inside the parser-safe structure
+- if custom modules are enabled in `user_config.json`, add their exact section titles to the LLM write protocol and keep those titles stable across days
 
 Expandable monitoring modules:
 
