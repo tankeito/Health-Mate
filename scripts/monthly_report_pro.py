@@ -33,7 +33,7 @@ def console_print(*args, sep=" ", end="\n", file=sys.stdout, flush=False):
 
 print = console_print
 
-from daily_health_report_pro import (
+from daily_report_pro import (
     REPORTS_DIR,
     build_multi_condition_tip,
     build_score_report,

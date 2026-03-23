@@ -37,7 +37,7 @@ if [ ! -f "$TODAY_FILE" ]; then
     exit 1
 fi
 
-result=$(python3 "${SCRIPT_DIR}/daily_health_report_pro.py" "$TODAY_FILE" "$CURRENT_DATE" 2>&1)
+result=$(python3 "${SCRIPT_DIR}/daily_report_pro.py" "$TODAY_FILE" "$CURRENT_DATE" 2>&1)
 echo "$result" >> "$LOG_FILE"
 
 delivery_message=$(echo "$result" | sed -n '/=== DELIVERY_MESSAGE_START ===/,/=== DELIVERY_MESSAGE_END ===/p' | sed '1d;$d')

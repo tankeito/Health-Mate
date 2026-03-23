@@ -15,7 +15,7 @@ DEFAULT_OUTPUT_DIR = PROJECT_ROOT / "memory_en"
 os.environ.setdefault("MEMORY_DIR", str(DEFAULT_SOURCE_DIR))
 sys.path.insert(0, str(SCRIPT_DIR))
 
-from daily_health_report_pro import load_user_config, parse_memory_file  # noqa: E402
+from daily_report_pro import load_user_config, parse_memory_file  # noqa: E402
 
 
 MEAL_LABELS = {

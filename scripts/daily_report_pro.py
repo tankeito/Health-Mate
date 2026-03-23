@@ -2718,7 +2718,7 @@ def generate_report(memory_file, date):
 
 if __name__ == '__main__':
     if len(sys.argv) < 3:
-        print("Usage: python3 daily_health_report_pro.py <memory_file> <date>")
+        print("Usage: python3 daily_report_pro.py <memory_file> <date>")
         sys.exit(1)
 
     memory_file = sys.argv[1]

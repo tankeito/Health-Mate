@@ -207,7 +207,7 @@ The wizard writes all persistent settings into `config/user_config.json`, includ
 ### 4. Generate Reports
 
 ```bash
-python scripts/daily_health_report_pro.py /path/to/memory/2026-03-20.md 2026-03-20
+python scripts/daily_report_pro.py /path/to/memory/2026-03-20.md 2026-03-20
 python scripts/weekly_report_pro.py 2026-03-20
 python scripts/monthly_report_pro.py 2026-03-20
 ```
@@ -424,7 +424,7 @@ Repository:
 ```text
 health-mate/
 ├── scripts/
-│   ├── daily_health_report_pro.py
+│   ├── daily_report_pro.py
 │   ├── weekly_report_pro.py
 │   ├── monthly_report_pro.py
 │   ├── daily_pdf_generator.py

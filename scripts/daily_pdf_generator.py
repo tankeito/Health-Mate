@@ -1382,5 +1382,5 @@ def generate_pdf_report(data, profile, scores, nutrition, macros, risks, plan, o
             pass
     print(f"PDF report generated: {output_path}")
 if __name__ == "__main__":
-    print("Use this module via daily_health_report_pro.py.")
+    print("Use this module via daily_report_pro.py.")
     
