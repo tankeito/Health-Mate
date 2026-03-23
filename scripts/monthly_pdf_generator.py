@@ -19,8 +19,8 @@ from reportlab.lib.units import cm
 from reportlab.lib.utils import ImageReader
 from reportlab.platypus import Image, KeepTogether, PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
-from i18n import condition_name, format_weight, resolve_locale
-from daily_pdf_generator import clean_html_tags, get_font_prop, register_chinese_font, stars_to_text, build_numbered_canvasmaker
+from i18n import condition_name, format_weight, inline_localize, resolve_locale
+from daily_pdf_generator import clean_html_tags, get_font_prop, register_chinese_font, stars_to_text
 
 try:
     import matplotlib.patches as mpatches
@@ -50,7 +50,7 @@ C_MEDICATION = "#FDE68A"
 
 
 def localize(locale: str, zh_text: str, en_text: str) -> str:
-    return zh_text if resolve_locale(locale=locale) == "zh-CN" else en_text
+    return inline_localize(locale, zh_text, en_text)
 
 
 def profile_condition_title(profile: dict, locale: str) -> str:
@@ -62,8 +62,8 @@ def profile_condition_title(profile: dict, locale: str) -> str:
         labels = [condition_name(locale, item) for item in conditions if item]
         labels = [item for item in labels if item]
         if labels:
-            return "、".join(labels) if resolve_locale(locale=locale) == "zh-CN" else ", ".join(labels)
-    return condition_name(locale, (profile or {}).get("condition", "balanced"))
+            return "、".join(labels) if resolve_locale(locale=locale) in {"zh-CN", "ja-JP"} else ", ".join(labels)
+        return condition_name(locale, (profile or {}).get("condition", "balanced"))
 
 
 def source_text(locale: str, source: str) -> str:
@@ -135,7 +135,7 @@ def create_macro_radar_chart(macro_scores: Dict[str, float], locale: str) -> Opt
         return None
 
     try:
-        font_prop = get_font_prop()
+        font_prop = get_font_prop(locale)
         labels = [
             localize(locale, "饮食", "Diet"),
             localize(locale, "饮水", "Hydration"),
@@ -196,7 +196,7 @@ def create_symptom_heatmap(daily_records: List[dict], locale: str, min_weeks: in
         return None
 
     try:
-        font_prop = get_font_prop()
+        font_prop = get_font_prop(locale)
         valid_records = [record for record in daily_records if record.get("date")]
         if not valid_records:
             return None
@@ -289,18 +289,16 @@ def create_symptom_heatmap(daily_records: List[dict], locale: str, min_weeks: in
         legend_kwargs = {
             "handles": legend_items,
             "loc": "upper center",
-            "bbox_to_anchor": (0.5, -0.26),
+            "bbox_to_anchor": (0.5, -0.2),
             "frameon": False,
             "ncol": 2,
-            "fontsize": 6.7,
-            "columnspacing": 2.2,
-            "handlelength": 1.35,
-            "handletextpad": 0.55,
-            "borderaxespad": 0.0,
+            "fontsize": 6.5,
+            "columnspacing": 1.6,
+            "handlelength": 1.2,
         }
         legend = ax.legend(**legend_kwargs)
-        _style_legend(legend, font_prop, fontsize=6.7)
-        fig.subplots_adjust(bottom=0.31)
+        _style_legend(legend, font_prop, fontsize=6.5)
+        fig.subplots_adjust(bottom=0.26)
 
         return _save_figure(fig)
     except Exception:
@@ -334,7 +332,7 @@ def create_weight_bmr_trend_chart(records: List[dict], profile: dict, locale: st
         if len(filtered) < 2:
             return None
 
-        font_prop = get_font_prop()
+        font_prop = get_font_prop(locale)
         age = float(profile.get("age", 30) or 30)
         height_cm = float(profile.get("height_cm", 170) or 170)
         gender = str(profile.get("gender", "male") or "male")
@@ -403,7 +401,7 @@ def create_symptom_distribution_chart(chart: Dict[str, object], locale: str) -> 
         return None
 
     try:
-        font_prop = get_font_prop()
+        font_prop = get_font_prop(locale)
         distribution = chart.get("distribution", {}) if isinstance(chart, dict) else {}
         total_days = int(chart.get("calendar_days", 0) or 0) if isinstance(chart, dict) else 0
         symptom_days = int(chart.get("symptom_days", 0) or 0) if isinstance(chart, dict) else 0
@@ -496,7 +494,7 @@ def create_intake_boxplot(records: List[dict], locale: str) -> Optional[str]:
         if len(fat_values) < 3 or len(carb_values) < 3:
             return None
 
-        font_prop = get_font_prop()
+        font_prop = get_font_prop(locale)
         fig, (ax_fat, ax_carb) = plt.subplots(1, 2, figsize=(7.4, 3.2))
         fig.patch.set_alpha(0)
         fat_box = ax_fat.boxplot(
@@ -560,7 +558,7 @@ def create_gallstone_correlation_chart(records: List[dict], locale: str, fat_tar
         if len(filtered) < 2:
             return None
 
-        font_prop = get_font_prop()
+        font_prop = get_font_prop(locale)
         labels = [record["date"][8:] for record in filtered]
         fat_values = [float(record.get("fat", 0) or 0) for record in filtered]
         symptom_values = [int(record.get("symptom_count", 0) or 0) for record in filtered]
@@ -611,7 +609,7 @@ def create_bp_boxplot(bp_records: List[dict], locale: str) -> Optional[str]:
         return None
 
     try:
-        font_prop = get_font_prop()
+        font_prop = get_font_prop(locale)
         systolic = [record["systolic"] for record in bp_records if record.get("systolic")]
         diastolic = [record["diastolic"] for record in bp_records if record.get("diastolic")]
         if len(systolic) < 2 or len(diastolic) < 2:
@@ -657,7 +655,7 @@ def create_weight_bodyfat_chart(records: List[dict], locale: str) -> Optional[st
         if len(filtered) < 2:
             return None
 
-        font_prop = get_font_prop()
+        font_prop = get_font_prop(locale)
         labels = [record["date"][8:] for record in filtered]
         weights = [record.get("weight") for record in filtered]
         bodyfat = [record.get("body_fat_percent") for record in filtered]
@@ -701,7 +699,7 @@ def create_glucose_trend_chart(glucose_records: List[dict], locale: str) -> Opti
         return None
 
     try:
-        font_prop = get_font_prop()
+        font_prop = get_font_prop(locale)
         sorted_records = sorted(glucose_records, key=lambda item: (item.get("date", ""), item.get("time", "")))
         labels = [record["date"][8:] for record in sorted_records]
         values = [float(record.get("value", 0) or 0) for record in sorted_records]
@@ -735,7 +733,7 @@ def create_custom_metric_chart(chart_data: dict, locale: str) -> Optional[str]:
         points = chart_data.get("points", [])
         if len(points) < 2:
             return None
-        font_prop = get_font_prop()
+        font_prop = get_font_prop(locale)
         labels = [point["date"][8:] for point in points]
         values = [float(point.get("value", 0) or 0) for point in points]
         if max(values) <= 0:
@@ -1102,7 +1100,7 @@ def generate_monthly_pdf_report(
         )
         story.append(Paragraph(f"{profile_condition_title(profile, locale)} - Health-Mate", footer_style))
 
-        doc.build(story, canvasmaker=build_numbered_canvasmaker(font_name))
+        doc.build(story)
     finally:
         for image_path in temp_images:
             if image_path and os.path.exists(image_path):

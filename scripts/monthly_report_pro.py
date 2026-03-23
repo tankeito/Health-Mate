@@ -55,7 +55,7 @@ from daily_health_report_pro import (
     tavily_search,
     validate_environment,
 )
-from i18n import build_delivery_message, format_weight, resolve_locale
+from i18n import build_delivery_message, format_weight, inline_localize, localize_free_text, resolve_locale
 from monthly_pdf_generator import generate_monthly_pdf_report
 
 validate_environment()
@@ -151,7 +151,11 @@ SEARCH_BAD_PATTERNS = (
 
 
 def localize(locale: str, zh_text: str, en_text: str) -> str:
-    return zh_text if resolve_locale(locale=locale) == "zh-CN" else en_text
+    return inline_localize(locale, zh_text, en_text)
+
+
+def sanitize_locale_line(locale: str, text: str) -> str:
+    return localize_free_text(locale, text) if resolve_locale(locale=locale) == "ja-JP" else text
 
 
 def safe_average(values: Iterable[Optional[float]]) -> float:
@@ -402,9 +406,13 @@ def extract_relevant_symptom_lines(daily_data: dict) -> List[str]:
         "cycling",
         "exercise",
         "steps",
+        "症状持続時間",
+        "現在状態",
+        "不調なし",
     ]
     positive_hints = [
         "右上腹",
+        "右上腹部",
         "腹胀",
         "腹涨",
         "腹痛",
@@ -413,13 +421,17 @@ def extract_relevant_symptom_lines(daily_data: dict) -> List[str]:
         "绞痛",
         "恶心",
         "不适",
+        "張り",
+        "痛み",
+        "違和感",
+        "吐き気",
         "pain",
         "bloating",
         "distension",
         "nausea",
         "discomfort",
     ]
-    resolved_hints = ["无不适", "无症状", "无不适感", "完全缓解", "症状已完全缓解", "recovered", "resolved"]
+    resolved_hints = ["无不适", "无症状", "无不适感", "完全缓解", "症状已完全缓解", "recovered", "resolved", "不調なし", "症状なし", "完全に緩解", "完全に改善", "已恢复", "已恢復"]
 
     relevant = []
     for item in raw_items:
@@ -437,6 +449,8 @@ def extract_symptom_labels(daily_data: dict, locale: str) -> List[str]:
     symptoms = extract_relevant_symptom_lines(daily_data)
     if not symptoms:
         return []
+    if resolve_locale(locale=locale) == "ja-JP":
+        symptoms = [sanitize_locale_line(locale, item) for item in symptoms]
 
     symptom_text = " ".join(symptoms).lower()
     if any(token in symptom_text for token in ["无不适", "无症状", "none", "no symptom", "no discomfort"]):
@@ -459,31 +473,34 @@ def extract_symptom_labels(daily_data: dict, locale: str) -> List[str]:
                 "right upper abdominal bloating",
                 "post-meal right upper abdominal bloating",
                 "post-meal right upper quadrant discomfort",
+                "右上腹部の張り",
+                "右上腹部の痛み",
+                "右上腹部の違和感",
             ],
         ),
         (
             localize(locale, "餐后腹胀", "Post-meal bloating"),
-            ["餐后腹胀", "饭后腹胀", "饭后发胀", "post-meal bloating", "postprandial bloating"],
+            ["餐后腹胀", "饭后腹胀", "饭后发胀", "post-meal bloating", "postprandial bloating", "食後の腹部膨満", "食後の張り"],
         ),
         (
             localize(locale, "腹胀", "Bloating"),
-            ["腹胀", "腹涨", "bloating", "distension"],
+            ["腹胀", "腹涨", "bloating", "distension", "腹部膨満", "張り"],
         ),
         (
             localize(locale, "恶心", "Nausea"),
-            ["恶心", "nausea"],
+            ["恶心", "nausea", "吐き気"],
         ),
         (
             localize(locale, "绞痛", "Colic"),
-            ["绞痛", "colic"],
+            ["绞痛", "colic", "疝痛"],
         ),
         (
             localize(locale, "腹痛", "Abdominal pain"),
-            ["腹痛", "胃痛", "abdominal pain", "abdomen pain"],
+            ["腹痛", "胃痛", "abdominal pain", "abdomen pain", "腹痛", "胃の痛み"],
         ),
         (
             localize(locale, "不适", "Discomfort"),
-            ["不适", "discomfort"],
+            ["不适", "discomfort", "不調", "違和感"],
         ),
     ]
 
@@ -507,6 +524,7 @@ def extract_symptom_labels(daily_data: dict, locale: str) -> List[str]:
     for item in symptoms:
         cleaned = re.sub(r"^[\-\s•*]+", "", item)
         cleaned = re.sub(r"[:：].*$", "", cleaned).strip()
+        cleaned = sanitize_locale_line(locale, cleaned)
         if 0 < len(cleaned) <= 24:
             fallback_labels.append(cleaned)
     return dedupe_preserve_order(fallback_labels)
@@ -518,7 +536,19 @@ def format_monthly_review_sections(locale: str, sections: Iterable[tuple[str, st
         clean_body = re.sub(r"\s+", " ", str(body or "")).strip()
         if not clean_body:
             continue
-        title = f"【{zh_title}】" if resolve_locale(locale=locale) == "zh-CN" else f"[{en_title}]"
+        resolved = resolve_locale(locale=locale)
+        if resolved == "zh-CN":
+            title = f"【{zh_title}】"
+        elif resolved == "ja-JP":
+            ja_title_map = {
+                "核心发现": "【主要な所見】",
+                "风险提示": "【注意点】",
+                "下月调整": "【来月の調整】",
+                "检索补充": "【外部参考】",
+            }
+            title = ja_title_map.get(zh_title, f"【{sanitize_locale_line(locale, zh_title)}】")
+        else:
+            title = f"[{en_title}]"
         parts.append(f"**{title}**\n{clean_body}")
     return "\n\n".join(parts).strip()
 
@@ -850,6 +880,7 @@ def aggregate_monthly_data(month_dates: List[str], config: dict, locale: Optiona
 def build_monthly_highlights(monthly_data: dict, profile: dict, locale: str) -> List[str]:
     highlights = []
     macro_scores = monthly_data.get("macro_scores", {})
+    is_ja = resolve_locale(locale=locale) == "ja-JP"
     score_pairs = [
         ("diet", localize(locale, "饮食", "diet")),
         ("water", localize(locale, "饮水", "hydration")),
@@ -858,19 +889,24 @@ def build_monthly_highlights(monthly_data: dict, profile: dict, locale: str) -> 
         ("monitoring", localize(locale, "监测", "monitoring")),
     ]
     best_key, best_label = max(score_pairs, key=lambda item: macro_scores.get(item[0], 0))
-    highlights.append(
-        localize(
-            locale,
-            f"本月 {best_label} 维度完成度最高，约 {macro_scores.get(best_key, 0):.0f}%。",
-            f"{best_label.capitalize()} was the strongest adherence dimension this month at about {macro_scores.get(best_key, 0):.0f}%.",
-        )
-    )
-
-    if monthly_data.get("symptom_days", 0) == 0:
-        highlights.append(localize(locale, "本月未记录明显症状，整体状态比较平稳。", "No clear symptom day was recorded this month, suggesting a steady overall state."))
+    if is_ja:
+        highlights.append(f"今月は {best_label} の達成率がもっとも高く、およそ {macro_scores.get(best_key, 0):.0f}% でした。")
     else:
         highlights.append(
             localize(
+                locale,
+                f"本月 {best_label} 维度完成度最高，约 {macro_scores.get(best_key, 0):.0f}%。",
+                f"{best_label.capitalize()} was the strongest adherence dimension this month at about {macro_scores.get(best_key, 0):.0f}%.",
+            )
+        )
+
+    if monthly_data.get("symptom_days", 0) == 0:
+        highlights.append("今月は目立った症状の記録がなく、全体状態は比較的安定していました。" if is_ja else localize(locale, "本月未记录明显症状，整体状态比较平稳。", "No clear symptom day was recorded this month, suggesting a steady overall state."))
+    else:
+        highlights.append(
+            f"今月は {monthly_data['symptom_days']} 日で不調があり、合計 {monthly_data['symptom_events']} 回記録されました。誘因の振り返りが必要です。"
+            if is_ja
+            else localize(
                 locale,
                 f"本月有 {monthly_data['symptom_days']} 天出现不适，共 {monthly_data['symptom_events']} 次，需重点复盘诱因。",
                 f"Symptoms were logged on {monthly_data['symptom_days']} days ({monthly_data['symptom_events']} events) and deserve closer trigger review.",
@@ -881,15 +917,17 @@ def build_monthly_highlights(monthly_data: dict, profile: dict, locale: str) -> 
     primary_condition = monthly_data.get("primary_condition")
     if monthly_data.get("latest_weight") is not None:
         if primary_condition == "fat_loss" and weight_change < 0:
-            highlights.append(localize(locale, f"体重较月初下降 {abs(weight_change):.2f}kg，方向与减脂目标一致。", f"Weight moved down by {abs(weight_change):.2f}kg from the start of the month, which aligns with fat-loss goals."))
+            highlights.append(f"体重は月初より {abs(weight_change):.2f}kg 減少し、減脂目標と同じ方向に進んでいます。" if is_ja else localize(locale, f"体重较月初下降 {abs(weight_change):.2f}kg，方向与减脂目标一致。", f"Weight moved down by {abs(weight_change):.2f}kg from the start of the month, which aligns with fat-loss goals."))
         elif abs(weight_change) <= 0.6:
-            highlights.append(localize(locale, f"体重月内波动约 {abs(weight_change):.2f}kg，整体比较稳定。", f"Weight fluctuated by about {abs(weight_change):.2f}kg this month and stayed relatively stable."))
+            highlights.append(f"今月の体重変動は約 {abs(weight_change):.2f}kg で、比較的安定していました。" if is_ja else localize(locale, f"体重月内波动约 {abs(weight_change):.2f}kg，整体比较稳定。", f"Weight fluctuated by about {abs(weight_change):.2f}kg this month and stayed relatively stable."))
         else:
-            highlights.append(localize(locale, f"体重月内波动达到 {abs(weight_change):.2f}kg，建议和饮食、活动一起复盘。", f"Weight fluctuated by {abs(weight_change):.2f}kg this month, so meals and activity deserve a joint review."))
+            highlights.append(f"今月の体重変動は {abs(weight_change):.2f}kg に達しており、食事と活動をあわせて振り返る価値があります。" if is_ja else localize(locale, f"体重月内波动达到 {abs(weight_change):.2f}kg，建议和饮食、活动一起复盘。", f"Weight fluctuated by {abs(weight_change):.2f}kg this month, so meals and activity deserve a joint review."))
 
     if monthly_data.get("medication_enabled"):
         highlights.append(
-            localize(
+            f"服薬記録は {monthly_data.get('medication_days', 0)} 日分あり、月報では遵守状況とリスク評価に反映されています。"
+            if is_ja
+            else localize(
                 locale,
                 f"用药记录覆盖 {monthly_data.get('medication_days', 0)} 天，月报已纳入依从性与风险评估。",
                 f"Medication was logged on {monthly_data.get('medication_days', 0)} days and is now part of the adherence and risk review.",
@@ -898,7 +936,9 @@ def build_monthly_highlights(monthly_data: dict, profile: dict, locale: str) -> 
 
     if monthly_data.get("monitoring_days", 0) > 0:
         highlights.append(
-            localize(
+            f"モニタリング項目は {monthly_data.get('monitoring_days', 0)} 日分記録されており、複数指標を横断した傾向判断に使えます。"
+            if is_ja
+            else localize(
                 locale,
                 f"监测模块有 {monthly_data.get('monitoring_days', 0)} 天记录，可用于联合判断趋势。",
                 f"Monitoring modules were logged on {monthly_data.get('monitoring_days', 0)} days, which gives us cross-metric trend visibility.",
@@ -913,6 +953,7 @@ def build_specialty_charts(monthly_data: dict, config: dict, locale: str) -> Lis
     standards = get_condition_standards(config, monthly_data.get("conditions", []))
     daily_records = monthly_data.get("daily_records", [])
     conditions = monthly_data.get("conditions", [])
+    is_ja = resolve_locale(locale=locale) == "ja-JP"
 
     if "gallstones" in conditions:
         symptom_days = [record for record in daily_records if record.get("symptom_count", 0) > 0]
@@ -921,14 +962,18 @@ def build_specialty_charts(monthly_data: dict, config: dict, locale: str) -> Lis
         charts.append(
             {
                 "type": "gallstones",
-                "title": localize(locale, "胆结石：脂肪摄入 vs 症状频次", "Gallstones: Fat intake vs symptom frequency"),
-                "subtitle": localize(locale, "双轴对照：左轴为每日脂肪克数，右轴为当天症状次数。", "Dual-axis view: daily fat grams on the left axis, symptom count on the right."),
+                "title": "胆石: 脂質摂取量と症状頻度" if is_ja else localize(locale, "胆结石：脂肪摄入 vs 症状频次", "Gallstones: Fat intake vs symptom frequency"),
+                "subtitle": "左軸は日ごとの脂質量、右軸はその日の症状回数です。" if is_ja else localize(locale, "双轴对照：左轴为每日脂肪克数，右轴为当天症状次数。", "Dual-axis view: daily fat grams on the left axis, symptom count on the right."),
                 "records": daily_records,
                 "fat_target": standards.get("fat_max_g"),
-                "summary": localize(
-                    locale,
-                    f"症状日的平均脂肪摄入约 {fat_on_symptom:.1f}g，平稳日约 {fat_on_calm:.1f}g。若两者差距持续扩大，说明油脂控制与症状关系更值得重点关注。",
-                    f"Average fat intake was about {fat_on_symptom:.1f}g on symptom days versus {fat_on_calm:.1f}g on calmer days. If that gap keeps widening, fat control is likely a major trigger to review.",
+                "summary": (
+                    f"症状があった日の平均脂質摂取は約 {fat_on_symptom:.1f}g、落ち着いていた日は約 {fat_on_calm:.1f}g でした。差が広がる場合は、脂質管理と症状の関連を重点的に見直してください。"
+                    if is_ja
+                    else localize(
+                        locale,
+                        f"症状日的平均脂肪摄入约 {fat_on_symptom:.1f}g，平稳日约 {fat_on_calm:.1f}g。若两者差距持续扩大，说明油脂控制与症状关系更值得重点关注。",
+                        f"Average fat intake was about {fat_on_symptom:.1f}g on symptom days versus {fat_on_calm:.1f}g on calmer days. If that gap keeps widening, fat control is likely a major trigger to review.",
+                    )
                 ),
             }
         )
@@ -940,13 +985,17 @@ def build_specialty_charts(monthly_data: dict, config: dict, locale: str) -> Lis
                 charts.append(
                     {
                         "type": "intake_boxplot",
-                        "title": localize(locale, "胆结石：脂肪 / 碳水摄入离散度", "Gallstones: Fat and carb intake spread"),
-                        "subtitle": localize(locale, "用箱线图识别“平时很稳、偶尔暴冲”的摄入异常日。", "A boxplot helps spot unusually high-intake days that averages can hide."),
+                        "title": "胆石: 脂質 / 炭水化物のばらつき" if is_ja else localize(locale, "胆结石：脂肪 / 碳水摄入离散度", "Gallstones: Fat and carb intake spread"),
+                        "subtitle": "箱ひげ図で、普段は安定していても一部の日だけ摂取量が跳ねるパターンを見つけます。" if is_ja else localize(locale, "用箱线图识别“平时很稳、偶尔暴冲”的摄入异常日。", "A boxplot helps spot unusually high-intake days that averages can hide."),
                         "records": intake_records,
-                        "summary": localize(
-                            locale,
-                            f"本月脂肪均值约 {safe_average(fat_values):.1f}g，碳水均值约 {safe_average(carb_values):.1f}g。若离群点明显偏高，建议回看对应日期的晚餐和加餐。",
-                            f"Typical fat intake stayed around {safe_average(fat_values):.1f}g and carbs around {safe_average(carb_values):.1f}g. If outliers rise far above the box, revisit those dinner and snack days.",
+                        "summary": (
+                            f"今月の脂質平均は約 {safe_average(fat_values):.1f}g、炭水化物平均は約 {safe_average(carb_values):.1f}g でした。外れ値が高い日は、夕食と間食の内容を見直してください。"
+                            if is_ja
+                            else localize(
+                                locale,
+                                f"本月脂肪均值约 {safe_average(fat_values):.1f}g，碳水均值约 {safe_average(carb_values):.1f}g。若离群点明显偏高，建议回看对应日期的晚餐和加餐。",
+                                f"Typical fat intake stayed around {safe_average(fat_values):.1f}g and carbs around {safe_average(carb_values):.1f}g. If outliers rise far above the box, revisit those dinner and snack days.",
+                            )
                         ),
                     }
                 )
@@ -959,31 +1008,36 @@ def build_specialty_charts(monthly_data: dict, config: dict, locale: str) -> Lis
     top_symptom_text = (
         "、".join(f"{label} {count}次" for label, count in top_labels)
         if resolve_locale(locale=locale) == "zh-CN"
-        else ", ".join(f"{label} {count}x" for label, count in top_labels)
+        else "、".join(f"{label} {count}回" for label, count in top_labels) if is_ja else ", ".join(f"{label} {count}x" for label, count in top_labels)
     )
     if total_days > 0:
         completion_rate = int(healthy_days / max(total_days, 1) * 100)
         symptom_legend_text = (
-            localize(locale, f"出现不适：{symptom_days_count} 天（{top_symptom_text or '本月未细分症状'}）", f"Symptoms present: {symptom_days_count} days ({top_symptom_text or 'no symptom subtype logged'})")
+            (f"不調あり: {symptom_days_count} 日（{top_symptom_text or '今月は詳細な症状分類なし'}）" if is_ja else localize(locale, f"出现不适：{symptom_days_count} 天（{top_symptom_text or '本月未细分症状'}）", f"Symptoms present: {symptom_days_count} days ({top_symptom_text or 'no symptom subtype logged'})"))
             if symptom_days_count > 0
-            else localize(locale, "出现不适：0 天", "Symptoms present: 0 days")
+            else ("不調あり: 0 日" if is_ja else localize(locale, "出现不适：0 天", "Symptoms present: 0 days"))
         )
         charts.append(
             {
                 "type": "symptom_distribution",
-                "title": localize(locale, "健康达标环形图：本月健康天数 vs 出现不适天数", "Healthy-day donut: symptom-free days vs symptom days"),
-                "subtitle": localize(locale, "以当月总天数为基数，直观看清健康无症状天数与出现不适天数的比例。", "This donut uses the full month as the baseline so healthy days and symptom days are easier to compare."),
+                "title": "健康達成ドーナツ: 健康日数と不調日数" if is_ja else localize(locale, "健康达标环形图：本月健康天数 vs 出现不适天数", "Healthy-day donut: symptom-free days vs symptom days"),
+                "subtitle": "今月の総日数を基準に、無症状の日数と不調日数の比率を確認します。" if is_ja else localize(locale, "以当月总天数为基数，直观看清健康无症状天数与出现不适天数的比例。", "This donut uses the full month as the baseline so healthy days and symptom days are easier to compare."),
                 "distribution": symptom_distribution,
                 "calendar_days": total_days,
                 "healthy_days": healthy_days,
                 "symptom_days": symptom_days_count,
                 "completion_rate": completion_rate,
-                "healthy_legend": localize(locale, f"健康无症状：{healthy_days} 天", f"Healthy symptom-free: {healthy_days} days"),
+                "healthy_legend": f"健康で無症状: {healthy_days} 日" if is_ja else localize(locale, f"健康无症状：{healthy_days} 天", f"Healthy symptom-free: {healthy_days} days"),
                 "symptom_legend": symptom_legend_text,
-                "summary": localize(
-                    locale,
-                    f"本月共 {total_days} 天，其中 {healthy_days} 天未记录不适，健康达标约 {completion_rate:.0f}%。{f'出现不适的 {symptom_days_count} 天主要表现为：{top_symptom_text}。' if top_symptom_text else ''}",
-                    f"There were {total_days} days this month, with {healthy_days} symptom-free days and a healthy-day completion rate of about {completion_rate:.0f}%. {f'Symptom days were mainly driven by: {top_symptom_text}.' if top_symptom_text else ''}",
+                "summary": (
+                    f"今月は {total_days} 日中 {healthy_days} 日が無症状で、健康達成率は約 {completion_rate:.0f}% でした。"
+                    + (f" 不調があった {symptom_days_count} 日では、主に {top_symptom_text} が見られました。" if top_symptom_text else "")
+                    if is_ja
+                    else localize(
+                        locale,
+                        f"本月共 {total_days} 天，其中 {healthy_days} 天未记录不适，健康达标约 {completion_rate:.0f}%。{f'出现不适的 {symptom_days_count} 天主要表现为：{top_symptom_text}。' if top_symptom_text else ''}",
+                        f"There were {total_days} days this month, with {healthy_days} symptom-free days and a healthy-day completion rate of about {completion_rate:.0f}%. {f'Symptom days were mainly driven by: {top_symptom_text}.' if top_symptom_text else ''}",
+                    )
                 ),
             }
         )
@@ -1054,6 +1108,11 @@ def build_specialty_charts(monthly_data: dict, config: dict, locale: str) -> Lis
                 "summary": localize(locale, f"该指标来自“{metric.get('section')}”模块，当前已累计 {len(metric.get('points', []))} 个数值点，后续可继续用于月度趋势分析。", f"This metric comes from the '{metric.get('section')}' module and already has {len(metric.get('points', []))} numeric points for monthly trend analysis."),
             }
         )
+    if resolve_locale(locale=locale) == "ja-JP":
+        for chart in charts:
+            for key in ("title", "subtitle", "summary", "healthy_legend", "symptom_legend", "section", "label", "unit"):
+                if chart.get(key):
+                    chart[key] = sanitize_locale_line(locale, str(chart.get(key)))
     return charts[:6]
 
 
@@ -1062,13 +1121,14 @@ def build_follow_up_reminders(monthly_data: dict, profile: dict, locale: str) ->
     conditions = monthly_data.get("conditions", [])
     symptom_days = monthly_data.get("symptom_days", 0)
     ultrasound = monthly_data.get("ultrasound_summary", {})
+    is_ja = resolve_locale(locale=locale) == "ja-JP"
 
     if "gallstones" in conditions:
-        reminders.append(localize(locale, "肝胆胰脾彩超（空腹）+ 肝功能，建议按季度完成一次复查。", "A fasting hepatobiliary ultrasound plus liver-function labs should be reviewed at least once per quarter."))
+        reminders.append("空腹での肝胆膵脾エコーと肝機能検査は、少なくとも四半期に 1 回を目安に再確認してください。" if is_ja else localize(locale, "肝胆胰脾彩超（空腹）+ 肝功能，建议按季度完成一次复查。", "A fasting hepatobiliary ultrasound plus liver-function labs should be reviewed at least once per quarter."))
         if symptom_days >= 3 or ultrasound.get("latest_size_cm", 0) >= 2 or ultrasound.get("wall_warning"):
-            reminders.append(localize(locale, "本月已出现较高风险信号，建议尽快预约肝胆外科或普外科专家门诊评估是否需要进一步干预。", "Higher-risk signals appeared this month, so a hepatobiliary or general-surgery specialist visit should be arranged soon to evaluate further intervention."))
+            reminders.append("今月は高リスクのサインが見られるため、肝胆外科または一般外科の専門外来を早めに予約し、追加介入の要否を確認してください。" if is_ja else localize(locale, "本月已出现较高风险信号，建议尽快预约肝胆外科或普外科专家门诊评估是否需要进一步干预。", "Higher-risk signals appeared this month, so a hepatobiliary or general-surgery specialist visit should be arranged soon to evaluate further intervention."))
         elif ultrasound.get("latest_size_cm"):
-            reminders.append(localize(locale, f"最近一次超声记录最大结石约 {ultrasound.get('latest_size_cm'):.1f}cm，若症状重新增多，不要拖到下季度再评估。", f"The latest ultrasound recorded a largest stone of about {ultrasound.get('latest_size_cm'):.1f}cm. If symptoms pick up again, do not wait until next quarter to re-evaluate."))
+            reminders.append(f"直近のエコーでは最大結石径が約 {ultrasound.get('latest_size_cm'):.1f}cm でした。症状が再び増える場合は、次の四半期を待たずに再評価してください。" if is_ja else localize(locale, f"最近一次超声记录最大结石约 {ultrasound.get('latest_size_cm'):.1f}cm，若症状重新增多，不要拖到下季度再评估。", f"The latest ultrasound recorded a largest stone of about {ultrasound.get('latest_size_cm'):.1f}cm. If symptoms pick up again, do not wait until next quarter to re-evaluate."))
 
     if "hypertension" in conditions:
         reminders.append(localize(locale, "建议保留连续 7 天晨起和睡前家庭血压记录，复诊时一并带给医生。", "Keep a 7-day home blood-pressure log with morning and bedtime readings and bring it to follow-up visits."))
@@ -1153,8 +1213,11 @@ def matches_locale_text(text: str, locale: str) -> bool:
     cleaned = str(text or "").strip()
     if not cleaned:
         return False
-    if resolve_locale(locale=locale) == "zh-CN":
+    resolved = resolve_locale(locale=locale)
+    if resolved == "zh-CN":
         return len(re.findall(r"[一-鿿]", cleaned)) >= 4
+    if resolved == "ja-JP":
+        return bool(re.search(r"[\u3040-\u30ff]", cleaned)) or len(re.findall(r"[一-鿿]", cleaned)) >= 4
     return len(re.findall(r"[A-Za-z]{3,}", cleaned)) >= 5
 
 
@@ -1547,6 +1610,84 @@ def build_region_specific_hospital_fallbacks(
     locale: str,
 ) -> List[dict]:
     normalized_residence = str(residence_text or "")
+    if "成都" in normalized_residence and primary_condition == "gallstones" and resolve_locale(locale=locale) == "ja-JP":
+        return [
+            {
+                "hospital": "四川大学華西病院",
+                "department": "肝胆膵外科 / 肝胆外科",
+                "doctor": "王文涛主任医師",
+                "doctor_title": "主任医師 / 教授",
+                "hospital_strength": "全国トップクラスの三甲教学病院で、肝胆膵外科、画像診断、麻酔、低侵襲手術の体制が非常に充実しています。",
+                "hospital_grade": "三級甲等（全国トップクラス）",
+                "hospital_address": "成都市武侯区国学巷 37 号",
+                "booking_method": "華医通アプリ / WeChat公式アカウント",
+                "doctor_specialty": "複雑な胆道結石、胆嚢結石、慢性胆嚢炎、および肝胆膵外科手術の評価。",
+                "registration_fee": "特需外来（約 300-500 元）",
+                "clinic_schedule": "華医通の最新外来表を優先確認し、MDT 外来があれば優先予約してください。",
+                "reason": "超音波の継続フォロー、慢性胆嚢炎のコントロール、手術タイミングの判断を一つの病院でまとめて見たいケースに最適です。",
+                "url": "",
+            },
+            {
+                "hospital": "四川大学華西病院",
+                "department": "肝胆膵外科 / 肝胆外科",
+                "doctor": "胡佳副主任医師",
+                "doctor_title": "副主任医師 / 副教授",
+                "hospital_strength": "難治性の胆嚢・胆道疾患や低侵襲外科評価の経験が豊富なトップ級三甲教学病院です。",
+                "hospital_grade": "三級甲等（全国トップクラス）",
+                "hospital_address": "成都市武侯区国学巷 37 号",
+                "booking_method": "華医通アプリ / WeChat公式アカウント",
+                "doctor_specialty": "複雑な胆嚢・胆道疾患、腹腔鏡手術、ロボット支援手術の評価。",
+                "registration_fee": "専門外来（約 100-200 元）",
+                "clinic_schedule": "華医通の最新外来表を確認し、肝胆膵外科の専門外来を優先してください。",
+                "reason": "症状が再発し、低侵襲手術の適応や保存的治療との比較をより詳しく相談したい場合に相性が良い候補です。",
+                "url": "",
+            },
+            {
+                "hospital": "四川大学華西病院",
+                "department": "肝胆膵外科 / 肝胆外科",
+                "doctor": "徐珽副主任医師",
+                "doctor_title": "副主任医師",
+                "hospital_strength": "胆膵領域の専門性が高く、複雑な胆道病変の総合判断に強いトップ級三甲教学病院です。",
+                "hospital_grade": "三級甲等（全国トップクラス）",
+                "hospital_address": "成都市武侯区国学巷 37 号",
+                "booking_method": "華医通アプリ / WeChat公式アカウント",
+                "doctor_specialty": "胆道結石、胆膵疾患、複雑な胆道外科評価。",
+                "registration_fee": "専門外来（約 50-100 元）",
+                "clinic_schedule": "華医通の最新外来表を確認してください。初診は専門外来でも十分なことが多いです。",
+                "reason": "胆道結石リスク、画像変化、胆嚢炎の再燃状況、今後の外科戦略をまとめて整理したい患者に向いています。",
+                "url": "",
+            },
+            {
+                "hospital": "四川省人民病院",
+                "department": "肝胆外科 / 一般外科",
+                "doctor": "周永碧主任医師",
+                "doctor_title": "主任医師",
+                "hospital_strength": "省級の公立三甲病院で、肝胆外科の成熟度が高く、低侵襲手術と周術期連携が安定しています。",
+                "hospital_grade": "三級甲等（省級重点）",
+                "hospital_address": "成都市青羊区一環路西二段 32 号",
+                "booking_method": "WeChat公式アカウント / 現地受付",
+                "doctor_specialty": "胆嚢結石、低侵襲の胆嚢温存治療、胆嚢炎の外科評価。",
+                "registration_fee": "専門外来（約 80-150 元）",
+                "clinic_schedule": "病院の最新外来表を確認し、肝胆外科専門外来を優先してください。",
+                "reason": "省級三甲でまず外来評価、超音波、肝機能の情報を整理し、保存的治療継続か手術評価へ進むかを判断したい場合に実用的です。",
+                "url": "",
+            },
+            {
+                "hospital": "成都市第三人民病院",
+                "department": "肝胆外科 / 一般外科",
+                "doctor": "李毅医師",
+                "doctor_title": "医師",
+                "hospital_strength": "市内で通いやすい三甲総合病院で、再診、追加検査、術前の基礎評価をまとめやすいのが利点です。",
+                "hospital_grade": "三級甲等（通院しやすい地域中核）",
+                "hospital_address": "病院公式サイトで最新の院区情報を確認してください。",
+                "booking_method": "病院公式の予約窓口を確認してください。",
+                "doctor_specialty": "胆石症、胆道外科、外来フォローアップ評価。",
+                "registration_fee": "一般 / 専門外来（病院の最新受付ページを確認）",
+                "clinic_schedule": "病院の最新外来表をご確認ください。",
+                "reason": "近隣での再診を優先しつつ、超音波や肝機能を補完してから上位病院に紹介したい場合に使いやすい候補です。",
+                "url": "",
+            },
+        ]
     if "成都" in normalized_residence and primary_condition == "gallstones":
         return [
             {
@@ -1635,6 +1776,7 @@ def build_condition_care_question(monthly_data: dict, locale: str) -> str:
     symptom_days = monthly_data.get("symptom_days", 0)
     latest_size = ultrasound.get("latest_size_cm")
     wall_warning = ultrasound.get("wall_warning")
+    is_ja = resolve_locale(locale=locale) == "ja-JP"
 
     if primary_condition == "gallstones":
         if resolve_locale(locale=locale) == "zh-CN":
@@ -1647,13 +1789,31 @@ def build_condition_care_question(monthly_data: dict, locale: str) -> str:
                 details.append("胆囊壁存在炎症或增厚提示")
             suffix = f"（{', '.join(details)}）" if details else ""
             return f"请帮我推荐 {residence_text} 做胆结石或慢性胆囊炎评估/手术比较好的医院和医生，优先肝胆胰外科或肝胆外科{suffix}。"
+        if is_ja:
+            details = []
+            if latest_size:
+                details.append(f"最新の結石サイズは約 {latest_size:.1f}cm")
+            if symptom_days:
+                details.append(f"今月の症状日は {symptom_days} 日")
+            if wall_warning:
+                details.append("胆嚢壁の炎症または肥厚の示唆あり")
+            suffix = f"（{'、'.join(details)}）" if details else ""
+            return f"{residence_text} で胆石または慢性胆嚢炎の評価・手術に強い病院と医師を推薦してください。肝胆膵外科または肝胆外科を優先してください{suffix}。"
         return f"Please recommend strong hospitals and doctors in {residence_text} for gallstone or chronic cholecystitis evaluation or surgery, prioritizing hepatobiliary surgery."
     if primary_condition == "hypertension":
+        if is_ja:
+            return f"{residence_text} で高血圧診療に強い病院と医師を推薦してください。循環器内科または高血圧専門外来を優先してください。"
         return localize(locale, f"请帮我推荐 {residence_text} 看高血压比较好的医院和医生，优先心内科或高血压专病门诊。", f"Please recommend strong hospitals and doctors in {residence_text} for hypertension care, prioritizing cardiology or hypertension clinics.")
     if primary_condition == "diabetes":
+        if is_ja:
+            return f"{residence_text} で糖尿病診療に強い病院と医師を推薦してください。内分泌内科または糖尿病専門外来を優先してください。"
         return localize(locale, f"请帮我推荐 {residence_text} 看糖尿病比较好的医院和医生，优先内分泌科或糖尿病专病门诊。", f"Please recommend strong hospitals and doctors in {residence_text} for diabetes care, prioritizing endocrinology or diabetes clinics.")
     if primary_condition == "fat_loss":
+        if is_ja:
+            return f"{residence_text} で体重・体脂肪管理に強い病院と医師を推薦してください。臨床栄養科またはスポーツ医学外来を優先してください。"
         return localize(locale, f"请帮我推荐 {residence_text} 做体重体脂管理比较好的医院和医生，优先临床营养科或运动医学门诊。", f"Please recommend strong hospitals and doctors in {residence_text} for weight and body-fat management, prioritizing clinical nutrition or sports medicine.")
+    if is_ja:
+        return f"{residence_text} で健康管理評価に強い病院と医師を推薦してください。"
     return localize(locale, f"请帮我推荐 {residence_text} 做健康管理评估比较好的医院和医生。", f"Please recommend strong hospitals and doctors in {residence_text} for general health-management evaluation.")
 
 
@@ -1690,6 +1850,7 @@ def normalize_hospital_recommendation(
     locale: str,
     fallback_reason: str = "",
 ) -> Optional[dict]:
+    is_ja = resolve_locale(locale=locale) == "ja-JP"
     hospital = extract_hospital_name(item.get("hospital", "")) or str(item.get("hospital", "")).strip()
     if not is_valid_hospital_name(hospital):
         return None
@@ -1726,6 +1887,20 @@ def normalize_hospital_recommendation(
     booking_method = clean_booking_method(item.get("booking_method", "") or item.get("booking", ""), locale, max_length=60)
     registration_fee = clean_registration_fee(item.get("registration_fee", "") or item.get("fee", ""), locale, max_length=46)
     clinic_schedule = clean_clinic_schedule(item.get("clinic_schedule", "") or item.get("schedule", ""), locale, max_length=52)
+
+    if is_ja:
+        hospital = sanitize_locale_line(locale, hospital)
+        department = sanitize_locale_line(locale, department)
+        doctor = sanitize_locale_line(locale, doctor)
+        doctor_title = sanitize_locale_line(locale, doctor_title)
+        hospital_strength = sanitize_locale_line(locale, hospital_strength)
+        hospital_grade = sanitize_locale_line(locale, hospital_grade)
+        hospital_address = sanitize_locale_line(locale, hospital_address)
+        booking_method = sanitize_locale_line(locale, booking_method)
+        doctor_specialty = sanitize_locale_line(locale, doctor_specialty)
+        registration_fee = sanitize_locale_line(locale, registration_fee)
+        clinic_schedule = sanitize_locale_line(locale, clinic_schedule)
+        reason = sanitize_locale_line(locale, reason)
 
     return {
         "hospital": trim_text(hospital, 32),
@@ -2244,6 +2419,8 @@ def build_hospital_recommendations(monthly_data: dict, profile: dict, locale: st
     primary_condition = monthly_data.get("primary_condition")
     meta = condition_queries.get(primary_condition, next(iter(condition_queries.values())))
     fallback = build_local_rule_hospital_recommendations(residence_label, residence_text, primary_condition, meta["department"], locale)
+    if resolve_locale(locale=locale) == "ja-JP" and fallback:
+        return fallback, "fallback"
 
     tavily_evidence = collect_tavily_hospital_evidence(
         monthly_data,
@@ -2293,6 +2470,7 @@ def build_hospital_recommendations(monthly_data: dict, profile: dict, locale: st
 
 def build_monthly_fallback_review(monthly_data: dict, profile: dict, locale: str, config: Optional[dict] = None) -> tuple[str, str]:
     macro_scores = monthly_data.get("macro_scores", {})
+    is_ja = resolve_locale(locale=locale) == "ja-JP"
     low_dims = [
         label
         for key, label in [
@@ -2308,63 +2486,66 @@ def build_monthly_fallback_review(monthly_data: dict, profile: dict, locale: str
     symptom_text = (
         "、".join(f"{label} {count}次" for label, count in top_symptoms)
         if resolve_locale(locale=locale) == "zh-CN"
-        else ", ".join(f"{label} {count}x" for label, count in top_symptoms)
+        else "、".join(f"{label} {count}回" for label, count in top_symptoms) if is_ja else ", ".join(f"{label} {count}x" for label, count in top_symptoms)
     )
 
-    findings = localize(
-        locale,
-        f"本月围绕 {monthly_data.get('condition_text')} 进行管理，月均综合评分 {monthly_data.get('avg_total_score', 0):.1f}/100。饮食、饮水、运动、用药、监测完成度分别为 {macro_scores.get('diet', 0):.0f}% / {macro_scores.get('water', 0):.0f}% / {macro_scores.get('exercise', 0):.0f}% / {macro_scores.get('medication', 0):.0f}% / {macro_scores.get('monitoring', 0):.0f}%。",
-        f"This month focused on {monthly_data.get('condition_text')} management, with an average overall score of {monthly_data.get('avg_total_score', 0):.1f}/100. Diet, hydration, exercise, medication, and monitoring completion landed at {macro_scores.get('diet', 0):.0f}% / {macro_scores.get('water', 0):.0f}% / {macro_scores.get('exercise', 0):.0f}% / {macro_scores.get('medication', 0):.0f}% / {macro_scores.get('monitoring', 0):.0f}%.",
+    findings = (
+        f"今月は {monthly_data.get('condition_text')} を中心に管理し、月平均総合評価は {monthly_data.get('avg_total_score', 0):.1f}/100 でした。"
+        f" 食事・飲水・運動・服薬・モニタリングの達成率は {macro_scores.get('diet', 0):.0f}% / {macro_scores.get('water', 0):.0f}% / {macro_scores.get('exercise', 0):.0f}% / {macro_scores.get('medication', 0):.0f}% / {macro_scores.get('monitoring', 0):.0f}% です。"
+        if is_ja
+        else localize(
+            locale,
+            f"本月围绕 {monthly_data.get('condition_text')} 进行管理，月均综合评分 {monthly_data.get('avg_total_score', 0):.1f}/100。饮食、饮水、运动、用药、监测完成度分别为 {macro_scores.get('diet', 0):.0f}% / {macro_scores.get('water', 0):.0f}% / {macro_scores.get('exercise', 0):.0f}% / {macro_scores.get('medication', 0):.0f}% / {macro_scores.get('monitoring', 0):.0f}%。",
+            f"This month focused on {monthly_data.get('condition_text')} management, with an average overall score of {monthly_data.get('avg_total_score', 0):.1f}/100. Diet, hydration, exercise, medication, and monitoring completion landed at {macro_scores.get('diet', 0):.0f}% / {macro_scores.get('water', 0):.0f}% / {macro_scores.get('exercise', 0):.0f}% / {macro_scores.get('medication', 0):.0f}% / {macro_scores.get('monitoring', 0):.0f}%.",
+        )
     )
 
     risk_parts = [
-        localize(
-            locale,
-            f"本月记录到 {monthly_data.get('symptom_days', 0)} 天症状、{monthly_data.get('medication_days', 0)} 天用药、{monthly_data.get('monitoring_days', 0)} 天监测。",
-            f"This month included {monthly_data.get('symptom_days', 0)} symptom days, {monthly_data.get('medication_days', 0)} medication days, and {monthly_data.get('monitoring_days', 0)} monitoring days.",
+        (
+            f"今月は症状日が {monthly_data.get('symptom_days', 0)} 日、服薬日が {monthly_data.get('medication_days', 0)} 日、モニタリング日が {monthly_data.get('monitoring_days', 0)} 日ありました。"
+            if is_ja
+            else localize(
+                locale,
+                f"本月记录到 {monthly_data.get('symptom_days', 0)} 天症状、{monthly_data.get('medication_days', 0)} 天用药、{monthly_data.get('monitoring_days', 0)} 天监测。",
+                f"This month included {monthly_data.get('symptom_days', 0)} symptom days, {monthly_data.get('medication_days', 0)} medication days, and {monthly_data.get('monitoring_days', 0)} monitoring days.",
+            )
         )
     ]
     if symptom_text:
-        risk_parts.append(localize(locale, f"症状以 {symptom_text} 为主。", f"The symptom mix was led by {symptom_text}."))
+        risk_parts.append(f"症状は主に {symptom_text} でした。" if is_ja else localize(locale, f"症状以 {symptom_text} 为主。", f"The symptom mix was led by {symptom_text}."))
 
     primary_condition = monthly_data.get("primary_condition")
     if primary_condition == "gallstones":
         risk_parts.append(
-            localize(
+            f"胆石管理では月平均脂質摂取が約 {monthly_data.get('avg_fat', 0):.1f}g でした。高脂質日と不調日が重なる場合は、夕食と間食を重点的に見直してください。"
+            if is_ja
+            else localize(
                 locale,
                 f"胆结石专项上，月均脂肪摄入约 {monthly_data.get('avg_fat', 0):.1f}g。若高脂日与不适日重叠，需要重点复盘晚餐和加餐。",
                 f"For gallstone care, average fat intake was about {monthly_data.get('avg_fat', 0):.1f}g. If higher-fat days overlap with symptoms, dinner and snack patterns need closer review.",
             )
         )
     elif primary_condition == "hypertension":
-        risk_parts.append(
-            localize(
-                locale,
-                "若血压箱线图离散度偏大，说明波动仍明显，需要回看作息、盐分与服药时间。",
-                "If the blood-pressure boxplot stays wide, variability remains meaningful and sleep, sodium, and medication timing deserve review.",
-            )
-        )
+        risk_parts.append("血圧箱ひげ図のばらつきが大きい場合は、睡眠、塩分、服薬時間を見直す必要があります。" if is_ja else localize(locale, "若血压箱线图离散度偏大，说明波动仍明显，需要回看作息、盐分与服药时间。", "If the blood-pressure boxplot stays wide, variability remains meaningful and sleep, sodium, and medication timing deserve review."))
     elif primary_condition == "fat_loss":
-        risk_parts.append(
-            localize(
-                locale,
-                f"体重月变化约 {monthly_data.get('weight_change', 0):.2f}kg，若下降过快也要警惕恢复不足与胆囊刺激。",
-                f"Monthly weight change was about {monthly_data.get('weight_change', 0):.2f}kg; if the drop is too fast, recovery strain and gallbladder irritation are still worth watching.",
-            )
-        )
+        risk_parts.append(f"体重の月間変化は約 {monthly_data.get('weight_change', 0):.2f}kg で、減り方が速すぎる場合は回復不足や胆嚢への刺激にも注意が必要です。" if is_ja else localize(locale, f"体重月变化约 {monthly_data.get('weight_change', 0):.2f}kg，若下降过快也要警惕恢复不足与胆囊刺激。", f"Monthly weight change was about {monthly_data.get('weight_change', 0):.2f}kg; if the drop is too fast, recovery strain and gallbladder irritation are still worth watching."))
 
     plan_parts = [
-        localize(
+        "来月はまず低得点の項目を立て直し、そのうえで病態別の比較を続けてください。"
+        if is_ja
+        else localize(
             locale,
             "下月建议优先把低分维度拉稳，再继续做病种专项对照。",
             "Next month should first stabilize the weaker adherence dimensions, then continue disease-specific comparisons.",
         )
     ]
     if low_dims:
-        gap_text = "、".join(low_dims) if resolve_locale(locale=locale) == "zh-CN" else ", ".join(low_dims)
-        plan_parts.append(localize(locale, f"当前优先级最高的是：{gap_text}。", f"The highest-priority gaps now are: {gap_text}."))
+        gap_text = "、".join(low_dims) if is_ja or resolve_locale(locale=locale) == "zh-CN" else ", ".join(low_dims)
+        plan_parts.append(f"現在の最優先課題は {gap_text} です。" if is_ja else localize(locale, f"当前优先级最高的是：{gap_text}。", f"The highest-priority gaps now are: {gap_text}."))
     plan_parts.append(
-        localize(
+        "誘因、症状の持続時間、再検査結果を引き続き日記に残すと、次回の月報グラフがより判断しやすくなります。"
+        if is_ja
+        else localize(
             locale,
             "建议把诱因、症状持续时间、复查结果继续写进日记，月报中的趋势图会更有判断价值。",
             "Keep logging triggers, symptom duration, and follow-up results so next month's charts become more clinically useful.",
@@ -2383,15 +2564,23 @@ def build_monthly_fallback_review(monthly_data: dict, profile: dict, locale: str
         if macro_scores.get(key, 0) < 70:
             gap_topics.append(label)
     if has_tavily_api_key(config) and gap_topics:
-        query = localize(
-            locale,
-            f"{monthly_data.get('condition_text')} 患者教育 月度管理 {' '.join(gap_topics[:3])} 复盘建议",
-            f"{monthly_data.get('condition_text')} patient education monthly self-management review {' '.join(gap_topics[:3])}",
+        query = (
+            f"{monthly_data.get('condition_text')} 患者教育 月間セルフマネジメント {' '.join(gap_topics[:3])} 振り返り提案"
+            if is_ja
+            else localize(
+                locale,
+                f"{monthly_data.get('condition_text')} 患者教育 月度管理 {' '.join(gap_topics[:3])} 复盘建议",
+                f"{monthly_data.get('condition_text')} patient education monthly self-management review {' '.join(gap_topics[:3])}",
+            )
         )
         search_results = tavily_search(query, max_results=2, config=config)
         snippets = []
         for result in search_results:
             content = clean_search_excerpt(str(result.get("content", "") or ""), locale, max_length=150)
+            if is_ja and content and not re.search(r"[\u3040-\u30ff\u4e00-\u9fff]", content):
+                continue
+            if re.search(r"(責任著者|corresponding author|doi|figure|table)", str(content or ""), re.IGNORECASE):
+                continue
             if content:
                 snippets.append(content)
         if snippets:
@@ -2402,9 +2591,35 @@ def build_monthly_fallback_review(monthly_data: dict, profile: dict, locale: str
 
 
 def get_ai_monthly_review(monthly_data: dict, profile: dict, config: dict, locale: str) -> tuple[str, str]:
-    prompt = localize(
-        locale,
-        f"""请根据以下 30 天健康数据生成一段约 260-320 字的月度病情研判，并严格按以下结构输出，不要添加其他标题或前言：
+    if resolve_locale(locale=locale) == "ja-JP":
+        prompt = f"""以下の 30 日分の健康データをもとに、月次の病状レビューを約 260-320 文字で作成してください。余計な前置きは不要で、必ず次の構成を守ってください。
+**【主要な所見】**
+2-3 文で、今月の全体状態、遵守状況、主要トレンドを要約する。
+
+**【注意点】**
+2 文で、今月もっとも注意すべき誘因またはモニタリング不足を示す。
+
+**【来月の調整】**
+2-3 文で、来月に実行しやすい調整方針を提示する。
+
+利用者: {profile.get('name', '利用者')}
+病種・目標: {monthly_data.get('condition_text')}
+月平均総合評価: {monthly_data.get('avg_total_score', 0):.1f}
+達成率: {json.dumps(monthly_data.get('macro_scores', {}), ensure_ascii=False)}
+月平均カロリー: {monthly_data.get('avg_calories', 0):.0f} kcal
+月平均飲水量: {monthly_data.get('avg_water', 0):.0f} ml
+月平均歩数: {monthly_data.get('avg_steps', 0):.0f}
+症状日数: {monthly_data.get('symptom_days', 0)}
+症状回数: {monthly_data.get('symptom_events', 0)}
+服薬日数: {monthly_data.get('medication_days', 0)}
+モニタリング日数: {monthly_data.get('monitoring_days', 0)}
+ハイライト: {" | ".join(monthly_data.get('macro_highlights', []))}
+症状分布: {json.dumps(monthly_data.get('symptom_distribution', {}), ensure_ascii=False)}
+必ず上の 3 見出しで返してください。"""
+    else:
+        prompt = localize(
+            locale,
+            f"""请根据以下 30 天健康数据生成一段约 260-320 字的月度病情研判，并严格按以下结构输出，不要添加其他标题或前言：
 **【核心发现】**
 2-3 句，总结本月整体状态、依从性、关键趋势。
 
@@ -2428,7 +2643,7 @@ def get_ai_monthly_review(monthly_data: dict, profile: dict, config: dict, local
 专项亮点：{" | ".join(monthly_data.get('macro_highlights', []))}
 症状分布：{json.dumps(monthly_data.get('symptom_distribution', {}), ensure_ascii=False)}
 请务必按上述 3 个小标题输出。""",
-        f"""Write an approximately 180-230 word monthly clinical-style review and follow this exact structure with no extra intro:
+            f"""Write an approximately 180-230 word monthly clinical-style review and follow this exact structure with no extra intro:
 **[Key Findings]**
 2-3 sentences on overall status, adherence, and trend direction.
 
@@ -2452,11 +2667,15 @@ Monitoring days: {monthly_data.get('monitoring_days', 0)}
 Highlights: {" | ".join(monthly_data.get('macro_highlights', []))}
 Symptom mix: {json.dumps(monthly_data.get('symptom_distribution', {}), ensure_ascii=False)}
 Return the review with those exact three section headings.""",
-    )
+        )
 
     output = run_local_llm(
         prompt=prompt,
-        system_prompt=localize(locale, "你是一位谨慎、专业的健康数据分析师。", "You are a careful and professional health data analyst."),
+        system_prompt=(
+            "あなたは慎重で専門的な健康データ分析者です。"
+            if resolve_locale(locale=locale) == "ja-JP"
+            else localize(locale, "你是一位谨慎、专业的健康数据分析师。", "You are a careful and professional health data analyst.")
+        ),
         settings=get_generation_settings(config, "expert_commentary"),
         locale=locale,
         timeout_key="ai_comment_timeout",
@@ -2563,6 +2782,8 @@ def generate_monthly_text_report(monthly_data: dict, profile: dict, ai_review: s
     render_notice = str(monthly_data.get("render_notice") or "").strip()
     if render_notice:
         lines.extend(["", f"### {section(localize(locale, '渲染说明', 'Rendering Notice'), 'ℹ️')}", render_notice])
+    if resolve_locale(locale=locale) == "ja-JP":
+        lines = [sanitize_locale_line(locale, line) for line in lines]
     return "\n".join(lines).strip()
 
 
@@ -2619,8 +2840,9 @@ if __name__ == "__main__":
 
         ai_review, review_source = get_ai_monthly_review(monthly_data, profile_payload, config, locale)
 
-        timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-        pdf_filename = f"monthly_report_{timestamp}.pdf"
+        locale_tag = resolve_locale(locale=locale).replace("-", "_")
+        timestamp = datetime.now().strftime("%Y%m%d%H%M%S%f")
+        pdf_filename = f"monthly_report_{locale_tag}_{timestamp}.pdf"
         local_output_path = os.path.join(REPORTS_DIR, pdf_filename)
 
         generate_monthly_pdf_report(

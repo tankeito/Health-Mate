@@ -56,6 +56,8 @@ from i18n import (
     build_weekly_ai_system_prompt,
     format_weight,
     format_weight_delta,
+    inline_localize,
+    localize_free_text,
     resolve_locale,
     t,
 )
@@ -87,7 +89,11 @@ CUSTOM_SECTION_IGNORE_HINTS = (
 
 
 def localize(locale, zh_text, en_text):
-    return zh_text if resolve_locale(locale=locale) == "zh-CN" else en_text
+    return inline_localize(locale, zh_text, en_text)
+
+
+def sanitize_locale_line(locale, text):
+    return localize_free_text(locale, text) if resolve_locale(locale=locale) == "ja-JP" else text
 
 
 def normalize_name(value):
@@ -119,14 +125,7 @@ def dedupe_preserve_order(items):
 
 
 def clean_search_excerpt(text, locale, max_length=160):
-    snippet = shared_clean_search_excerpt(text, locale, max_length=max_length)
-    snippet = re.sub(r"[，,、;；:：]+\s*[。\.]+$", "", snippet or "").strip()
-    snippet = re.sub(r"[，,、;；:：\.。!！?？]+$", "", snippet or "").strip()
-    if not snippet:
-        return ""
-    if resolve_locale(locale=locale) == "zh-CN":
-        return snippet if re.search(r"[。！？!?]$", snippet) else snippet + "。"
-    return snippet if re.search(r"[.!?]$", snippet) else snippet + "."
+    return shared_clean_search_excerpt(text, locale, max_length=max_length)
 
 
 def get_week_dates(target_date_str):
@@ -137,7 +136,9 @@ def get_week_dates(target_date_str):
 
 def summarize_day(record, locale):
     if not record:
-        return localize(locale, "暂无", "N/A")
+        return "記録なし" if resolve_locale(locale=locale) == "ja-JP" else localize(locale, "暂无", "N/A")
+    if resolve_locale(locale=locale) == "ja-JP":
+        return f"{record['date']}（{record['score']:.0f}/100、飲水 {record['water_total']}ml、歩数 {record['steps']}）"
     return localize(
         locale,
         f"{record['date']}（{record['score']:.0f} 分，饮水 {record['water_total']}ml，步数 {record['steps']}）",
@@ -191,6 +192,10 @@ def build_weekly_observations(weekly_data, profile, locale):
     gaps = []
     next_focus = []
     gap_topics = []
+    resolved_locale = resolve_locale(locale=locale)
+
+    def tr(zh_text, en_text, ja_text):
+        return inline_localize(locale, zh_text, en_text, ja_text)
 
     step_target = int(profile.get("step_target", 8000) or 8000)
     water_target = int(profile.get("water_target_ml", 2000) or 2000)
@@ -199,72 +204,175 @@ def build_weekly_observations(weekly_data, profile, locale):
     review_days = max(1, observed_days)
 
     if weekly_data.get("avg_total_score", 0) >= 80:
-        strengths.append(localize(locale, f"周均综合评分 {weekly_data['avg_total_score']:.1f} 分，整体执行稳定。", f"Average overall score reached {weekly_data['avg_total_score']:.1f}, showing stable execution."))
+        strengths.append(tr(
+            f"周均综合评分 {weekly_data['avg_total_score']:.1f} 分，整体执行稳定。",
+            f"Average overall score reached {weekly_data['avg_total_score']:.1f}, showing stable execution.",
+            f"週平均総合評価は {weekly_data['avg_total_score']:.1f} 点で、全体の実行状況は安定していました。",
+        ))
     elif observed_days:
-        gaps.append(localize(locale, f"周均综合评分 {weekly_data['avg_total_score']:.1f} 分，仍有提升空间。", f"Average overall score was {weekly_data['avg_total_score']:.1f}, leaving room to improve."))
+        gaps.append(tr(
+            f"周均综合评分 {weekly_data['avg_total_score']:.1f} 分，仍有提升空间。",
+            f"Average overall score was {weekly_data['avg_total_score']:.1f}, leaving room to improve.",
+            f"週平均総合評価は {weekly_data['avg_total_score']:.1f} 点で、まだ改善の余地があります。",
+        ))
 
     if weekly_data.get("water_goal_days", 0) >= 5:
-        strengths.append(localize(locale, f"饮水达标 {weekly_data['water_goal_days']}/7 天，基础补水比较稳定。", f"Hydration target was met on {weekly_data['water_goal_days']}/7 days, which is a steady baseline habit."))
+        strengths.append(tr(
+            f"饮水达标 {weekly_data['water_goal_days']}/7 天，基础补水比较稳定。",
+            f"Hydration target was met on {weekly_data['water_goal_days']}/7 days, which is a steady baseline habit.",
+            f"飲水目標は {weekly_data['water_goal_days']}/7 日で達成できており、基礎的な補水習慣は安定しています。",
+        ))
     else:
-        gaps.append(localize(locale, f"饮水仅达标 {weekly_data['water_goal_days']}/7 天，距离每日 {water_target}ml 还有差距。", f"Hydration target was met on only {weekly_data['water_goal_days']}/7 days, still short of the daily {water_target}ml goal."))
-        next_focus.append(localize(locale, "把饮水拆成 4-5 次完成，优先保证工作日上午和下午各一次补水。", "Split hydration into 4-5 checkpoints and make sure at least one refill happens in both the morning and afternoon work blocks."))
+        gaps.append(tr(
+            f"饮水仅达标 {weekly_data['water_goal_days']}/7 天，距离每日 {water_target}ml 还有差距。",
+            f"Hydration target was met on only {weekly_data['water_goal_days']}/7 days, still short of the daily {water_target}ml goal.",
+            f"飲水目標の達成は {weekly_data['water_goal_days']}/7 日にとどまり、1日 {water_target}ml の目標にはまだ差があります。",
+        ))
+        next_focus.append(tr(
+            "把饮水拆成 4-5 次完成，优先保证工作日上午和下午各一次补水。",
+            "Split hydration into 4-5 checkpoints and make sure at least one refill happens in both the morning and afternoon work blocks.",
+            "飲水を 4〜5 回に分け、午前と午後にそれぞれ 1 回ずつ補水する流れを固定してください。",
+        ))
         gap_topics.append("hydration")
 
     if weekly_data.get("step_goal_days", 0) >= 4:
-        strengths.append(localize(locale, f"步数目标达标 {weekly_data['step_goal_days']}/7 天，活动量保持不错。", f"Step target was achieved on {weekly_data['step_goal_days']}/7 days, which kept activity volume in a good place."))
+        strengths.append(tr(
+            f"步数目标达标 {weekly_data['step_goal_days']}/7 天，活动量保持不错。",
+            f"Step target was achieved on {weekly_data['step_goal_days']}/7 days, which kept activity volume in a good place.",
+            f"歩数目標は {weekly_data['step_goal_days']}/7 日で達成できており、活動量は良好でした。",
+        ))
     else:
-        gaps.append(localize(locale, f"步数目标仅达标 {weekly_data['step_goal_days']}/7 天，离每日 {step_target} 步还有距离。", f"Step target was achieved on only {weekly_data['step_goal_days']}/7 days, still below the daily {step_target}-step goal."))
-        next_focus.append(localize(locale, "固定 3 次 15-20 分钟餐后步行或晚间快走，优先补足低活动日。", "Lock in three 15-20 minute post-meal or evening walks next week to recover the lower-activity days."))
+        gaps.append(tr(
+            f"步数目标仅达标 {weekly_data['step_goal_days']}/7 天，离每日 {step_target} 步还有距离。",
+            f"Step target was achieved on only {weekly_data['step_goal_days']}/7 days, still below the daily {step_target}-step goal.",
+            f"歩数目標の達成は {weekly_data['step_goal_days']}/7 日で、1日 {step_target} 歩にはまだ届いていません。",
+        ))
+        next_focus.append(tr(
+            "固定 3 次 15-20 分钟餐后步行或晚间快走，优先补足低活动日。",
+            "Lock in three 15-20 minute post-meal or evening walks next week to recover the lower-activity days.",
+            "食後や夕方に 15〜20 分のウォーキングを 3 回固定し、活動量の少ない日を埋めてください。",
+        ))
         gap_topics.append("activity")
 
     if weekly_data.get("avg_diet_score", 0) >= 80:
-        strengths.append(localize(locale, f"饮食周均得分 {weekly_data['avg_diet_score']:.1f} 分，饮食结构整体较稳。", f"Average diet score was {weekly_data['avg_diet_score']:.1f}, suggesting a generally stable meal structure."))
+        strengths.append(tr(
+            f"饮食周均得分 {weekly_data['avg_diet_score']:.1f} 分，饮食结构整体较稳。",
+            f"Average diet score was {weekly_data['avg_diet_score']:.1f}, suggesting a generally stable meal structure.",
+            f"食事の週平均評価は {weekly_data['avg_diet_score']:.1f} 点で、食事構成は概ね安定していました。",
+        ))
     elif weekly_data.get("recorded_meal_days", 0) > 0:
-        gaps.append(localize(locale, f"饮食周均得分 {weekly_data['avg_diet_score']:.1f} 分，仍需优化脂肪、纤维或餐次结构。", f"Average diet score was {weekly_data['avg_diet_score']:.1f}; fat, fiber, or meal structure still need work."))
-        next_focus.append(localize(locale, "优先把早餐和晚餐结构固定下来，并针对本周短板补纤维或控制脂肪。", "Stabilize breakfast and dinner first, then correct this week's main gaps in fiber or fat intake."))
+        gaps.append(tr(
+            f"饮食周均得分 {weekly_data['avg_diet_score']:.1f} 分，仍需优化脂肪、纤维或餐次结构。",
+            f"Average diet score was {weekly_data['avg_diet_score']:.1f}; fat, fiber, or meal structure still need work.",
+            f"食事の週平均評価は {weekly_data['avg_diet_score']:.1f} 点で、脂質・食物繊維・食事リズムの調整がまだ必要です。",
+        ))
+        next_focus.append(tr(
+            "优先把早餐和晚餐结构固定下来，并针对本周短板补纤维或控制脂肪。",
+            "Stabilize breakfast and dinner first, then correct this week's main gaps in fiber or fat intake.",
+            "まず朝食と夕食の型を安定させ、今週の弱点に応じて食物繊維の補強や脂質調整を進めてください。",
+        ))
         gap_topics.append("diet")
     elif observed_days:
-        gaps.append(localize(locale, "本周饮食记录不足，导致饮食趋势判断有限。", "Meal logging was too sparse this week, so diet trend analysis is limited."))
-        next_focus.append(localize(locale, "至少连续记录 5 天三餐或主要两餐，方便生成更可靠的趋势判断。", "Log at least 5 days of meals next week so the trend analysis becomes more reliable."))
+        gaps.append(tr(
+            "本周饮食记录不足，导致饮食趋势判断有限。",
+            "Meal logging was too sparse this week, so diet trend analysis is limited.",
+            "今週は食事記録が少なく、食事トレンドの判断材料が不足しています。",
+        ))
+        next_focus.append(tr(
+            "至少连续记录 5 天三餐或主要两餐，方便生成更可靠的趋势判断。",
+            "Log at least 5 days of meals next week so the trend analysis becomes more reliable.",
+            "来週は少なくとも 5 日分、3 食または主要 2 食を連続記録し、トレンド判断の精度を上げてください。",
+        ))
         gap_topics.append("logging")
 
     weight_change = weekly_data.get("weight_change", 0)
     if primary_condition == "fat_loss":
         if weight_change <= -0.2:
-            strengths.append(localize(locale, f"体重较周初下降 {abs(weight_change):.2f}kg，方向与减脂目标一致。", f"Weight moved down by {abs(weight_change):.2f}kg from the start of the week, which aligns with the fat-loss goal."))
+            strengths.append(tr(
+                f"体重较周初下降 {abs(weight_change):.2f}kg，方向与减脂目标一致。",
+                f"Weight moved down by {abs(weight_change):.2f}kg from the start of the week, which aligns with the fat-loss goal.",
+                f"体重は週初から {abs(weight_change):.2f}kg 減少し、減脂目標と同じ方向に進んでいます。",
+            ))
         elif weight_change > 0.5:
-            gaps.append(localize(locale, f"体重较周初上升 {weight_change:.2f}kg，需要复查晚餐份量和活动量。", f"Weight rose by {weight_change:.2f}kg from the start of the week, so dinner portions and activity deserve a closer look."))
-            next_focus.append(localize(locale, "晚餐主食和零食份量先减一点，同时补足 2-3 次餐后活动。", "Trim dinner carbs and snacks slightly, then add 2-3 extra post-meal activity blocks."))
+            gaps.append(tr(
+                f"体重较周初上升 {weight_change:.2f}kg，需要复查晚餐份量和活动量。",
+                f"Weight rose by {weight_change:.2f}kg from the start of the week, so dinner portions and activity deserve a closer look.",
+                f"体重は週初より {weight_change:.2f}kg 増えており、夕食量と活動量の見直しが必要です。",
+            ))
+            next_focus.append(tr(
+                "晚餐主食和零食份量先减一点，同时补足 2-3 次餐后活动。",
+                "Trim dinner carbs and snacks slightly, then add 2-3 extra post-meal activity blocks.",
+                "夕食の主食と間食を少し抑え、食後の活動を 2〜3 回追加してください。",
+            ))
             gap_topics.append("weight")
     else:
         if abs(weight_change) <= 0.5 and weekly_data.get("valid_weight_days", 0) >= 2:
-            strengths.append(localize(locale, f"体重波动控制在 {abs(weight_change):.2f}kg 内，整体较平稳。", f"Weight fluctuation stayed within {abs(weight_change):.2f}kg, which is relatively stable."))
+            strengths.append(tr(
+                f"体重波动控制在 {abs(weight_change):.2f}kg 内，整体较平稳。",
+                f"Weight fluctuation stayed within {abs(weight_change):.2f}kg, which is relatively stable.",
+                f"体重変動は {abs(weight_change):.2f}kg 以内に収まり、全体として安定していました。",
+            ))
         elif weekly_data.get("valid_weight_days", 0) >= 2:
-            gaps.append(localize(locale, f"体重波动达到 {abs(weight_change):.2f}kg，建议结合饮食与活动进一步排查。", f"Weight fluctuation reached {abs(weight_change):.2f}kg, so diet and activity patterns should be reviewed together."))
+            gaps.append(tr(
+                f"体重波动达到 {abs(weight_change):.2f}kg，建议结合饮食与活动进一步排查。",
+                f"Weight fluctuation reached {abs(weight_change):.2f}kg, so diet and activity patterns should be reviewed together.",
+                f"体重変動は {abs(weight_change):.2f}kg に達しており、食事と活動をあわせて見直す必要があります。",
+            ))
             gap_topics.append("weight")
 
     if weekly_data.get("symptom_days", 0) == 0:
-        strengths.append(localize(locale, "本周未记录明显不适症状，整体状态较平稳。", "No clear symptom days were logged this week, suggesting a steady overall state."))
+        strengths.append(tr(
+            "本周未记录明显不适症状，整体状态较平稳。",
+            "No clear symptom days were logged this week, suggesting a steady overall state.",
+            "今週は目立った不調症状の記録がなく、全体状態は安定していました。",
+        ))
     else:
-        gaps.append(localize(locale, f"本周有 {weekly_data['symptom_days']} 天记录症状，共 {weekly_data['symptom_events']} 次，需要关注诱因。", f"Symptoms were recorded on {weekly_data['symptom_days']} days ({weekly_data['symptom_events']} events), so triggers deserve attention."))
-        next_focus.append(localize(locale, "把症状出现前的饮食、作息和活动一起记录，便于下周定位诱因。", "Log meals, sleep, and activity around symptom episodes next week so likely triggers are easier to identify."))
+        gaps.append(tr(
+            f"本周有 {weekly_data['symptom_days']} 天记录症状，共 {weekly_data['symptom_events']} 次，需要关注诱因。",
+            f"Symptoms were recorded on {weekly_data['symptom_days']} days ({weekly_data['symptom_events']} events), so triggers deserve attention.",
+            f"今週は {weekly_data['symptom_days']} 日で症状が記録され、合計 {weekly_data['symptom_events']} 回ありました。誘因の確認が必要です。",
+        ))
+        next_focus.append(tr(
+            "把症状出现前的饮食、作息和活动一起记录，便于下周定位诱因。",
+            "Log meals, sleep, and activity around symptom episodes next week so likely triggers are easier to identify.",
+            "症状の前後にある食事、睡眠、活動もあわせて記録し、来週の誘因特定につなげてください。",
+        ))
         gap_topics.append("symptoms")
 
     if weekly_data.get("medication_enabled"):
         if weekly_data.get("medication_days", 0) >= max(1, min(review_days, 5)):
-            strengths.append(localize(locale, f"用药记录覆盖 {weekly_data['medication_days']} 天，依从性追踪比较完整。", f"Medication was logged on {weekly_data['medication_days']} days, giving decent adherence visibility."))
+            strengths.append(tr(
+                f"用药记录覆盖 {weekly_data['medication_days']} 天，依从性追踪比较完整。",
+                f"Medication was logged on {weekly_data['medication_days']} days, giving decent adherence visibility.",
+                f"服薬記録は {weekly_data['medication_days']} 日分あり、遵守状況の確認材料として十分です。",
+            ))
         else:
-            gaps.append(localize(locale, f"用药模块已启用，但本周仅记录 {weekly_data['medication_days']} 天。", f"Medication tracking is enabled, but only {weekly_data['medication_days']} days were logged this week."))
-            next_focus.append(localize(locale, "如果有服药安排，请同步记录时间、药名与剂量，便于周报一起复盘。", "If medication is part of the routine, log time, medicine name, and dosage so it can be reviewed in the weekly report."))
+            gaps.append(tr(
+                f"用药模块已启用，但本周仅记录 {weekly_data['medication_days']} 天。",
+                f"Medication tracking is enabled, but only {weekly_data['medication_days']} days were logged this week.",
+                f"服薬モジュールは有効ですが、今週の記録は {weekly_data['medication_days']} 日分にとどまりました。",
+            ))
+            next_focus.append(tr(
+                "如果有服药安排，请同步记录时间、药名与剂量，便于周报一起复盘。",
+                "If medication is part of the routine, log time, medicine name, and dosage so it can be reviewed in the weekly report.",
+                "服薬がある日は、時間・薬剤名・用量もあわせて記録し、週報で振り返れるようにしてください。",
+            ))
             gap_topics.append("medication")
 
     custom_stats = weekly_data.get("custom_section_stats", [])
     for section in custom_stats[:3]:
         if section.get("days_recorded", 0) > 0:
-            strengths.append(localize(locale, f"{section['title']} 本周记录 {section['days_recorded']} 天，可用于联合判断。", f"{section['title']} was recorded on {section['days_recorded']} days and can now be used in combined review."))
+            if resolved_locale == "ja-JP":
+                strengths.append(f"{section['title']} は今週 {section['days_recorded']} 日記録され、他指標とあわせて判断できます。")
+            else:
+                strengths.append(localize(locale, f"{section['title']} 本周记录 {section['days_recorded']} 天，可用于联合判断。", f"{section['title']} was recorded on {section['days_recorded']} days and can now be used in combined review."))
         elif section.get("configured"):
-            gaps.append(localize(locale, f"已启用 {section['title']}，但本周暂无记录。", f"{section['title']} is enabled, but no entries were recorded this week."))
-            next_focus.append(localize(locale, f"若 {section['title']} 是重点监测项，请至少补齐 1-2 次记录。", f"If {section['title']} matters for ongoing management, add at least 1-2 entries next week."))
+            if resolved_locale == "ja-JP":
+                gaps.append(f"{section['title']} は有効ですが、今週の記録がありませんでした。")
+                next_focus.append(f"{section['title']} が重要な監視項目であれば、来週は少なくとも 1〜2 回記録してください。")
+            else:
+                gaps.append(localize(locale, f"已启用 {section['title']}，但本周暂无记录。", f"{section['title']} is enabled, but no entries were recorded this week."))
+                next_focus.append(localize(locale, f"若 {section['title']} 是重点监测项，请至少补齐 1-2 次记录。", f"If {section['title']} matters for ongoing management, add at least 1-2 entries next week."))
             gap_topics.append(section["title"])
 
     strengths = dedupe_preserve_order(strengths)[:5]
@@ -273,11 +381,23 @@ def build_weekly_observations(weekly_data, profile, locale):
     gap_topics = dedupe_preserve_order(gap_topics)[:4]
 
     if not strengths and observed_days:
-        strengths.append(localize(locale, "本周至少完成了基础记录，为后续分析保留了数据。", "Basic tracking was completed this week, which still preserves usable data for later analysis."))
+        strengths.append(tr(
+            "本周至少完成了基础记录，为后续分析保留了数据。",
+            "Basic tracking was completed this week, which still preserves usable data for later analysis.",
+            "今週は最低限の基礎記録が残っており、次回分析につながる土台は確保できています。",
+        ))
     if not gaps and observed_days:
-        gaps.append(localize(locale, "目前没有特别突出的短板，重点是继续保持稳定执行。", "No single major gap stands out right now; the main task is to keep execution steady."))
+        gaps.append(tr(
+            "目前没有特别突出的短板，重点是继续保持稳定执行。",
+            "No single major gap stands out right now; the main task is to keep execution steady.",
+            "現時点で大きく目立つ弱点はなく、次週も安定して続けることが最優先です。",
+        ))
     if not next_focus:
-        next_focus.append(localize(locale, "延续当前节奏，围绕饮食、饮水和活动保持稳定。", "Keep the current rhythm and stay consistent with meals, hydration, and activity."))
+        next_focus.append(tr(
+            "延续当前节奏，围绕饮食、饮水和活动保持稳定。",
+            "Keep the current rhythm and stay consistent with meals, hydration, and activity.",
+            "現在のリズムを維持し、食事・飲水・活動の安定を優先してください。",
+        ))
 
     return strengths, gaps, next_focus, gap_topics
 
@@ -472,47 +592,66 @@ def build_weekly_fallback_insights(weekly_data, profile, locale):
     focus = weekly_data.get("next_focus", [])
     best_day_text = summarize_day(weekly_data.get("best_day"), locale)
     focus_day_text = summarize_day(weekly_data.get("focus_day"), locale)
+    is_ja = resolve_locale(locale=locale) == "ja-JP"
 
     if weekly_data.get("observed_days", 0) == 0:
-        review = localize(
-            locale,
-            "本周几乎没有可用于分析的记录，周报已保留基础结构，但结论可信度较低。建议先把每日饮食、饮水、步数和症状记录补齐。",
-            "There were almost no usable records this week. The weekly report was still generated, but the conclusions are low-confidence. Please fill in daily meals, hydration, steps, and symptoms first.",
+        review = (
+            "今週は分析に使える記録がほとんどなく、週報の骨組みは出力できていますが、結論の信頼度は低めです。まずは毎日の食事、飲水、歩数、症状を記録してください。"
+            if is_ja
+            else localize(
+                locale,
+                "本周几乎没有可用于分析的记录，周报已保留基础结构，但结论可信度较低。建议先把每日饮食、饮水、步数和症状记录补齐。",
+                "There were almost no usable records this week. The weekly report was still generated, but the conclusions are low-confidence. Please fill in daily meals, hydration, steps, and symptoms first.",
+            )
         )
         plan = "\n".join([
-            f"- {localize(locale, '连续记录 5-7 天基础数据，再生成下一次周报。', 'Log 5-7 consecutive days of core data before generating the next weekly report.')}",
-            f"- {localize(locale, '至少记录体重、饮水、步数和主要餐次。', 'At minimum, log weight, hydration, steps, and main meals.')}",
-            f"- {localize(locale, '如有症状或用药，也请同步记录。', 'If symptoms or medication are involved, record them as well.')}",
+            f"- {('5〜7 日連続で基礎データを記録してから、次回の週報を生成してください。' if is_ja else localize(locale, '连续记录 5-7 天基础数据，再生成下一次周报。', 'Log 5-7 consecutive days of core data before generating the next weekly report.'))}",
+            f"- {('最低でも体重、飲水、歩数、主要な食事を記録してください。' if is_ja else localize(locale, '至少记录体重、饮水、步数和主要餐次。', 'At minimum, log weight, hydration, steps, and main meals.'))}",
+            f"- {('症状や服薬がある場合は、それもあわせて残してください。' if is_ja else localize(locale, '如有症状或用药，也请同步记录。', 'If symptoms or medication are involved, record them as well.'))}",
         ])
         return review, plan, "fallback"
 
-    review_lines = [
-        localize(locale, f"本周管理重点为 {condition_text}。本周做得较好的地方：", f"This week's management focus was {condition_text}. The stronger areas were:"),
-        *[f"- {item}" for item in strengths[:3]],
-        localize(locale, "本周仍需重点关注：", "The main gaps that still need attention are:"),
-        *[f"- {item}" for item in gaps[:3]],
-        localize(locale, f"最佳状态日：{best_day_text}。需要重点复盘的一天：{focus_day_text}。", f"Best day: {best_day_text}. Day that needs the most review: {focus_day_text}."),
-    ]
+    if is_ja:
+        review_lines = [
+            f"今週の管理テーマは {condition_text} でした。良かった点は次のとおりです。",
+            *[f"- {item}" for item in strengths[:3]],
+            "引き続き注意したい点はこちらです。",
+            *[f"- {item}" for item in gaps[:3]],
+            f"今週もっとも安定していた日は {best_day_text}、重点的に振り返りたい日は {focus_day_text} です。",
+        ]
+    else:
+        review_lines = [
+            localize(locale, f"本周管理重点为 {condition_text}。本周做得较好的地方：", f"This week's management focus was {condition_text}. The stronger areas were:"),
+            *[f"- {item}" for item in strengths[:3]],
+            localize(locale, "本周仍需重点关注：", "The main gaps that still need attention are:"),
+            *[f"- {item}" for item in gaps[:3]],
+            localize(locale, f"最佳状态日：{best_day_text}。需要重点复盘的一天：{focus_day_text}。", f"Best day: {best_day_text}. Day that needs the most review: {focus_day_text}."),
+        ]
 
     plan_lines = [f"- {item}" for item in focus[:4]]
     source = "fallback"
 
     if has_tavily_api_key(config) and weekly_data.get("gap_topics"):
-        query = localize(
-            locale,
-            f"{condition_text} 患者教育 一周健康管理 {' '.join(weekly_data['gap_topics'][:3])} 建议",
-            f"{condition_text} patient education weekly self-management tips {' '.join(weekly_data['gap_topics'][:3])}",
-        )
+        if is_ja:
+            query = f"{condition_text} 患者教育 週間セルフマネジメント {' '.join(weekly_data['gap_topics'][:3])} 提案"
+        else:
+            query = localize(
+                locale,
+                f"{condition_text} 患者教育 一周健康管理 {' '.join(weekly_data['gap_topics'][:3])} 建议",
+                f"{condition_text} patient education weekly self-management tips {' '.join(weekly_data['gap_topics'][:3])}",
+            )
         search_results = tavily_search(query, max_results=2, config=config)
         snippets = []
         for result in search_results:
             content = clean_search_excerpt(str(result.get("content", "") or ""), locale, max_length=160)
+            if is_ja and content and not re.search(r"[\u3040-\u30ff\u4e00-\u9fff]", content):
+                continue
             if content:
                 snippets.append(content)
         if snippets:
-            review_lines.append(localize(locale, "检索补充观点：", "Retrieved external note:"))
+            review_lines.append("外部参考：" if is_ja else localize(locale, "检索补充观点：", "Retrieved external note:"))
             review_lines.extend([f"- {snippet}" for snippet in snippets[:1]])
-            plan_lines.append(localize(locale, f"- 可参考外部建议：{snippets[0]}", f"- External idea to consider: {snippets[0]}"))
+            plan_lines.append(f"- 外部提案として参考になる点: {snippets[0]}" if is_ja else localize(locale, f"- 可参考外部建议：{snippets[0]}", f"- External idea to consider: {snippets[0]}"))
             source = "fallback_tavily"
 
     review = "\n".join(review_lines).strip()
@@ -536,13 +675,18 @@ def parse_weekly_ai_output(output):
 
 def get_ai_weekly_insights(weekly_data, profile, config, locale):
     """Generate weekly review text and action items."""
+    is_ja = resolve_locale(locale=locale) == "ja-JP"
     context = {
         "condition_name": weekly_data.get("condition_text", ""),
         "primary_condition": weekly_data.get("primary_condition", ""),
-        "profile_summary": localize(
-            locale,
-            f"{profile.get('name', t(locale, 'default_name'))}，{profile.get('age', '-')} 岁，身高 {profile.get('height_cm', '-')}cm，当前体重 {format_weight(locale, weekly_data.get('latest_weight') or profile.get('current_weight_kg'))}，目标体重 {format_weight(locale, profile.get('target_weight_kg'))}",
-            f"{profile.get('name', t(locale, 'default_name'))}, age {profile.get('age', '-')}, height {profile.get('height_cm', '-')}cm, current weight {format_weight(locale, weekly_data.get('latest_weight') or profile.get('current_weight_kg'))}, target weight {format_weight(locale, profile.get('target_weight_kg'))}",
+        "profile_summary": (
+            f"{profile.get('name', t(locale, 'default_name'))}、{profile.get('age', '-')}歳、身長 {profile.get('height_cm', '-')}cm、現在体重 {format_weight(locale, weekly_data.get('latest_weight') or profile.get('current_weight_kg'))}、目標体重 {format_weight(locale, profile.get('target_weight_kg'))}"
+            if is_ja
+            else localize(
+                locale,
+                f"{profile.get('name', t(locale, 'default_name'))}，{profile.get('age', '-')} 岁，身高 {profile.get('height_cm', '-')}cm，当前体重 {format_weight(locale, weekly_data.get('latest_weight') or profile.get('current_weight_kg'))}，目标体重 {format_weight(locale, profile.get('target_weight_kg'))}",
+                f"{profile.get('name', t(locale, 'default_name'))}, age {profile.get('age', '-')}, height {profile.get('height_cm', '-')}cm, current weight {format_weight(locale, weekly_data.get('latest_weight') or profile.get('current_weight_kg'))}, target weight {format_weight(locale, profile.get('target_weight_kg'))}",
+            )
         ),
         "diet_principle": weekly_data.get("diet_principle", ""),
         "step_target": profile.get("step_target", 8000),
@@ -561,14 +705,14 @@ def get_ai_weekly_insights(weekly_data, profile, config, locale):
         "medication_days": weekly_data.get("medication_days", 0),
         "best_day": summarize_day(weekly_data.get("best_day"), locale),
         "focus_day": summarize_day(weekly_data.get("focus_day"), locale),
-        "strengths": " | ".join(weekly_data.get("strengths", [])) or localize(locale, "暂无", "None"),
-        "gaps": " | ".join(weekly_data.get("gaps", [])) or localize(locale, "暂无", "None"),
-        "next_focus": " | ".join(weekly_data.get("next_focus", [])) or localize(locale, "保持稳定", "Keep the current routine"),
+        "strengths": " | ".join(weekly_data.get("strengths", [])) or ("なし" if is_ja else localize(locale, "暂无", "None")),
+        "gaps": " | ".join(weekly_data.get("gaps", [])) or ("なし" if is_ja else localize(locale, "暂无", "None")),
+        "next_focus": " | ".join(weekly_data.get("next_focus", [])) or ("現在のリズムを維持" if is_ja else localize(locale, "保持稳定", "Keep the current routine")),
         "custom_sections": " | ".join(
             f"{section['title']}:{section.get('days_recorded', 0)}"
             for section in weekly_data.get("custom_section_stats", [])
             if section.get("days_recorded", 0) > 0
-        ) or localize(locale, "暂无", "None"),
+        ) or ("なし" if is_ja else localize(locale, "暂无", "None")),
     }
     prompt = build_weekly_ai_prompt(locale, context)
     output = run_local_llm(
@@ -628,7 +772,10 @@ def generate_weekly_text_report(weekly_data, profile, ai_review, ai_plan, locale
     for section in weekly_data.get("custom_section_stats", []):
         if section.get("days_recorded", 0) <= 0:
             continue
-        custom_lines.append(f"- 🧪 {section['title']}: {localize(locale, '记录', 'logged')} {section['days_recorded']} {localize(locale, '天', 'days')}, {localize(locale, '条目', 'items')} {section.get('items', 0)}")
+        if resolve_locale(locale=locale) == "ja-JP":
+            custom_lines.append(f"- 🧪 {section['title']}: 記録日数 {section['days_recorded']} 日、項目数 {section.get('items', 0)}")
+        else:
+            custom_lines.append(f"- 🧪 {section['title']}: {localize(locale, '记录', 'logged')} {section['days_recorded']} {localize(locale, '天', 'days')}, {localize(locale, '条目', 'items')} {section.get('items', 0)}")
 
     report_lines = [
         f"## {heading(t(locale, 'weekly_text_heading', start_date=weekly_data['start_date'], end_date=weekly_data['end_date']), '🗓️')}",
@@ -676,7 +823,10 @@ def generate_weekly_text_report(weekly_data, profile, ai_review, ai_plan, locale
         ai_plan.strip(),
         f"_{generation_source_label(locale, plan_source)}_",
     ])
-    return "\n".join(line for line in report_lines if line is not None).strip()
+    report_lines = [line for line in report_lines if line is not None]
+    if resolve_locale(locale=locale) == "ja-JP":
+        report_lines = [sanitize_locale_line(locale, line) for line in report_lines]
+    return "\n".join(report_lines).strip()
 
 
 def publish_weekly_pdf(local_pdf_path):
@@ -725,8 +875,9 @@ if __name__ == "__main__":
 
         ai_review, ai_plan, review_source, plan_source = get_ai_weekly_insights(weekly_data, profile_payload, config, locale)
 
-        timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-        pdf_filename = f"weekly_report_{timestamp}.pdf"
+        locale_tag = resolve_locale(locale=locale).replace("-", "_")
+        timestamp = datetime.now().strftime("%Y%m%d%H%M%S%f")
+        pdf_filename = f"weekly_report_{locale_tag}_{timestamp}.pdf"
         local_output_path = os.path.join(REPORTS_DIR, pdf_filename)
 
         generate_weekly_pdf_report(

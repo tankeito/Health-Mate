@@ -2,8 +2,8 @@
     "name": "health-mate",
     "display_name": "Health-Mate",
     "type": "python/app",
-    "version": "1.4.1",
-    "description": "Health-Mate is an executable OpenClaw health-management skill with local Markdown parsing, strict memory-write templates for LLM output, daily/weekly/monthly PDF generation, healthy-day heatmaps, monthly specialty charts, hospital-and-doctor planning, and optional webhook delivery. Security disclosure: 1. MEMORY_DIR must be explicitly set. 2. Bundled shell runners read config/.env when present and write local reports/logs during normal execution. 3. Outbound network requests occur only when webhook or Tavily credentials are configured, or when runtime font download is explicitly enabled. 4. Users should back up config/user_config.json and config/.env before upgrades because some platform flows may reset local configuration files.",
+    "version": "1.5.0",
+    "description": "Health-Mate is an executable OpenClaw health-management skill with Chinese, English, and Japanese report flows, local Markdown parsing, strict memory-write templates for LLM output, daily/weekly/monthly PDF generation, weekly and monthly heatmaps, a monthly healthy-day donut chart, specialty charts, residence-aware hospital-and-doctor planning, and optional webhook delivery. SECURITY DISCLOSURE: 1. MEMORY_DIR must be explicitly set; there is no implicit fallback path. 2. The bundled shell runners read config/.env when present and write local reports/logs during normal execution. 3. Outbound network requests occur only when webhook or Tavily credentials are configured, or when runtime font download is explicitly enabled. 4. Before upgrades or reinstalls, users should back up config/user_config.json and config/.env because some platform workflows may reset local configuration files.",
     "author": "tankeito",
     "email": "tqd354@gmail.com",
     "license": "MIT",
@@ -26,6 +26,8 @@
     ],
     "env": {
         "MEMORY_DIR": "Required. Explicitly set this to the Markdown health-memory directory the skill should read.",
+        "OPENCLAW_BIN": "Optional. Absolute path to the local openclaw binary. Recommended for cron or minimal-PATH shells so local LLM generation can still run.",
+        "HEALTH_MATE_LANG": "Optional. Force the output locale such as zh-CN, en-US, or ja-JP.",
         "TAVILY_API_KEY": "Optional. Enables Tavily-assisted fallback guidance and monthly hospital lookup hints.",
         "DINGTALK_WEBHOOK": "Optional. Enables DingTalk delivery.",
         "FEISHU_WEBHOOK": "Optional. Enables Feishu delivery.",
@@ -33,7 +35,7 @@
         "TELEGRAM_CHAT_ID": "Optional. Required only for Telegram delivery.",
         "REPORT_WEB_DIR": "Optional. Local directory where generated PDFs can be copied for public serving.",
         "REPORT_BASE_URL": "Optional. Public base URL used to build downloadable PDF links.",
-        "ALLOW_RUNTIME_FONT_DOWNLOAD": "Optional. Disabled by default. Set to true only if you explicitly allow runtime fallback font download."
+        "ALLOW_RUNTIME_FONT_DOWNLOAD": "Optional. Disabled by default. Set to true only if you explicitly allow runtime fallback download of NotoSansSC-VF.ttf."
     },
     "commands": [
         {
@@ -56,14 +58,13 @@
         }
     ],
     "features": [
-        "Executable local Python scripts and shell runners, not a prompt-only package",
-        "Chinese and English report generation with strict recorder-style memory templates",
-        "Daily, weekly, and monthly PDF reports with trend charts, heatmaps, and specialty monthly visuals",
-        "Monthly hospital-and-doctor planning with LLM-first, Tavily-assisted, and local fallback modes",
+        "Executable local Python scripts and shell runners, not an instruction-only prompt bundle",
+        "Chinese/English/Japanese parsing, prompts, and report generation with strict recorder-style memory templates",
+        "Localized daily, weekly, and monthly PDF reports with weekly/monthly heatmaps, a monthly healthy-day donut chart, and monthly specialty charts",
+        "Residence-aware monthly medical follow-up guidance and grouped hospital-and-doctor suggestions",
         "Custom scoring modules and additional monitoring sections including medication and lab-style modules",
-        "Explicit MEMORY_DIR handling with no implicit fallback path in the shell runners",
-        "English-safe rendering fallback when the Chinese font is missing",
-        "Bundled Japanese documentation and local Japanese font asset for `1.4.1`",
+        "Optional outbound network behavior limited to Tavily, webhook delivery, and explicit opt-in font download",
+        "English-compatible rendering fallback when the bundled Chinese or Japanese font is unavailable",
         "Upgrade-sensitive local config flow; users should back up config/user_config.json and config/.env before reinstalling or upgrading"
     ],
     "tags": [
@@ -73,10 +74,9 @@
         "hydration",
         "fitness",
         "openclaw",
+        "bilingual",
         "pdf",
         "webhook",
-        "local-files",
-        "weekly-report",
-        "monthly-report"
+        "local-files"
     ]
 }

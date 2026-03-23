@@ -24,6 +24,7 @@ from i18n import (
     condition_name,
     exercise_name,
     format_weight,
+    inline_localize,
     meal_name,
     resolve_locale,
     strip_approximate_phrase,
@@ -104,7 +105,7 @@ def stars_to_text(stars_str):
 
 
 def localize_text(locale, zh_text, en_text):
-    return zh_text if resolve_locale(locale=locale) == "zh-CN" else en_text
+    return inline_localize(locale, zh_text, en_text)
 
 
 def profile_condition_title(profile, locale):
@@ -116,7 +117,7 @@ def profile_condition_title(profile, locale):
         labels = [condition_name(locale, item) for item in conditions if item]
         labels = [item for item in labels if item]
         if labels:
-            separator = "、" if resolve_locale(locale=locale) == "zh-CN" else ", "
+            separator = "、" if resolve_locale(locale=locale) in {"zh-CN", "ja-JP"} else ", "
             return separator.join(labels)
     return condition_name(locale, (profile or {}).get('condition', 'balanced'))
 
@@ -488,7 +489,7 @@ def create_nutrition_chart(nutrition, locale):
     if not MATPLOTLIB_AVAILABLE: return None
     try:
         locale = resolve_locale(locale=locale)
-        my_font = get_font_prop()
+        my_font = get_font_prop(locale)
         carb_kcal, protein_kcal, fat_kcal = nutrition.get('carb', 0)*4, nutrition.get('protein', 0)*4, nutrition.get('fat', 0)*9
         if carb_kcal + protein_kcal + fat_kcal <= 0: return None
         
@@ -537,7 +538,7 @@ def create_meal_macro_stacked_chart(meals, locale):
         return None
     try:
         locale = resolve_locale(locale=locale)
-        my_font = get_font_prop()
+        my_font = get_font_prop(locale)
         meal_order = {
             "breakfast": 0,
             "morning_snack": 1,
@@ -646,7 +647,7 @@ def create_water_chart(water_records, target_ml, locale):
     if not MATPLOTLIB_AVAILABLE or not water_records: return None
     try:
         locale = resolve_locale(locale=locale)
-        my_font = get_font_prop()
+        my_font = get_font_prop(locale)
         total_drank = sum([int(r.get('amount_ml', 0)) for r in water_records])
         target = target_ml if target_ml > 0 else 2000
         remaining = max(0, target - total_drank)
@@ -742,7 +743,7 @@ def create_energy_balance_chart(nutrition, exercise_data, steps, step_target, re
         return None
     try:
         locale = resolve_locale(locale=locale)
-        my_font = get_font_prop()
+        my_font = get_font_prop(locale)
         intake = float((nutrition or {}).get("calories", 0) or 0)
         exercise_burn = sum(float(entry.get("calories", 0) or 0) for entry in (exercise_data or []) if isinstance(entry, dict))
         step_burn = max(0.0, float(steps or 0) * 0.035)
@@ -898,7 +899,7 @@ def create_exercise_chart(exercise_data, steps, step_target=8000, locale="zh-CN"
     if not MATPLOTLIB_AVAILABLE: return None
     try:
         locale = resolve_locale(locale=locale)
-        my_font = get_font_prop()
+        my_font = get_font_prop(locale)
         labels, calories, targets, is_step, inner_texts = [], [], [], [], []
         
         if exercise_data:
@@ -982,7 +983,7 @@ def generate_pdf_report(data, profile, scores, nutrition, macros, risks, plan, o
     render_notice = str(((generation_meta or {}).get("render_notice")) or data.get("render_notice") or "").strip()
 
     def localize(zh_text, en_text):
-        return zh_text if locale == 'zh-CN' else en_text
+        return inline_localize(locale, zh_text, en_text)
 
     def source_text(source):
         labels = {
