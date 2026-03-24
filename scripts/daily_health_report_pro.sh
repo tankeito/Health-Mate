@@ -8,12 +8,7 @@ LOGS_DIR="${PROJECT_ROOT}/logs"
 
 mkdir -p "${LOGS_DIR}"
 
-# ========== Cron 环境修复 ==========
-# Cron 不加载 ~/.bashrc，需显式设置 PATH 确保 openclaw CLI 可用
-export PATH="/root/.nvm/versions/node/v22.22.0/bin:/root/.local/bin:/root/bin:/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin:/usr/local/bin:/usr/bin:/bin:/root/.npm-global/bin"
-export NVM_DIR="/root/.nvm"
-[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-
+# Load environment variables from .env file
 if [ -f "${CONFIG_DIR}/.env" ]; then
     set -a
     source "${CONFIG_DIR}/.env"
@@ -22,13 +17,15 @@ else
     echo "Warning: .env was not found. Default values will be used."
 fi
 
+# Setup Cron environment for openclaw CLI
+export NVM_DIR="${NVM_DIR:-/root/.nvm}"
+export PATH="${OPENCLAW_PATH:-/root/.nvm/versions/node/v22.22.0/bin}:${PATH}"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+
 export TZ=Asia/Shanghai
 CURRENT_DATE=$(date +"%Y-%m-%d")
 CURRENT_TIME=$(date +"%H:%M:%S")
 LOG_FILE="${LOG_FILE:-${LOGS_DIR}/daily_health_report_pro.log}"
-if [ -n "${OPENCLAW_BIN:-}" ] && [ -x "${OPENCLAW_BIN}" ]; then
-    export PATH="$(dirname "${OPENCLAW_BIN}"):${PATH}"
-fi
 if [ -z "${MEMORY_DIR:-}" ]; then
     echo "Error: MEMORY_DIR is not set." >> "$LOG_FILE"
     exit 1
