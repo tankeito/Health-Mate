@@ -19,7 +19,7 @@ fi
 
 # Setup Cron environment for openclaw CLI
 export NVM_DIR="${NVM_DIR:-/root/.nvm}"
-export PATH="${OPENCLAW_PATH:-/root/.nvm/versions/node/v22.22.0/bin}:${PATH}"
+export PATH="${CRON_PATH:-/root/.nvm/versions/node/v22.22.0/bin:/root/.local/bin:/root/bin:/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin:/usr/local/bin:/usr/bin:/bin:/root/.npm-global/bin}"
 [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
 
 export TZ=Asia/Shanghai
