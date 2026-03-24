@@ -6,7 +6,7 @@ English | [中文](README_ZH.md) | [日本語](README_JP.md)
 >
 > Track meals, hydration, exercise, symptoms, medication, and custom monitoring modules from local Markdown memories, then turn them into Daily, Weekly, and Monthly PDF reports with optional text push delivery.
 
-[![Version](https://img.shields.io/badge/version-1.5.0-blue.svg)](https://github.com/tankeito/Health-Mate/releases)
+[![Version](https://img.shields.io/badge/version-1.5.1-blue.svg)](https://github.com/tankeito/Health-Mate/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![OpenClaw](https://img.shields.io/badge/OpenClaw-Skill-green.svg)](https://openclaw.ai)
 
@@ -395,6 +395,14 @@ Repository:
 ---
 
 ## 📌 Changelog
+
+### v1.5.1 — 2026-03-24
+
+- ⏰ Optimized Cron environment configuration for reliable LLM invocation in scheduled tasks
+- 🔧 Moved `NVM_DIR` and `CRON_PATH` to `.env` and `.env.example` files for centralized management
+- 📝 Updated `daily_health_report_pro.sh`, `weekly_health_report_pro.sh`, and `monthly_health_report_pro.sh` to load environment variables from `.env`
+- 🌐 Changed all shell script comments to English for better internationalization
+- ✅ Ensures scheduled daily/weekly/monthly reports can successfully call local LLM for AI insights
 
 ### v1.5.0 — 2026-03-23
 

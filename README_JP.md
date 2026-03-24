@@ -6,7 +6,7 @@
 >
 > 食事、飲水、体重、運動、症状、服薬、独自モニタリング項目を継続的に記録し、慢性疾患管理や減量の振り返りに使える見やすいレポートへ整形します。
 
-[![Version](https://img.shields.io/badge/version-1.5.0-blue.svg)](https://github.com/tankeito/Health-Mate/releases)
+[![Version](https://img.shields.io/badge/version-1.5.1-blue.svg)](https://github.com/tankeito/Health-Mate/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![OpenClaw](https://img.shields.io/badge/OpenClaw-Skill-green.svg)](https://openclaw.ai)
 
@@ -286,6 +286,14 @@ health-mate/
 ---
 
 ## 📌 変更履歴
+
+### v1.5.1 — 2026-03-24
+
+- ⏰ cron 定期タスク向け環境設定を最適化し、スケジュール実行時に LLM を正常に呼び出せるよう改善
+- 🔧 `NVM_DIR` と `CRON_PATH` を `.env` および `.env.example` へ移動し、一元管理を実現
+- 📝 `daily_health_report_pro.sh`、`weekly_health_report_pro.sh`、`monthly_health_report_pro.sh` を更新し、`.env` から環境変数を読み込むよう修正
+- 🌐 シェルスクリプトのコメントを全て英語化し、国際対応を強化
+- ✅ 定期実行の日報・週報・月報でローカル LLM を使用し、AI 分析と提案を正常に生成可能に
 
 ### v1.5.0 — 2026-03-23
 
