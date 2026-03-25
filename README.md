@@ -139,30 +139,276 @@ Health-Mate intelligently switches its underlying report engine based on the `po
 
 ---
 
-## 🚀 Automated Tracking Engine
+## 🚀 Quick Start
 
-Health-Mate integrates seamlessly with OpenClaw's scheduling system for zero-friction habit tracking.
+### 1. Install
 
-### HEARTBEAT.md Integration
-
-Configure proactive check-ins in `HEARTBEAT.md`:
-
-```cron
-# Daily health check-in reminder (8:00 - 21:00)
-0 10,14,20 * * * /path/to/health_mate/scripts/heartbeat_reminder.sh
+```bash
+git clone https://github.com/tankeito/Health-Mate.git health-mate
+cd health-mate
+pip install -r requirements.txt
 ```
 
-### Features:
-- 🕐 **Smart Timing**: Reminders during natural break points (mid-morning, post-lunch, evening)
-- 🔕 **Non-Intrusive**: Single consolidated message instead of multiple pings
-- 📱 **Multi-Channel**: DingTalk, Feishu, Telegram, or Slack webhook delivery
-- 📊 **Auto-Logging**: Check-ins automatically written to `MEMORY_DIR/YYYY-MM-DD.md`
+### 2. Configure Environment Variables
 
-### Example Heartbeat Flow:
-1. **10:00** → Hydration reminder ("Current: 300ml/2000ml, keep going!")
-2. **14:00** → Lunch check-in ("What did you eat? I'll review fat content")
-3. **20:00** → Dinner + medication reminder
-4. **22:00** → Daily PDF report auto-generated and pushed
+ClawHub manual folder upload may omit `config/.env.example`. Open `config/user_config.example.json` and review the top-level `env` block as an upload-safe reference.
+
+The setup wizard creates a commented project-local `config/.env` template when the file does not exist.
+
+```bash
+# ========== Cron Environment Variables (Required for scheduled tasks) ==========
+NVM_DIR="/root/.nvm"
+CRON_PATH="/root/.nvm/versions/node/v22.22.0/bin:/root/.local/bin:/root/bin:/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin:/usr/local/bin:/usr/bin:/bin:/root/.npm-global/bin"
+
+# ========== Required Configuration ==========
+MEMORY_DIR="/root/.openclaw/workspace/memory"
+
+# ========== Optional Configuration ==========
+OPENCLAW_BIN="/root/.nvm/versions/node/v22.22.0/bin/openclaw"  # Recommended for cron
+LOG_FILE="/root/.openclaw/logs/health_report_pro.log"
+
+# Messaging (Optional)
+DINGTALK_WEBHOOK="https://..."
+FEISHU_WEBHOOK="https://..."
+TELEGRAM_BOT_TOKEN="..."
+TELEGRAM_CHAT_ID="..."
+
+# AI Features (Optional)
+TAVILY_API_KEY="tvly-..."
+
+# PDF Report (Optional)
+REPORT_WEB_DIR="/var/www/html/reports"
+REPORT_BASE_URL="https://example.com/reports"
+
+# Font Download (Default: false)
+ALLOW_RUNTIME_FONT_DOWNLOAD="false"
+```
+
+### 3. Run the Setup Wizard
+
+```bash
+python scripts/init_config.py
+```
+
+The wizard writes all persistent settings into `config/user_config.json`:
+- Profile basics
+- Active conditions and primary condition
+- Scoring modules and weights
+- Medication settings
+- Residence (used by monthly medical planning)
+- Custom monitoring modules
+- `report_preferences.population_branch` (lifestyle vs disease routing)
+- Report and AI-generation preferences
+
+### 4. Generate Reports
+
+```bash
+# Daily Report
+python scripts/daily_report_pro.py /path/to/memory/2026-03-20.md 2026-03-20
+
+# Weekly Report
+python scripts/weekly_report_pro.py 2026-03-20
+
+# Monthly Report
+python scripts/monthly_report_pro.py 2026-03-20
+```
+
+### 5. Optional Shell Runners (for Cron)
+
+```bash
+scripts/daily_health_report_pro.sh
+scripts/weekly_health_report_pro.sh
+scripts/monthly_health_report_pro.sh
+```
+
+**Cron Environment Note**: If your scheduled shell does not inherit the interactive Node/NVM `PATH`, set `OPENCLAW_BIN` in `config/.env`. The daily runner and Python controller both use it as the first-choice resolver for local LLM execution.
+
+If `OPENCLAW_BIN` is not set, the Python runner tries common install locations:
+- `/root/.nvm/versions/node/*/bin/openclaw`
+- `/usr/local/bin/openclaw`
+- `/usr/bin/openclaw`
+- Windows standard Node.js path
+
+### 6. Optional English Memory Mirror
+
+```bash
+python scripts/export_memory_en.py
+```
+
+Use this when you want:
+- An English mirror of local memory files
+- An English rendering path when Chinese fonts are unavailable
+- Bilingual regression checks for report output
+
+---
+
+## ⚙️ Configuration Reference
+
+### `config/user_config.json`
+
+Main long-term profile file storing:
+- User profile
+- Active conditions and primary condition
+- Enabled score modules and weights
+- Medication settings
+- Residence metadata
+- Custom monitoring modules
+- Report preferences
+- AI-generation preferences
+
+**Important**: `report_preferences.population_branch`
+- Supported values: `lifestyle` / `disease`
+- Example config starts with `lifestyle`
+- Setup wizard auto-suggests `lifestyle` for `balanced` / `fat_loss`, and `disease` for disease-management goals
+
+### Common Runtime Variables
+
+| Variable | Required | Purpose |
+|----------|----------|---------|
+| `MEMORY_DIR` | Yes | Points to the health-memory directory |
+| `TAVILY_API_KEY` | No | Enables Tavily retrieval fallback |
+| `DINGTALK_WEBHOOK` | No | Pushes text summary and PDF link to DingTalk |
+| `FEISHU_WEBHOOK` | No | Pushes text summary and PDF link to Feishu |
+| `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` | No | Pushes text summary and PDF link to Telegram |
+| `REPORT_WEB_DIR` | No | Copies generated PDFs to a web directory |
+| `REPORT_BASE_URL` | No | Builds public PDF URLs for push messages |
+| `ALLOW_RUNTIME_FONT_DOWNLOAD` | No | Allows runtime font download (default: false) |
+
+---
+
+## 📝 Memory Write Protocol
+
+When an assistant writes into `MEMORY_DIR`, it must behave like a **strict recorder**.
+
+### Hard Rules
+
+- ❌ No commentary
+- ❌ No encouragement
+- ❌ No summaries
+- ❌ No emoji
+- ❌ No chat filler
+
+### Structural Rules
+
+- ✅ Meals, hydration, medication, and exercise events must use **level-3 headings** with time markers (e.g., `### Breakfast (around 08:50)`)
+- ✅ Hydration blocks must stay minimal and stable (only intake + cumulative)
+- ✅ Daily step totals must stay inside a **dedicated level-2 section** (`## Today Steps`)
+- ✅ Custom monitoring modules must keep stable level-2 section names
+- ✅ Avoid mixing languages inside one data block
+
+### Minimal Example
+
+```markdown
+# 2026-03-20 Health Log
+
+## Weight Record
+- Morning fasting: 64.4kg
+
+## Hydration
+### Morning (around 08:45)
+- Water intake: 300ml
+- Cumulative: 300ml/2000ml
+
+## Meals
+### Breakfast (around 08:50)
+- Oatmeal 50g -> approx. 190kcal
+- Skim milk 250ml -> approx. 87kcal
+
+## Exercise
+### Afternoon Cycling (around 17:10)
+- Distance: 10.2km
+- Duration: 42min
+- Burn: approx. 290kcal
+
+## Today Steps
+- Total steps: 8200 steps
+```
+
+### Expandable Monitoring Modules
+
+```markdown
+## Blood Pressure
+### Morning (around 08:00)
+- Blood Pressure: 128/82 mmHg
+- Heart Rate: 72 bpm
+
+## Glucose Record
+### After Breakfast (around 10:10)
+- Glucose: 7.1 mmol/L
+- Timing: 2h after breakfast
+
+## Body Composition
+- Weight: 64.4kg
+- Body Fat: 18.6%
+
+## Biochemistry
+- ALT: 34 U/L
+- AST: 28 U/L
+```
+
+### Forbidden Content
+
+- `Assessment`
+- `Status`
+- `Summary`
+- Motivational filler
+- Debug logs
+- System logs
+
+---
+
+## 🔤 Font Fallback
+
+### Preferred CJK Fonts
+
+- `assets/NotoSansSC-VF.ttf` (Chinese)
+- `assets/NotoSansJP-VF.ttf` (Japanese)
+
+### If Required Font is Missing
+
+- The renderer switches to an English-safe rendering path
+- The PDF adds a rendering notice
+- **Chinese PDF users**: Place `NotoSansSC-VF.ttf` into `assets/`
+- **Japanese PDF users**: Place `NotoSansJP-VF.ttf` into `assets/`
+
+---
+
+## 🧪 Troubleshooting
+
+### `MEMORY_DIR` Missing
+
+**Symptoms**: Shell runners stop immediately with error
+
+**Solution**:
+- Set `MEMORY_DIR` explicitly in `config/.env` or your runtime environment
+- For ClawHub manual uploads, copy the `MEMORY_DIR` example from `config/user_config.example.json` → `env`
+
+### Monthly Hospital Recommendations Are Too Generic
+
+**Symptoms**: Hospital suggestions lack specific doctor names or feel templated
+
+**Solution**:
+1. Make sure residence is configured in `config/user_config.json`
+2. Confirm local LLM execution is available (set `OPENCLAW_BIN` for cron)
+3. Configure `TAVILY_API_KEY` for retrieval-enhanced fallback
+4. If LLM is unavailable, the city-specific local-rule layer still tries to prefer real hospital + doctor combinations where curated data exists
+
+### Chinese / Japanese PDF Falls Back to English
+
+**Symptoms**: PDF renders in English despite Chinese/Japanese content
+
+**Solution**:
+- Required CJK font is missing
+- Place `assets/NotoSansSC-VF.ttf` or `assets/NotoSansJP-VF.ttf` locally and regenerate
+
+### Push Delivery Is Missing
+
+**Symptoms**: Report generated but no DingTalk/Feishu/Telegram message received
+
+**Solution**:
+- Check whether the corresponding webhook variables are configured in `config/.env`
+- Inspect `logs/` directory for runtime delivery output
+- Verify webhook URLs are valid and not expired
 
 ---
 
@@ -170,18 +416,21 @@ Configure proactive check-ins in `HEARTBEAT.md`:
 
 Health-Mate is built around explicit privacy boundaries.
 
-### What Stays Local (Default):
+### What Stays Local (Default)
+
 - 📁 **Markdown Parsing**: All health data extracted from local `MEMORY_DIR` files
 - 📊 **Scoring & Charts**: Condition-aware scoring, statistical calculations, chart rendering
 - 📄 **PDF Generation**: ReportLab renders PDFs entirely offline
 - 📝 **LLM Commentary**: Local `openclaw agent --local` for AI insights (no cloud API required)
 
-### What Requires Explicit Opt-In:
+### What Requires Explicit Opt-In
+
 - 🌐 **Tavily Retrieval**: Only when `TAVILY_API_KEY` is configured (for hospital recommendations or fallback guidance)
 - 📤 **Webhook Delivery**: Only when DingTalk/Feishu/Telegram credentials are set
 - ⬇️ **Runtime Font Download**: Disabled by default; set `ALLOW_RUNTIME_FONT_DOWNLOAD=true` only if you explicitly allow it
 
-### Recommended Deployment:
+### Recommended Deployment
+
 ```bash
 # Use virtual environment or container isolation
 python -m venv venv
@@ -197,35 +446,48 @@ export MEMORY_DIR="$HOME/.health-mate/memory"
 
 ---
 
-## 📥 Installation
+## 📁 Project Structure
 
-```bash
-# Clone repository
-git clone https://github.com/tankeito/Health-Mate.git health-mate
-cd health-mate
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Run setup wizard
-python scripts/init_config.py
+```text
+health-mate/
+├── scripts/
+│   ├── daily_report_pro.py
+│   ├── weekly_report_pro.py
+│   ├── monthly_report_pro.py
+│   ├── daily_pdf_generator.py
+│   ├── weekly_pdf_generator.py
+│   ├── monthly_pdf_generator.py
+│   ├── i18n.py
+│   ├── init_config.py
+│   ├── export_memory_en.py
+│   ├── export_memory_jp.py
+│   ├── daily_health_report_pro.sh
+│   ├── weekly_health_report_pro.sh
+│   └── monthly_health_report_pro.sh
+├── config/
+│   ├── user_config.json
+│   ├── user_config.example.json
+│   ├── .env
+│   └── pdf_style_config.json
+├── assets/
+│   ├── NotoSansSC-VF.ttf
+│   └── NotoSansJP-VF.ttf
+├── logs/
+├── reports/
+├── README.md
+├── README_ZH.md
+├── README_JP.md
+├── SKILL.md
+├── _meta.json
+└── requirements.txt
 ```
 
 ---
 
-## 📄 Documentation
+## 📬 Support
 
-- [English README](README.md)
-- [中文说明](README_ZH.md)
-- [日本語ドキュメント](README_JP.md)
-- [SKILL.md](SKILL.md) — OpenClaw skill specification
-
----
-
-## 📞 Support
-
-- **GitHub**: https://github.com/tankeito/Health-Mate
-- **Issues**: https://github.com/tankeito/Health-Mate/issues
+- **GitHub Issues**: https://github.com/tankeito/Health-Mate/issues
+- **Repository**: https://github.com/tankeito/Health-Mate
 - **Email**: tqd354@gmail.com
 
 ---
