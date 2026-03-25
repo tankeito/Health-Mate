@@ -336,27 +336,6 @@ def clone_ai_generation_defaults():
     }
 
 
-def build_scoring_modules_from_legacy(config, locale):
-    modules = []
-    legacy_weights = config.get('scoring_weights', {}) if isinstance(config, dict) else {}
-    legacy_map = {
-        "diet": safe_float(legacy_weights.get('diet', 0), 0),
-        "water": safe_float(legacy_weights.get('water', 0), 0),
-        "weight": safe_float(legacy_weights.get('weight', 0), 0),
-        "exercise": safe_float(legacy_weights.get('exercise', legacy_weights.get('exercise_bonus', 0)), 0),
-        "symptom": safe_float(legacy_weights.get('symptom', 0), 0),
-        "adherence": safe_float(legacy_weights.get('adherence', 0), 0),
-        "medication": safe_float(legacy_weights.get('medication', 0), 0),
-    }
-    for module in build_default_scoring_modules(locale):
-        normalized = dict(module)
-        normalized["weight"] = legacy_map.get(module["id"], normalized.get("weight", 0))
-        if module["id"] == "medication" and "medication" not in legacy_weights:
-            normalized["enabled"] = False
-        modules.append(normalized)
-    return modules
-
-
 def normalize_scoring_module(module, locale):
     if not isinstance(module, dict):
         return None
@@ -415,7 +394,7 @@ def normalize_scoring_modules(raw_config, locale):
                 normalized_modules.append(default_module)
         return normalized_modules
 
-    return build_scoring_modules_from_legacy(raw_config, locale)
+    return build_default_scoring_modules(locale)
 
 
 def normalize_user_config(raw_config):
@@ -457,8 +436,8 @@ def normalize_user_config(raw_config):
         existing = normalized_condition_standards.get(canonical_key, {})
         normalized_condition_standards[canonical_key] = deep_merge_dict(existing, value)
     merged["condition_standards"] = deep_merge_dict(base.get("condition_standards", {}), normalized_condition_standards)
-    merged["_version"] = "1.5.0"
-    merged["config_version"] = "1.5.0"
+    merged["_version"] = "1.5.1"
+    merged["config_version"] = "1.5.1"
     merged["ai_generation"] = deep_merge_dict(clone_ai_generation_defaults(), raw_config.get("ai_generation", {}))
     merged["scoring"] = {"modules": normalize_scoring_modules(raw_config, locale)}
     merged.setdefault("integrations", {"tavily_api_key": ""})
@@ -688,8 +667,8 @@ def prepare_font_compatible_memory(requested_locale, source_dir, default_memory_
 def _get_default_config():
     locale = "zh-CN"
     return {
-        "_version": "1.5.0",
-        "config_version": "1.5.0",
+        "_version": "1.5.1",
+        "config_version": "1.5.1",
         "language": "zh-CN",
         "user_profile": {
             "name": "Demo User",
@@ -727,7 +706,6 @@ def _get_default_config():
         "scoring": {
             "modules": build_default_scoring_modules(locale),
         },
-        "scoring_weights": {"diet": 0.45, "water": 0.35, "weight": 0.20, "exercise_bonus": 0.10},
         "exercise_standards": {"weekly_target_minutes": 150},
         "ai_generation": clone_ai_generation_defaults(),
         "integrations": {"tavily_api_key": ""},

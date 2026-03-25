@@ -173,7 +173,9 @@ pip install -r requirements.txt
 
 ### 2. Configure Environment Variables
 
-Recommended in `config/.env`:
+ClawHub manual folder upload may omit `config/.env.example`.
+Please open `config/user_config.example.json`, review the top-level `env` block, and create `config/.env` manually with the same keys.
+The runtime logic stays unchanged: the Python entry points and shell runners still read `config/.env`.
 
 ```bash
 MEMORY_DIR="/absolute/path/to/health-memory"
@@ -220,7 +222,7 @@ scripts/weekly_health_report_pro.sh
 scripts/monthly_health_report_pro.sh
 ```
 
-If your scheduled shell does not inherit the interactive Node/NVM `PATH`, set `OPENCLAW_BIN` in `config/.env`. The daily runner and Python controller both use it as the first-choice resolver for local LLM execution.
+If your scheduled shell does not inherit the interactive Node/NVM `PATH`, set `OPENCLAW_BIN` in `config/.env`. For ClawHub uploads, use the `env` block inside `config/user_config.example.json` as the reference. The daily runner and Python controller both use it as the first-choice resolver for local LLM execution.
 If `OPENCLAW_BIN` is not set, the Python runner still tries common install locations such as `/root/.nvm/versions/node/*/bin/openclaw`, `/usr/local/bin/openclaw`, `/usr/bin/openclaw`, and the standard Windows Node.js path. The shell runners themselves do not hardcode any fixed PATH.
 
 ### 6. Optional English Memory Mirror
@@ -374,6 +376,7 @@ Repository:
 
 - shell runners now stop immediately
 - set `MEMORY_DIR` explicitly in `config/.env` or your runtime environment
+- for ClawHub manual uploads, copy the `MEMORY_DIR` example from `config/user_config.example.json` -> `env`
 
 ### Monthly hospital recommendations are too generic
 
@@ -399,8 +402,8 @@ Repository:
 ### v1.5.1 — 2026-03-24
 
 - ⏰ Optimized Cron environment configuration for reliable LLM invocation in scheduled tasks
-- 🔧 Moved `NVM_DIR` and `CRON_PATH` to `.env` and `.env.example` files for centralized management
-- 📝 Updated `daily_health_report_pro.sh`, `weekly_health_report_pro.sh`, and `monthly_health_report_pro.sh` to load environment variables from `.env`
+- 🔧 Embedded the upload-safe env reference into `config/user_config.example.json` so ClawHub users can still create `config/.env` manually
+- 📝 Kept the runtime behavior unchanged: `daily_health_report_pro.sh`, `weekly_health_report_pro.sh`, and `monthly_health_report_pro.sh` still load environment variables from `.env`
 - 🌐 Changed all shell script comments to English for better internationalization
 - ✅ Ensures scheduled daily/weekly/monthly reports can successfully call local LLM for AI insights
 

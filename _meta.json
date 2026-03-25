@@ -3,7 +3,7 @@
     "display_name": "Health-Mate",
     "type": "python/app",
     "version": "1.5.1",
-    "description": "Health-Mate is an executable OpenClaw health-management skill with Chinese, English, and Japanese report flows, local Markdown parsing, strict memory-write templates for LLM output, daily/weekly/monthly PDF generation, weekly and monthly heatmaps, a monthly healthy-day donut chart, specialty charts, residence-aware hospital-and-doctor planning, and optional webhook delivery. SECURITY DISCLOSURE: 1. MEMORY_DIR must be explicitly set; there is no implicit fallback path. 2. The bundled shell runners read config/.env when present and write local reports/logs during normal execution. 3. Outbound network requests occur only when webhook or Tavily credentials are configured, or when runtime font download is explicitly enabled. 4. Before upgrades or reinstalls, users should back up config/user_config.json and config/.env because some platform workflows may reset local configuration files.",
+    "description": "Health-Mate is an executable OpenClaw health-management skill with Chinese, English, and Japanese report flows, local Markdown parsing, strict memory-write templates for LLM output, daily/weekly/monthly PDF generation, weekly and monthly heatmaps, a monthly healthy-day donut chart, specialty charts, residence-aware hospital-and-doctor planning, and optional webhook delivery. SECURITY DISCLOSURE: 1. MEMORY_DIR must be explicitly set; there is no implicit fallback path. 2. The bundled shell runners read config/.env when present and write local reports/logs during normal execution. For ClawHub manual uploads, the env reference template is embedded in config/user_config.example.json under the top-level env block so users can still create config/.env manually. 3. Outbound network requests occur only when webhook or Tavily credentials are configured, or when runtime font download is explicitly enabled. 4. Before upgrades or reinstalls, users should back up config/user_config.json and config/.env because some platform workflows may reset local configuration files.",
     "author": "tankeito",
     "email": "tqd354@gmail.com",
     "license": "MIT",
@@ -65,6 +65,7 @@
         "Custom scoring modules and additional monitoring sections including medication and lab-style modules",
         "Optional outbound network behavior limited to Tavily, webhook delivery, and explicit opt-in font download",
         "English-compatible rendering fallback when the bundled Chinese or Japanese font is unavailable",
+        "Upload-safe env reference embedded in config/user_config.example.json for manual ClawHub installation",
         "Upgrade-sensitive local config flow; users should back up config/user_config.json and config/.env before reinstalling or upgrading"
     ],
     "tags": [

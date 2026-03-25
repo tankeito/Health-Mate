@@ -1,8 +1,24 @@
 {
-    "_comment": "Sample Health-Mate configuration. Copy this file to user_config.json and replace the demo values with your own settings. Multiple conditions, custom scoring modules, and medication tracking are supported.",
-    "_version": "1.5.0",
-    "config_version": "1.5.0",
+    "_comment": "Sample Health-Mate configuration. Copy this file to user_config.json and replace the demo values with your own settings. Multiple conditions, custom scoring modules, and medication tracking are supported. For ClawHub manual upload, see the top-level env block and create config/.env manually with the same keys.",
+    "_version": "1.5.1",
+    "config_version": "1.5.1",
     "language": "zh-CN",
+    "env": {
+        "_comment": "Upload-safe env reference. ClawHub manual upload may not include config/.env.example, so please use this block as the reference and manually create config/.env. Runtime scripts still read config/.env.",
+        "NVM_DIR": "/root/.nvm",
+        "CRON_PATH": "/root/.nvm/versions/node/v22.22.0/bin:/root/.local/bin:/root/bin:/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin:/usr/local/bin:/usr/bin:/bin:/root/.npm-global/bin",
+        "OPENCLAW_BIN": "/root/.nvm/versions/node/v22.22.0/bin/openclaw",
+        "MEMORY_DIR": "/absolute/path/to/health-memory",
+        "DINGTALK_WEBHOOK": "https://oapi.dingtalk.com/robot/send?access_token=YOUR_TOKEN",
+        "FEISHU_WEBHOOK": "https://open.feishu.cn/open-apis/bot/v2/hook/YOUR_HOOK",
+        "TELEGRAM_BOT_TOKEN": "YOUR_BOT_TOKEN",
+        "TELEGRAM_CHAT_ID": "YOUR_CHAT_ID",
+        "TAVILY_API_KEY": "YOUR_API_KEY",
+        "REPORT_WEB_DIR": "/opt/1panel/www/sites/agent.btc354.com/index",
+        "REPORT_BASE_URL": "https://agent.btc354.com",
+        "ALLOW_RUNTIME_FONT_DOWNLOAD": "false",
+        "LOG_FILE": "/root/.openclaw/logs/health_report_pro.log"
+    },
     "user_profile": {
         "name": "Alex",
         "gender": "male",

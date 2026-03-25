@@ -76,6 +76,12 @@ Optional:
 - `REPORT_BASE_URL`
 - `ALLOW_RUNTIME_FONT_DOWNLOAD`
 
+For ClawHub manual folder upload:
+
+- `config/.env.example` may be missing from the uploaded package
+- use the top-level `env` block inside `config/user_config.example.json` as the reference template
+- create `config/.env` manually with the same keys
+
 ## Upgrade And Backup Notice
 
 Before upgrading or reinstalling this skill, back up:
@@ -95,6 +101,7 @@ Expected local file I/O:
 
 - reads Markdown logs from `MEMORY_DIR`
 - reads `config/.env` when shell runners are used
+- may rely on `config/user_config.example.json` as an upload-safe env reference during manual installation
 - writes PDFs into `reports/`
 - writes logs into `logs/`
 - may create a temporary English memory mirror for rendering fallback
@@ -270,8 +277,8 @@ If one of them is missing:
 ### v1.5.1 - 2026-03-24
 
 - Optimized Cron environment configuration for reliable LLM invocation in scheduled tasks
-- Moved `NVM_DIR` and `CRON_PATH` to `.env` files for centralized management
-- Updated `daily_health_report_pro.sh`, `weekly_health_report_pro.sh`, and `monthly_health_report_pro.sh` to load environment variables from `.env`
+- Embedded the upload-safe env reference into `config/user_config.example.json`
+- Kept `daily_health_report_pro.sh`, `weekly_health_report_pro.sh`, and `monthly_health_report_pro.sh` loading environment variables from `.env`
 - Changed all shell script comments to English for better internationalization
 - Ensures scheduled daily/weekly/monthly reports can successfully call local LLM for AI insights
 

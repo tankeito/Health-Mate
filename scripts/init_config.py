@@ -330,8 +330,8 @@ while ask_yes_no(localize(locale, "添加一个自定义模块吗？", "Add a cu
     )
 
 config = {
-    "_version": "1.5.0",
-    "config_version": "1.5.0",
+    "_version": "1.5.1",
+    "config_version": "1.5.1",
     "language": locale,
     "user_profile": {
         "name": name,
