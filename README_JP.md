@@ -1,10 +1,10 @@
 [English](README.md) | [中文](README_ZH.md) | 日本語
 
-# 🏥 Health-Mate | OpenClaw 向けローカル優先ヘルスレポート基盤
+# 🏥 Health-Mate | OpenClaw 向けローカル優先多言語ヘルスレポート基盤
 
-> OpenClaw の Markdown 健康メモリを、日報・週報・月報の PDF と文字版サマリーへ変換するローカル優先スキルです。
+> 多言語対応・双引擎アーキテクチャ（医療慢性疾患管理 vs 均衡減脂体态）を備えた本格的な健康報告システム。
 >
-> 食事、飲水、体重、運動、症状、服薬、独自モニタリング項目を継続的に記録し、慢性疾患管理や減量の振り返りに使える見やすいレポートへ整形します。
+> ローカル Markdown 健康メモリを、病態感知採点、専用チャート、医療計画、オプション Webhook 配信付きの日報・週報・月報 PDF へ変換します。
 
 [![Version](https://img.shields.io/badge/version-1.5.2-blue.svg)](https://github.com/tankeito/Health-Mate/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -16,327 +16,220 @@
 
 Health-Mate は、単なる生活ログの蓄積で終わらず、振り返りと次の行動につながる「レポート中心」の健康管理ワークフローを目指しています。
 
-- 🧠 **疾患感知型**: 胆石 / 慢性胆嚢炎、高血圧、糖尿病、減脂、複数疾患の同時管理に対応
+- 🧠 **疾患感知型**: 胆石/慢性胆嚢炎、高血圧、糖尿病、減脂、複数疾患の同時管理に対応
 - 📄 **レポート中心設計**: 日報・週報・月報を自動生成し、数値・図表・提案を一体化
 - 🔒 **ローカル優先**: 解析、採点、PDF 描画、ローカル fallback は既定でローカル完結
 - 🧩 **拡張可能**: 血圧、血糖、体脂肪、生化学、睡眠などを `user_config.json` で追加可能
-- 🌐 **多言語対応**: 中国語・英語・日本語のレポート系ロケールをサポート
+- 🌐 **多言語対応**: 中国語・英語・日本語（`zh-CN`、`en-US`、`ja-JP`）の完全サポート。対象言語の医療排版習慣とフォントレンダリング fallback を自動適応
 
 ---
 
-## 📑 3 種類のレポート
+## 📊 3 種類のレポート：何が解決できるか
 
-| レポート | 主な役割 | 代表的な内容 | 答える問い |
-| --- | --- | --- | --- |
-| 🌅 日報 | 当日レビュー | 総合採点、栄養ドーナツ、飲水 / 運動詳細、リスク警告、翌日プラン | 今日どうだったか、明日何を変えるか |
-| 🗓️ 週報 | 中期トレンド確認 | 週次サマリー、熱力図、体重 / 飲水 / 歩数 / 栄養トレンド、AI 振り返り | 今週の良かった点と繰り返す課題は何か |
-| 📊 月報 | 病態別の深掘り | レーダー、30 日熱力図、体重 / BMR 推移、病態別図表、医療計画 | 現在の方針は有効か、受診や追加評価が必要か |
+### 🌅 健康日報 —— 当日レビューと翌日マイクロ調整
 
----
+**答える問い**：*「今日はどうだったか、明日何を変えるべきか？」*
 
-## ⚙️ 処理パイプライン
+**コアモジュール**：
+- 📊 **動的栄養ドーナツチャート**: マクロ栄養素アドヒアランス可視化（タンパク質、脂肪、炭水化物、食物繊維）
+- 📈 **摂取積み上げ棒グラフ**: 食事、飲水、運動をタイム軸上で層別表示
+- ⚠️ **リスク警告**: 疾患固有の警告（例：胆石の脂肪低すぎ、高血圧のナトリウム高すぎ）
+- 📋 **翌日実行可能アクションリスト**: 明日の具体的・実行可能な調整案（特定食品、水分目標、運動目標）
 
-Health-Mate は以下の多層ローカル処理で動作します。
-
-1. **記録入力層**
-   OpenClaw が会話ベースの打刻を構造化 Markdown に整形し、`MEMORY_DIR` に保存します。
-
-2. **解析層**
-   Python が食事、飲水、体重、歩数、運動、症状、服薬、追加モジュールを正規表現ベースで抽出します。
-
-3. **評価層**
-   主病種・複数病種・ユーザー設定の重みに応じて、目標値、達成率、リスク判定を調整します。
-
-4. **洞察生成層**
-   可能ならローカル LLM を優先し、失敗時はローカルルール、必要に応じて Tavily 検索を組み合わせて補強します。
-
-5. **レンダリング / 配信層**
-   Matplotlib + ReportLab で PDF を描画し、必要なら DingTalk / Feishu / Telegram に文字版と PDF リンクを送ります。
+**使用シーン**: 毎日の振り返り、即時行動修正、モチベーション維持
 
 ---
 
-## 🧭 AI 出力ソースの見方
+### 🗓 健康週報 —— 習慣形成と短期変動分析
 
-レポート内の AI セクションには、どの経路で文面が作られたかを示す出典ラベルが付きます。
+**答える問い**：*「どの行動が安定したか、どの問題が繰り返されているか？」*
 
-| 表示ラベル | 意味 |
-| --- | --- |
-| `出典: LLM 動的生成` | ローカル `openclaw agent --local` が成功 |
-| `出典: Tavily 検索 + ローカルルール` | ローカル LLM が失敗し、検索補強付き fallback を使用 |
-| `出典: ローカルルール` | ローカル LLM が使えず、純粋なローカル fallback を使用 |
+**コアモジュール**：
+- 🎯 **週次核心指標レーダー**: 多次元概要（カロリー、マクロ栄養素、飲水、歩数、睡眠など）
+- 🔥 **習慣＆運動ヒートマップ**: `balanced` / `fat_loss` モード向け GitHub 風コントリビューショングラフ
+- 📉 **二軸比較トレンドチャート**: 体重 + エネルギー収支、歩数 + 飲水、症状頻度 + トリガー曝露
+- 🏥 **疾患モード**: 慢性疾患向け症状 - 服薬相関ヒートマップ
+- 💪 **フィットネスモード**: 4 週間習慣進行バー、エネルギー収支ウォーターフォールチャート
+- 📝 **良かった点と改善点**: 今週の進歩点、来週の注目事項
+
+**使用シーン**: 週次レビュー、パターン特定、月次チェックポイント前の戦略調整
 
 ---
 
-## 🚀 クイックスタート
+### 📊 健康月報 —— 深層分析と長期戦略
 
-### 1. インストール
+**答える問い**：*「現在の方針は有効か、通院またはエスカレーション介入が必要か？」*
+
+**コアモジュール**：
+- 🎯 **マクロアドヒアランスレーダー**: 30 日間栄養パターン概要
+- 🔥 **アクティビティヒートマップ**: 月間 GitHub 風グラフ（ライフスタイルモード）または症状 - 服薬ヒートマップ（疾患モード）
+- 📈 **30 日間体重＆BMR トレンド**: 重要なイベント注釈付き平滑曲線
+- 🏥 **専用チャート**: 疾患固有の深掘り可視化
+- 🧠 **AI 月次レビュー**: LLM 生成のトレンド・リスク・推奨事項の総合レポート
+- 🏥 **医療計画セクション**（疾患モードのみ）：
+  - 病院優先推奨（トップレベル三甲 > 三甲 > 地域医療センター）
+  - 診療科と医師マッチング、専門領域説明付き
+  - 診療ガイドラインに基づく受診リマインダー
+- 🏃 **ライフスタイル介入リスト**（フィットネスモードのみ）：
+  - 翌月のマクロ栄養とトレーニング調整案
+  - 体組成目標（除脂肪体重 vs 脂肪量）
+  - 習慣スタッキング推奨
+
+**使用シーン**: 月次戦略レビュー、医療フォローアップ計画、大きな方向転換
+
+---
+
+## 🧬 双引擎動的集団分岐
+
+Health-Mate は `user_config.json` の `population_branch` 設定に基づき、底层レポート引擎をインテリジェントに切り替えます。
+
+### 🏥 慢性疾患管理モード（Disease Management）
+
+**起動条件**: `gallstones`（胆石）、`hypertension`（高血圧）、`diabetes`（糖尿病）などの慢性疾患
+
+**レポート特性**：
+- 🩺 **病理所見アラインメントチャート**: 脂肪摂取 vs 症状頻度（胆石）、血圧ボックスプロット（高血圧）、血糖トレンド（糖尿病）
+- 💊 **服薬アドヒアランス分析**: 服薬タイミング、飲み忘れ、症状との相関
+- ⚠️ **高リスク食品トリガー識別**: 症状悪化と相関する食品の関連分析
+- 🏥 **病院＆医師推奨**（月報のみ）：
+  - LLM 生成の構造化推奨（病院 → 診療科 → 医師）
+  - エビデンスに基づくローカル候補病院の Tavily 検索 fallback
+  - 公立トップレベル三甲病院と大学附属医療センターを優先推奨
+  - エビデンスが十分な場合、実在の医師名と职称を出力
+
+**出力例**（胆石月報）：
+- 脂肪摂取 vs 症状頻度二軸チャート
+- 脂肪/炭水化物摂取分散ボックスプロット
+- 症状構成ドーナツチャート
+- 病院推奨：「四川省人民医院 → 肝胆外科 → 周永碧【主任医師】」
+
+---
+
+### 🏃 均衡＆体态管理モード（Fitness & Wellness）
+
+**起動条件**: `balanced`（均衡健康）、`fat_loss`（減脂）または一般健康最適化
+
+**レポート特性**：
+- 📊 **非医療化可視化**: 症状追蹤なし、病院推奨なし
+- 🔥 **4 週間習慣進行トレンド**: 主要行動の一貫性を示す積み上げ棒グラフ
+- ⚖️ **エネルギー収支ウォーターフォール**: カロリー摂取 vs 消費 vs 不足/過剰
+- 💪 **体組成深層分析**: 除脂肪体重（LBM）vs 脂肪量トレンド、体脂肪率平滑曲線
+- 🎯 **翌月マクロ栄養＆トレーニング計画**:
+  - タンパク質目標調整（筋肉維持）
+  - トレーニング前後の炭水化物タイミング
+  - トレーニング量進行（セット、レップ、強度）
+
+**出力例**（減脂月報）:
+- 30 日間体重トレンド平滑曲線
+- 体脂肪率トレンド
+- エネルギー収支ウォーターフォール
+- 4 週間習慣進行（歩数、トレーニング、タンパク質摂取、睡眠）
+- 翌月介入案：「タンパク質を 2.0g/kg に増量、レジスタンストレーニングを週 2 回追加、500kcal 不足を維持」
+
+---
+
+## ⚙️ コア技術スタック
+
+| レイヤー | 技術 | 用途 |
+|------|------|------|
+| **PDF レンダリング** | ReportLab 4.0+ | プロフェッショナルグレード PDF 生成、カスタムスタイル、多言語フォントサポート、精密レイアウト制御 |
+| **データ可視化** | Matplotlib 3.0+ | 統計チャート（レーダー、ヒートマップ、ボックスプロット、二軸トレンド）、疾患固有スタイリング |
+| **LLM 統合** | OpenClaw Local Agent + Tavily API | ハイブリッド推論アーキテクチャ：ローカル LLM で AI コメントと病院推奨を生成、Tavily でエビデンスベースの Web 検索 fallback |
+| **スケジューリング** | Cron + OpenClaw HEARTBEAT | 自動化された日報/週報/月報生成、DingTalk/Feishu/Telegram プッシュ配信対応 |
+
+---
+
+## 🚀 自動化トラッキングエンジン
+
+Health-Mate は OpenClaw スケジューリングシステムとシームレスに統合し、ゼロフリクションの習慣追蹤を実現します。
+
+### HEARTBEAT.md 統合
+
+`HEARTBEAT.md` でプロアクティブチェックインを設定：
+
+```cron
+# 毎日の健康チェックインリマインダー (8:00 - 21:00)
+0 10,14,20 * * * /path/to/health_mate/scripts/heartbeat_reminder.sh
+```
+
+### 機能特性：
+- 🕐 **スマートタイミング**: 自然な休憩ポイントでリマインダー送信（午前中段、昼食後、夜間）
+- 🔕 **非侵襲的**: 複数回の ping ではなく単一の consolidated メッセージ
+- 📱 **マルチチャンネル**: DingTalk、Feishu、Telegram、Slack webhook 配信対応
+- 📊 **自動ログ記録**: チェックインが自動的に `MEMORY_DIR/YYYY-MM-DD.md` へ書き込まれる
+
+### 心拍ワークフロー例：
+1. **10:00** → 飲水リマインダー（「現在の進捗：300ml/2000ml、続けて！」）
+2. **14:00** → 昼食チェックイン（「食事しましたか？何を食べたか教えてください。脂肪含量を厳しくチェックします！」）
+3. **20:00** → 夕食 + 服薬リマインダー
+4. **22:00** → 日報 PDF 自動生成＆プッシュ
+
+---
+
+## 🔒 プライバシー＆ローカル優先設計
+
+Health-Mate は明示的なプライバシー境界を基に構築されています。
+
+### デフォルトでローカル完結（ネット接続不要）：
+- 📁 **Markdown 解析**: すべての健康データをローカル `MEMORY_DIR` ファイルから抽出
+- 📊 **採点＆チャート**: 疾患感知採点、統計計算、チャートレンダリング
+- 📄 **PDF 生成**: ReportLab が完全にオフラインで PDF をレンダリング
+- 📝 **LLM コメント**: ローカル `openclaw agent --local` で AI 洞察を生成（クラウド API 不要）
+
+### 明示的オプトインが必要（オプション）：
+- 🌐 **Tavily 検索**: `TAVILY_API_KEY` を設定した場合のみ（病院推奨または fallback 指導用）
+- 📤 **Webhook 配信**: DingTalk/Feishu/Telegram 認証情報を設定した場合のみ
+- ⬇️ **ランタイムフォントダウンロード**: デフォルトで無効化；`ALLOW_RUNTIME_FONT_DOWNLOAD=true` を明示的に設定した場合のみ許可
+
+### 推奨デプロイ方法：
+```bash
+# 仮想環境またはコンテナで分離
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+
+# MEMORY_DIR をプライベートディレクトリに明示的に設定
+export MEMORY_DIR="$HOME/.health-mate/memory"
+
+# 必要でない限り webhook や Tavily を設定しない
+# 最大限のプライバシー保護のため TAVILY_API_KEY と WEBHOOK_URLs を未設定に
+```
+
+---
+
+## 📥 インストール
 
 ```bash
+# リポジトリをクローン
 git clone https://github.com/tankeito/Health-Mate.git health-mate
 cd health-mate
+
+# 依存関係をインストール
 pip install -r requirements.txt
-```
 
-### 2. 環境変数を設定する
-
-ClawHub の現在の手動アップロード方式では `config/.env.example` が同梱されない場合があります。
-そのため `config/user_config.example.json` を開き、トップレベルの `env` ブロックをアップロード安全な参照テンプレートとして確認してください。
-まだ `config/.env` が無い場合は、セットアップウィザードがコメント付きのプロジェクト内テンプレートを自動生成します。実行ロジック自体は変えておらず、Python エントリーポイントと shell ランナーは引き続き `config/.env` を読み込みます。
-
-```bash
-NVM_DIR="/root/.nvm"
-CRON_PATH="/root/.nvm/versions/node/v22.22.0/bin:/root/.local/bin:/root/bin:/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin:/usr/local/bin:/usr/bin:/bin:/root/.npm-global/bin"
-OPENCLAW_BIN="/root/.nvm/versions/node/v22.22.0/bin/openclaw" # cron では特に推奨
-MEMORY_DIR="/root/.openclaw/workspace/memory"
-LOG_FILE="/root/.openclaw/logs/health_report_pro.log"          # Optional shared log override
-DINGTALK_WEBHOOK="https://..."                                 # Optional
-FEISHU_WEBHOOK="https://..."                                   # Optional
-TELEGRAM_BOT_TOKEN="..."                                       # Optional
-TELEGRAM_CHAT_ID="..."                                         # Optional
-TAVILY_API_KEY="tvly-..."                                      # Optional
-REPORT_WEB_DIR="/var/www/html/reports"                         # Optional
-REPORT_BASE_URL="https://example.com/reports"                  # Optional
-ALLOW_RUNTIME_FONT_DOWNLOAD="false"
-```
-
-### 3. 初期設定ウィザードを実行する
-
-```bash
+# セットアップウィザードを実行
 python scripts/init_config.py
 ```
 
-このウィザードは `config/user_config.json` の主要項目を作成します。
+---
 
-まだ `config/.env` が無い場合は、コメント付きのプロジェクト内テンプレートも自動生成され、既存ファイルは上書きされません。
+## 📄 ドキュメント
 
-- 基本プロフィール
-- 管理対象の病種一覧と主病種
-- 採点モジュールと重み
-- 服薬モジュール
-- 常居地
-- AI 生成設定
-- 追加モニタリングモジュール
-- レポート設定
-- `report_preferences.population_branch`（`lifestyle` / `disease` の分岐制御）
-
-補足:
-
-- サンプル設定は `lifestyle` から始まります
-- セットアップウィザードは `balanced` / `fat_loss` なら `lifestyle`、疾病管理目標なら `disease` を自動提案します
-
-### 4. レポートを生成する
-
-```bash
-python scripts/daily_report_pro.py /path/to/memory/2026-03-20.md 2026-03-20
-python scripts/weekly_report_pro.py 2026-03-20
-python scripts/monthly_report_pro.py 2026-03-20
-```
-
-### 5. shell ランナーを使う
-
-```bash
-scripts/daily_health_report_pro.sh
-scripts/weekly_health_report_pro.sh
-scripts/monthly_health_report_pro.sh
-```
-
-cron や最小 PATH の shell 環境では、`openclaw` が見つからずローカル LLM がスキップされることがあります。`OPENCLAW_BIN` は `config/.env` に設定してください。ClawHub 手動アップロード時は `config/user_config.example.json` の `env` ブロックを参照すると安全です。日次ランナーと Python 側の両方で優先的に利用されます。
-`OPENCLAW_BIN` を未設定でも、Python 側では `/root/.nvm/versions/node/*/bin/openclaw`、`/usr/local/bin/openclaw`、`/usr/bin/openclaw`、Windows 標準 Node.js パスなどの代表的な場所を順に探索します。shell ランナー自体には固定 PATH を埋め込んでいません。
+- [English README](README.md)
+- [中文说明](README_ZH.md)
+- [日本語ドキュメント](README_JP.md)
+- [SKILL.md](SKILL.md) — OpenClaw skill 仕様書
 
 ---
 
-## 🇯🇵 日本語レポートについて
+## 📞 サポート
 
-### 日本語フォント
-
-日本語 PDF を安定表示するには、以下のフォントが推奨です。
-
-- `assets/NotoSansJP-VF.ttf`
-
-このファイルが存在する場合、`ja-JP` ロケールの PDF は日本語フォントで描画されます。
-
-### 日本語フォントが無い場合
-
-- 日本語 PDF は英語フォールバック経路で生成されます
-- レポート内にレンダリング説明を追加し、フォント不足を明示します
-- 中国語フォントしか無い場合でも、日本語の完全表示は保証されません
-
-必要ならリポジトリからフォントを取得してください。
-
-- GitHub: [https://github.com/tankeito/Health-Mate](https://github.com/tankeito/Health-Mate)
-
-### 日本語 memory ミラー
-
-既存の中国語 memory から日本語ミラーを生成して、日本語 PDF の検証に使えます。
-
-```bash
-python scripts/export_memory_jp.py
-```
-
-生成先:
-
-- `memory_jp/`
+- **GitHub**: https://github.com/tankeito/Health-Mate
+- **Issues**: https://github.com/tankeito/Health-Mate/issues
+- **メール**: tqd354@gmail.com
 
 ---
 
-## 📝 Memory Write Protocol
+**Health-Mate** | ローカル優先多言語ヘルスレポートシステム
 
-OpenClaw が `MEMORY_DIR` に書き込む Markdown は、解析器が壊れないよう厳格な形を守る必要があります。コメント、雑談、絵文字、評価文はファイルに書かないでください。
-
-必須ルール:
-
-- 食事 / 飲水 / 運動は必ず `### ラベル（約 HH:MM）` または `### Label (around HH:MM)` を使う
-- 食事行は `- 食品名 量 -> approx XXX kcal` 形式を守る
-- 飲水ブロックは `- 飲水量: XXml` と `- 累計: XXml / 目標ml` の 2 行だけにする
-- 歩数は `## 今日の歩数` または `## Today Steps` の下に `- 総歩数: XXXX` / `- Total steps: XXXX`
-- `**評価**`、`状态`、`总结` のような解析に不要な説明文を入れない
-
-最小テンプレート:
-
-```markdown
-# 2026-03-20 健康記録
-
-## 体重記録
-**朝の空腹時**: 64.4kg
-
-## 飲水記録
-### 午前 (around 08:45)
-- 飲水量: 300ml
-- 累計: 300ml / 2000ml
-
-## 食事記録
-### 朝食 (around 08:50)
-- oatmeal 50g -> approx 190 kcal
-- skim milk 250ml -> approx 87 kcal
-
-## 運動記録
-### サイクリング (around 17:10)
-- 距離: 10.2 km
-- 時間: 42 min
-- 消費: approx 290 kcal
-
-## 今日の歩数
-- 総歩数: 8200
-```
-
----
-
-## 🧪 日本語版を検証する手順
-
-1. `assets/NotoSansJP-VF.ttf` が存在することを確認
-2. `memory_jp/` を生成
-3. `HEALTH_MATE_LANG=ja-JP` を付けるか、日本語 memory から locale 推定させる
-4. 日報 / 週報 / 月報を生成
-5. PDF の見出し、表、図表ラベル、フッター、レンダリング説明を確認
-
-例:
-
-```bash
-python scripts/export_memory_jp.py
-python scripts/daily_report_pro.py memory_jp/2026-03-20.md 2026-03-20
-python scripts/weekly_report_pro.py 2026-03-20
-python scripts/monthly_report_pro.py 2026-03-20
-```
-
----
-
-## 🔒 セキュリティ境界
-
-Health-Mate はローカル優先ですが、以下は明示的に理解しておく必要があります。
-
-- `MEMORY_DIR` は必須で、暗黙のグローバル fallback パスはありません
-- shell ランナーは `config/.env` を読み込みます
-- ClawHub 手動アップロード時は `config/user_config.example.json` の `env` ブロックを参照して `.env` を手動作成してください
-- レポートとログはローカルに書き込みます
-- 外部通信は必要な設定を入れた時だけ発生します
-  - Tavily 検索
-  - Webhook 配信
-  - 実行時フォントダウンロード
-
-推奨:
-
-- 仮想環境またはコンテナで運用する
-- `MEMORY_DIR` を明示的に限定する
-- 不要な Webhook や API キーは設定しない
-
----
-
-## 📁 プロジェクト構成
-
-```text
-health-mate/
-├── scripts/
-│   ├── daily_report_pro.py
-│   ├── weekly_report_pro.py
-│   ├── monthly_report_pro.py
-│   ├── daily_pdf_generator.py
-│   ├── weekly_pdf_generator.py
-│   ├── monthly_pdf_generator.py
-│   ├── i18n.py
-│   ├── init_config.py
-│   ├── export_memory_en.py
-│   ├── export_memory_jp.py
-│   ├── daily_health_report_pro.sh
-│   ├── weekly_health_report_pro.sh
-│   └── monthly_health_report_pro.sh
-├── config/
-│   ├── user_config.json
-│   ├── user_config.example.json
-│   ├── .env
-│   └── pdf_style_config.json
-├── assets/
-│   ├── NotoSansSC-VF.ttf
-│   └── NotoSansJP-VF.ttf
-├── logs/
-├── reports/
-├── README.md
-├── README_ZH.md
-├── README_JP.md
-├── SKILL.md
-├── _meta.json
-└── requirements.txt
-```
-
----
-
-## 📌 変更履歴
-
-### v1.5.2 — 2026-03-25
-
-- 🧩 `config/user_config.example.json` の `env` 例を更新し、OpenClaw 標準の `MEMORY_DIR` と匿名化した `REPORT_WEB_DIR` / `REPORT_BASE_URL` を反映しました。
-- 📝 `scripts/init_config.py` を拡張し、初回セットアップ時に `config/.env` が無ければコメント付きテンプレートを自動生成し、既存ファイルは上書きしないようにしました。
-- 🔒 README / SKILL / `_meta.json` の説明をそろえ、プロジェクト内 `.env`、Cron 用 PATH 補助変数、任意の外部通信条件をより明確にしました。
-- ✅ `config/.env` が存在しない状態でセットアップウィザードを実行し、コメント付きテンプレートが実際に自動生成されることを確認しました。
-- 📊 `balanced` / `fat_loss` を主目標にした月報では、Page 2 がエネルギー収支・4週間習慣推移・除脂肪体重/脂肪量グラフへ切り替わり、Page 3 は生活習慣レビューとスクリーニング提案を中心にして病院検索をスキップするようになりました。
-
-### v1.5.1 — 2026-03-24
-
-- ⏰ cron 定期タスク向け環境設定を最適化し、スケジュール実行時に LLM を正常に呼び出せるよう改善
-- 🔧 ClawHub 手動アップロード向けに、env 参照テンプレートを `config/user_config.example.json` の `env` ブロックへ統合
-- 📝 実行ロジックは変更せず、`daily_health_report_pro.sh`、`weekly_health_report_pro.sh`、`monthly_health_report_pro.sh` は引き続き `.env` から環境変数を読み込み
-- 🌐 シェルスクリプトのコメントを全て英語化し、国際対応を強化
-- ✅ 定期実行の日報・週報・月報でローカル LLM を使用し、AI 分析と提案を正常に生成可能に
-
-### v1.5.0 — 2026-03-23
-
-- 🧹 旧ラッパー `scripts/health_report_pro.py` と `scripts/pdf_generator.py` を削除し、日報の正式エントリーポイントを `daily_health_report_pro.py` / `daily_pdf_generator.py` に一本化
-- 🇯🇵 `ja-JP` を初期設定ウィザードまで通し、`NotoSansJP-VF.ttf` 不在時は英語フォールバックと説明文を明示
-- ⏰ cron 向けのローカル LLM 解決を `OPENCLAW_BIN` 優先 + 代表パス自動探索として整理
-
-### v1.4.1 — 2026-03-22
-
-- 🇯🇵 `ja-JP` ロケール、`NotoSansJP-VF.ttf`、`export_memory_jp.py` を追加
-- 🛠 日報の正式エントリーポイントを `daily_health_report_pro.py` / `daily_pdf_generator.py` に統一
-- ⏰ `OPENCLAW_BIN` と多段 fallback により cron 環境でもローカル LLM を解決しやすく改善
-
-### v1.4.0 — 2026-03-21
-
-- 📊 月報ワークフローと病態別図表を追加
-- 🏥 常居地ベースの受診提案を追加
-- 🌡 週報 / 月報に症状・服薬熱力図を追加
-
----
-
-## 📄 License
-
-MIT License。詳細は [LICENSE](LICENSE) を参照してください。
+**Developed by tankeito** | MIT License | 2026
