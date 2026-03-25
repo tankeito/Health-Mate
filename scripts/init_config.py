@@ -3,6 +3,7 @@
 """Interactive configuration wizard for Health-Mate."""
 
 import json
+import os
 import re
 from pathlib import Path
 
@@ -10,6 +11,22 @@ SCRIPT_DIR = Path(__file__).parent.resolve()
 PROJECT_ROOT = SCRIPT_DIR.parent
 CONFIG_DIR = PROJECT_ROOT / "config"
 CONFIG_DIR.mkdir(exist_ok=True)
+
+ENV_TEMPLATE_DEFAULTS = {
+    "NVM_DIR": "/root/.nvm",
+    "CRON_PATH": "/root/.nvm/versions/node/v22.22.0/bin:/root/.local/bin:/root/bin:/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin:/usr/local/bin:/usr/bin:/bin:/root/.npm-global/bin",
+    "OPENCLAW_BIN": "/root/.nvm/versions/node/v22.22.0/bin/openclaw",
+    "MEMORY_DIR": "/root/.openclaw/workspace/memory",
+    "DINGTALK_WEBHOOK": "https://oapi.dingtalk.com/robot/send?access_token=YOUR_TOKEN",
+    "FEISHU_WEBHOOK": "https://open.feishu.cn/open-apis/bot/v2/hook/YOUR_HOOK",
+    "TELEGRAM_BOT_TOKEN": "YOUR_BOT_TOKEN",
+    "TELEGRAM_CHAT_ID": "YOUR_CHAT_ID",
+    "TAVILY_API_KEY": "YOUR_TAVILY_API_KEY",
+    "LOG_FILE": "/root/.openclaw/logs/health_report_pro.log",
+    "REPORT_WEB_DIR": "/var/www/html/reports",
+    "REPORT_BASE_URL": "https://example.com/reports",
+    "ALLOW_RUNTIME_FONT_DOWNLOAD": "false",
+}
 
 LANGUAGE_OPTIONS = {"1": "zh-CN", "2": "en-US", "3": "ja-JP"}
 LANGUAGE_LABELS = {"zh-CN": "中文", "en-US": "English", "ja-JP": "日本語"}
@@ -203,8 +220,80 @@ def build_ai_generation(ai_mode):
     }
 
 
+def infer_population_branch(primary_condition):
+    return "lifestyle" if str(primary_condition or "").strip() in {"balanced", "fat_loss"} else "disease"
+
+
 def slugify(text):
     return re.sub(r"[^a-z0-9_]+", "_", text.lower()).strip("_") or "custom_section"
+
+
+def env_value(name):
+    value = str(os.environ.get(name, "") or "").strip()
+    return value if value else ENV_TEMPLATE_DEFAULTS[name]
+
+
+def env_quote(value):
+    return '"' + str(value).replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+def build_env_template():
+    values = {key: env_value(key) for key in ENV_TEMPLATE_DEFAULTS}
+    lines = [
+        "# ========== Local Configuration - DO NOT upload to GitHub! ==========",
+        "# This file stays in config/.env and may contain secrets. Keep only the keys you intend the skill to read.",
+        "",
+        "# ========== Cron Environment Variables (Optional but recommended for scheduled tasks) ==========",
+        "# Node.js NVM directory used by the shell runners",
+        f'NVM_DIR={env_quote(values["NVM_DIR"])}',
+        "",
+        "# Cron PATH environment used by the shell runners so cron can find openclaw CLI and system commands",
+        f'CRON_PATH={env_quote(values["CRON_PATH"])}',
+        "",
+        "# Optional explicit openclaw binary path used by the Python local-LLM resolver",
+        f'OPENCLAW_BIN={env_quote(values["OPENCLAW_BIN"])}',
+        "",
+        "# ========== Messaging Configuration (Optional) ==========",
+        "# DingTalk Robot Webhook",
+        f'DINGTALK_WEBHOOK={env_quote(values["DINGTALK_WEBHOOK"])}',
+        "",
+        "# Feishu Robot Webhook",
+        f'FEISHU_WEBHOOK={env_quote(values["FEISHU_WEBHOOK"])}',
+        "",
+        "# Telegram Bot Configuration",
+        f'TELEGRAM_BOT_TOKEN={env_quote(values["TELEGRAM_BOT_TOKEN"])}',
+        f'TELEGRAM_CHAT_ID={env_quote(values["TELEGRAM_CHAT_ID"])}',
+        "",
+        "# ========== AI Retrieval Configuration (Optional) ==========",
+        "# Tavily API key used for retrieval-assisted fallback and monthly medical lookup",
+        f'TAVILY_API_KEY={env_quote(values["TAVILY_API_KEY"])}',
+        "",
+        "# ========== Health Report Configuration ==========",
+        "# Health memory directory",
+        f'MEMORY_DIR={env_quote(values["MEMORY_DIR"])}',
+        "",
+        "# Optional shared log file override. If omitted, each shell runner keeps its own logs/*.log file.",
+        f'LOG_FILE={env_quote(values["LOG_FILE"])}',
+        "",
+        "# Optional local directory where generated PDFs are copied for public serving",
+        f'REPORT_WEB_DIR={env_quote(values["REPORT_WEB_DIR"])}',
+        "",
+        "# Optional public base URL used when push messages include downloadable PDF links",
+        f'REPORT_BASE_URL={env_quote(values["REPORT_BASE_URL"])}',
+        "",
+        "# Allow runtime font download only if you explicitly want that behavior",
+        f'ALLOW_RUNTIME_FONT_DOWNLOAD={env_quote(values["ALLOW_RUNTIME_FONT_DOWNLOAD"])}',
+        "",
+    ]
+    return "\n".join(lines)
+
+
+def ensure_local_env_file():
+    env_path = CONFIG_DIR / ".env"
+    if env_path.exists():
+        return env_path, False
+    env_path.write_text(build_env_template(), encoding="utf-8")
+    return env_path, True
 
 
 print("=" * 60)
@@ -330,8 +419,8 @@ while ask_yes_no(localize(locale, "添加一个自定义模块吗？", "Add a cu
     )
 
 config = {
-    "_version": "1.5.1",
-    "config_version": "1.5.1",
+    "_version": "1.5.2",
+    "config_version": "1.5.2",
     "language": locale,
     "user_profile": {
         "name": name,
@@ -369,12 +458,17 @@ config = {
     "scoring": {"modules": modules},
     "exercise_standards": {"weekly_target_minutes": 150},
     "ai_generation": build_ai_generation(ai_mode_choice),
-    "report_preferences": {"append_custom_sections": True},
+    "report_preferences": {
+        "append_custom_sections": True,
+        "population_branch": infer_population_branch(primary_condition),
+    },
 }
 
 config_path = CONFIG_DIR / "user_config.json"
 with open(config_path, "w", encoding="utf-8") as handle:
     json.dump(config, handle, ensure_ascii=False, indent=4)
+
+env_path, env_created = ensure_local_env_file()
 
 enabled_modules = [module["title"] for module in modules if module.get("enabled")]
 condition_summary = (
@@ -384,6 +478,20 @@ condition_summary = (
 )
 
 print(localize(locale, "\n[步骤 4/4] 已保存", "\n[Step 4/4] Saved"))
+if env_created:
+    print(localize(
+        locale,
+        f"已生成带注释的 config/.env 模板：{env_path}",
+        f"Created a commented config/.env template: {env_path}",
+        f"コメント付きの config/.env テンプレートを作成しました: {env_path}",
+    ))
+else:
+    print(localize(
+        locale,
+        f"现有的 config/.env 已保留，未被覆盖：{env_path}",
+        f"Kept the existing config/.env without overwriting it: {env_path}",
+        f"既存の config/.env を保持し、上書きしませんでした: {env_path}",
+    ))
 print(localize(locale, f"配置文件已写入：{config_path}", f"Configuration written to: {config_path}"))
 print(localize(locale, f"主目标：{CONDITION_LABELS[locale][primary_condition]}", f"Primary goal: {CONDITION_LABELS[locale][primary_condition]}"))
 print(localize(locale, f"已选择目标：{condition_summary}", f"Selected goals: {condition_summary}"))
@@ -397,6 +505,7 @@ for line in [
     localize(locale, "3. 自定义模块请使用完全一致的二级标题，例如“## 生化情况”，周报和 PDF 会动态汇总。", "3. For custom modules, use the exact same level-2 heading such as '## Biochemistry'. Weekly reports and PDFs will aggregate them dynamically."),
     localize(locale, "4. 多病种同时启用时，日报/周报/月报/LLM/Tavily 回退都会基于全部已选目标生成。", "4. When multiple conditions are enabled, daily, weekly, monthly, LLM, and Tavily-assisted fallback generation all use the full condition set."),
     localize(locale, "5. 月报中的医院推荐会优先使用“常居地”字段，请在搬家或长期驻留地变化后同步更新。", "5. Monthly hospital suggestions use the residence fields first, so update them whenever your long-term location changes."),
-    localize(locale, "6. 所有配置都已经存入 user_config.json，之后也可以直接手动编辑。", "6. Everything is now stored in user_config.json, and you can edit it directly later."),
+    localize(locale, "6. report_preferences.population_branch 已按主目标自动写入：减脂/均衡健康默认 lifestyle，疾病管理默认 disease，之后也可手动改。", "6. report_preferences.population_branch was auto-filled from the primary goal: balanced/fat-loss uses lifestyle, disease care uses disease, and you can still edit it later."),
+    localize(locale, "7. 所有配置都已经存入 user_config.json，之后也可以直接手动编辑。", "7. Everything is now stored in user_config.json, and you can edit it directly later."),
 ]:
     print(line)

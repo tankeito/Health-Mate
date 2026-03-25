@@ -6,7 +6,7 @@
 >
 > 食事、飲水、体重、運動、症状、服薬、独自モニタリング項目を継続的に記録し、慢性疾患管理や減量の振り返りに使える見やすいレポートへ整形します。
 
-[![Version](https://img.shields.io/badge/version-1.5.1-blue.svg)](https://github.com/tankeito/Health-Mate/releases)
+[![Version](https://img.shields.io/badge/version-1.5.2-blue.svg)](https://github.com/tankeito/Health-Mate/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![OpenClaw](https://img.shields.io/badge/OpenClaw-Skill-green.svg)](https://openclaw.ai)
 
@@ -80,19 +80,22 @@ pip install -r requirements.txt
 ### 2. 環境変数を設定する
 
 ClawHub の現在の手動アップロード方式では `config/.env.example` が同梱されない場合があります。
-そのため `config/user_config.example.json` を開き、トップレベルの `env` ブロックを参照して `config/.env` を手動作成してください。
-実行ロジック自体は変えておらず、Python エントリーポイントと shell ランナーは引き続き `config/.env` を読み込みます。
+そのため `config/user_config.example.json` を開き、トップレベルの `env` ブロックをアップロード安全な参照テンプレートとして確認してください。
+まだ `config/.env` が無い場合は、セットアップウィザードがコメント付きのプロジェクト内テンプレートを自動生成します。実行ロジック自体は変えておらず、Python エントリーポイントと shell ランナーは引き続き `config/.env` を読み込みます。
 
 ```bash
-MEMORY_DIR="/absolute/path/to/health-memory"
+NVM_DIR="/root/.nvm"
+CRON_PATH="/root/.nvm/versions/node/v22.22.0/bin:/root/.local/bin:/root/bin:/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin:/usr/local/bin:/usr/bin:/bin:/root/.npm-global/bin"
 OPENCLAW_BIN="/root/.nvm/versions/node/v22.22.0/bin/openclaw" # cron では特に推奨
-TAVILY_API_KEY="tvly-..."                  # Optional
-DINGTALK_WEBHOOK="https://..."             # Optional
-FEISHU_WEBHOOK="https://..."               # Optional
-TELEGRAM_BOT_TOKEN="..."                   # Optional
-TELEGRAM_CHAT_ID="..."                     # Optional
-REPORT_WEB_DIR="/var/www/html/reports"     # Optional
-REPORT_BASE_URL="https://example.com/reports"
+MEMORY_DIR="/root/.openclaw/workspace/memory"
+LOG_FILE="/root/.openclaw/logs/health_report_pro.log"          # Optional shared log override
+DINGTALK_WEBHOOK="https://..."                                 # Optional
+FEISHU_WEBHOOK="https://..."                                   # Optional
+TELEGRAM_BOT_TOKEN="..."                                       # Optional
+TELEGRAM_CHAT_ID="..."                                         # Optional
+TAVILY_API_KEY="tvly-..."                                      # Optional
+REPORT_WEB_DIR="/var/www/html/reports"                         # Optional
+REPORT_BASE_URL="https://example.com/reports"                  # Optional
 ALLOW_RUNTIME_FONT_DOWNLOAD="false"
 ```
 
@@ -104,6 +107,8 @@ python scripts/init_config.py
 
 このウィザードは `config/user_config.json` の主要項目を作成します。
 
+まだ `config/.env` が無い場合は、コメント付きのプロジェクト内テンプレートも自動生成され、既存ファイルは上書きされません。
+
 - 基本プロフィール
 - 管理対象の病種一覧と主病種
 - 採点モジュールと重み
@@ -112,6 +117,12 @@ python scripts/init_config.py
 - AI 生成設定
 - 追加モニタリングモジュール
 - レポート設定
+- `report_preferences.population_branch`（`lifestyle` / `disease` の分岐制御）
+
+補足:
+
+- サンプル設定は `lifestyle` から始まります
+- セットアップウィザードは `balanced` / `fat_loss` なら `lifestyle`、疾病管理目標なら `disease` を自動提案します
 
 ### 4. レポートを生成する
 
@@ -289,6 +300,14 @@ health-mate/
 ---
 
 ## 📌 変更履歴
+
+### v1.5.2 — 2026-03-25
+
+- 🧩 `config/user_config.example.json` の `env` 例を更新し、OpenClaw 標準の `MEMORY_DIR` と匿名化した `REPORT_WEB_DIR` / `REPORT_BASE_URL` を反映しました。
+- 📝 `scripts/init_config.py` を拡張し、初回セットアップ時に `config/.env` が無ければコメント付きテンプレートを自動生成し、既存ファイルは上書きしないようにしました。
+- 🔒 README / SKILL / `_meta.json` の説明をそろえ、プロジェクト内 `.env`、Cron 用 PATH 補助変数、任意の外部通信条件をより明確にしました。
+- ✅ `config/.env` が存在しない状態でセットアップウィザードを実行し、コメント付きテンプレートが実際に自動生成されることを確認しました。
+- 📊 `balanced` / `fat_loss` を主目標にした月報では、Page 2 がエネルギー収支・4週間習慣推移・除脂肪体重/脂肪量グラフへ切り替わり、Page 3 は生活習慣レビューとスクリーニング提案を中心にして病院検索をスキップするようになりました。
 
 ### v1.5.1 — 2026-03-24
 

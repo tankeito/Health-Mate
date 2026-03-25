@@ -44,6 +44,7 @@ from daily_report_pro import (
     get_condition_standards,
     get_conditions_display_name,
     get_generation_settings,
+    get_population_branch,
     get_primary_condition,
     get_profile_conditions,
     get_scoring_modules,
@@ -156,6 +157,69 @@ def localize(locale: str, zh_text: str, en_text: str) -> str:
 
 def sanitize_locale_line(locale: str, text: str) -> str:
     return localize_free_text(locale, text) if resolve_locale(locale=locale) == "ja-JP" else text
+
+
+def localize_three(locale: str, zh_text: str, en_text: str, ja_text: Optional[str] = None) -> str:
+    resolved = resolve_locale(locale=locale)
+    if resolved == "zh-CN":
+        return zh_text
+    if resolved == "ja-JP" and ja_text is not None:
+        return ja_text
+    return en_text
+
+
+def is_lifestyle_mode(primary_condition: Optional[str], population_branch: Optional[str] = None) -> bool:
+    normalized_branch = str(population_branch or "").strip().lower()
+    if normalized_branch in {"lifestyle", "disease"}:
+        return normalized_branch == "lifestyle"
+    return str(primary_condition or "").strip() in {"balanced", "fat_loss"}
+
+
+def monthly_section_label(locale: str, primary_condition: Optional[str], key: str, population_branch: Optional[str] = None) -> str:
+    lifestyle_mode = is_lifestyle_mode(primary_condition, population_branch)
+    mappings = {
+        "deep_dive": (
+            ("核心体征与习惯洞察", "Core Vitals & Habit Insights", "コア指標と習慣インサイト"),
+            ("专科病理深度对齐", "Specialty Deep Dive", "病態別ディープダイブ"),
+        ),
+        "action_plan": (
+            ("月度健康复盘与行动策略", "Monthly Review & Action Strategy", "月間レビューと行動戦略"),
+            ("专家会诊与医疗规划", "Medical Action Plan", "医療アクションプラン"),
+        ),
+        "ai_review": (
+            ("AI 综合健康研判", "AI Comprehensive Assessment", "AI 総合健康評価"),
+            ("AI 月度病情研判", "AI Monthly Review", "AI 月次レビュー"),
+        ),
+        "follow_up": (
+            ("周期性体测与筛查建议", "Periodic Screening Suggestions", "定期測定・スクリーニング提案"),
+            ("复查提醒", "Follow-up Reminders", "フォローアップ提案"),
+        ),
+        "hospital": (
+            ("医院与门诊建议", "Hospital and Clinic Suggestions", "病院・外来提案"),
+            ("医院与门诊建议", "Hospital and Clinic Suggestions", "病院・外来提案"),
+        ),
+        "trend_block": (
+            ("核心体征与习惯洞察", "Core Vitals & Habit Insights", "コア指標と習慣インサイト"),
+            ("专科趋势分析", "Specialty Trends", "病態トレンド"),
+        ),
+    }
+    lifestyle_titles, default_titles = mappings[key]
+    chosen = lifestyle_titles if lifestyle_mode else default_titles
+    return localize_three(locale, *chosen)
+
+
+def get_monthly_review_blueprint(primary_condition: Optional[str], population_branch: Optional[str] = None) -> List[dict]:
+    if is_lifestyle_mode(primary_condition, population_branch):
+        return [
+            {"zh": "核心发现", "en": "Core Findings", "ja": "【主要な発見】"},
+            {"zh": "体态与习惯预警", "en": "Body Composition & Habit Watch", "ja": "【体組成と習慣の注意点】"},
+            {"zh": "次月高阶干预清单", "en": "Advanced Next-Month Checklist", "ja": "【来月の高度アクションリスト】"},
+        ]
+    return [
+        {"zh": "关键发现", "en": "Key Findings", "ja": "【主要な発見】"},
+        {"zh": "风险关注", "en": "Risk Watch", "ja": "【リスク観察】"},
+        {"zh": "下月调整", "en": "Next-Month Actions", "ja": "【来月の調整】"},
+    ]
 
 
 def safe_average(values: Iterable[Optional[float]]) -> float:
@@ -530,71 +594,142 @@ def extract_symptom_labels(daily_data: dict, locale: str) -> List[str]:
     return dedupe_preserve_order(fallback_labels)
 
 
-def format_monthly_review_sections(locale: str, sections: Iterable[tuple[str, str, str]]) -> str:
+def format_monthly_review_sections(locale: str, sections: Iterable[dict]) -> str:
     parts = []
-    for zh_title, en_title, body in sections:
-        clean_body = re.sub(r"\s+", " ", str(body or "")).strip()
+    resolved = resolve_locale(locale=locale)
+    for section in sections:
+        if isinstance(section, tuple):
+            zh_title = section[0] if len(section) > 0 else ""
+            en_title = section[1] if len(section) > 1 else zh_title
+            body = section[2] if len(section) > 2 else ""
+            section = {"zh": zh_title, "en": en_title, "body": body}
+        clean_body = str(section.get("body") or "").strip()
         if not clean_body:
             continue
-        resolved = resolve_locale(locale=locale)
         if resolved == "zh-CN":
-            title = f"【{zh_title}】"
+            title = f"【{section.get('zh', '')}】"
         elif resolved == "ja-JP":
-            ja_title_map = {
-                "核心发现": "【主要な所見】",
-                "风险提示": "【注意点】",
-                "下月调整": "【来月の調整】",
-                "检索补充": "【外部参考】",
-            }
-            title = ja_title_map.get(zh_title, f"【{sanitize_locale_line(locale, zh_title)}】")
+            title = section.get("ja") or f"【{sanitize_locale_line(locale, section.get('zh', ''))}】"
         else:
-            title = f"[{en_title}]"
+            title = f"[{section.get('en', '')}]"
         parts.append(f"**{title}**\n{clean_body}")
     return "\n\n".join(parts).strip()
 
 
-def ensure_monthly_review_sections(text: str, monthly_data: dict, locale: str) -> str:
+def ensure_monthly_review_sections(text: str, monthly_data: dict, locale: str, primary_condition: Optional[str] = None) -> str:
     cleaned = str(text or "").strip()
     if not cleaned:
         return ""
 
-    if any(token in cleaned for token in ["核心发现", "风险提示", "下月调整", "Key Findings", "Risk Watch", "Next-Month Actions"]):
+    blueprint = get_monthly_review_blueprint(primary_condition, monthly_data.get("population_branch"))
+    tokens = []
+    for item in blueprint:
+        tokens.extend([item.get("zh", ""), item.get("en", ""), str(item.get("ja", "")).replace("【", "").replace("】", "")])
+    if any(token and token in cleaned for token in tokens):
         return cleaned
 
     sentences = [item.strip() for item in re.split(r"(?<=[。！？!?])\s+|(?<=\.)\s+", cleaned) if item.strip()]
     findings = " ".join(sentences[:2]) or cleaned
     risk = " ".join(sentences[2:4]).strip()
     plan = " ".join(sentences[4:]).strip()
-
-    if not risk:
-        low_scores = [
-            label
-            for key, label in [
-                ("diet", localize(locale, "饮食", "diet")),
-                ("water", localize(locale, "饮水", "hydration")),
-                ("exercise", localize(locale, "运动", "exercise")),
-                ("monitoring", localize(locale, "监测", "monitoring")),
-            ]
-            if monthly_data.get("macro_scores", {}).get(key, 0) < 70
+    low_scores = [
+        label
+        for key, label in [
+            ("diet", localize(locale, "饮食", "diet")),
+            ("water", localize(locale, "饮水", "hydration")),
+            ("exercise", localize(locale, "运动", "exercise")),
+            ("monitoring", localize(locale, "监测", "monitoring")),
         ]
-        if low_scores:
-            risk = localize(locale, f"当前仍需重点关注：{'、'.join(low_scores)}。", f"The main watch-outs remain: {', '.join(low_scores)}.")
-        else:
-            risk = localize(locale, "本月整体风险信号不高，但仍需继续保持记录完整性。", "Overall risk signals stayed modest this month, but tracking consistency still matters.")
+        if monthly_data.get("macro_scores", {}).get(key, 0) < 70
+    ]
 
-    if not plan:
-        plan = localize(
-            locale,
-            "下月建议继续优先稳定饮食节奏、补齐专项监测，并把高风险触发因素写进每日记录，便于继续做趋势对照。",
-            "Next month, prioritize steadier meal timing, more complete specialty monitoring, and explicit trigger notes in daily logs so trends stay comparable.",
-        )
+    if is_lifestyle_mode(primary_condition, monthly_data.get("population_branch")):
+        if not risk:
+            watch_items = []
+            if low_scores:
+                watch_items.append(
+                    localize_three(
+                        locale,
+                        f"当前执行偏弱的维度集中在：{'、'.join(low_scores)}。",
+                        f"The weakest adherence dimensions are: {', '.join(low_scores)}.",
+                        f"弱い実行項目は主に {'、'.join(low_scores)} です。",
+                    )
+                )
+            if abs(float(monthly_data.get("weight_change", 0) or 0)) > 2.5:
+                watch_items.append(
+                    localize_three(
+                        locale,
+                        "本月体重波动偏大，建议复盘热量波动、恢复质量与记录连续性。",
+                        "Weight changed quickly this month, so calorie swings, recovery quality, and logging consistency should be reviewed.",
+                        "今月の体重変動はやや大きく、摂取量の揺れや回復の質、記録の連続性を見直す価値があります。",
+                    )
+                )
+            if monthly_data.get("avg_body_fat_percent") and monthly_data.get("valid_weight_days", 0) >= 5:
+                watch_items.append(
+                    localize_three(
+                        locale,
+                        "若体重下降但体脂改善不明显，说明仍需提高蛋白质量、力量训练占比与恢复质量。",
+                        "If weight falls without clear body-fat improvement, protein quality, resistance training, and recovery still need work.",
+                        "体重が落ちても体脂肪率の改善が鈍い場合は、たんぱく質・筋力トレーニング・回復の質を見直してください。",
+                    )
+                )
+            if not watch_items:
+                watch_items.append(
+                    localize_three(
+                        locale,
+                        "整体风险不高，但仍需持续关注作息稳定性、三大营养素分配与训练单一化问题。",
+                        "Overall risk is modest, but sleep regularity, macro balance, and overly single-pattern training still deserve attention.",
+                        "全体リスクは高くありませんが、睡眠の安定、栄養バランス、運動の単調さには引き続き注意が必要です。",
+                    )
+                )
+            risk = " ".join(watch_items)
+
+        if not plan:
+            current_weight = float(monthly_data.get("latest_weight") or monthly_data.get("avg_weight") or 60)
+            protein_target = max(90, int(round(current_weight * (1.6 if str(primary_condition) == "fat_loss" else 1.3))))
+            calorie_target = int(round(monthly_data.get("avg_calories", 0) or 0))
+            plan = "\n".join(
+                [
+                    localize_three(
+                        locale,
+                        f"1. 饮食宏观结构微调：优先把日均蛋白稳定到约 {protein_target}g；若本月热量起伏较大，先把工作日与周末的热量差控制在 300kcal 内。",
+                        f"1. Nutrition structure: stabilize daily protein near {protein_target}g, and keep weekday-vs-weekend calorie swings within about 300 kcal when intake has been inconsistent.",
+                        f"1. 栄養構成の微調整: 1日のたんぱく質をおよそ {protein_target}g に安定させ、摂取のばらつきが大きい場合は平日と休日の差を 300kcal 以内に抑えます。",
+                    ),
+                    localize_three(
+                        locale,
+                        "2. 运动负荷建议：将有氧与力量训练拆分规划，至少保证每周 2-3 次力量训练，并让步数/骑行等有氧承担日常消耗基础。",
+                        "2. Training load: separate cardio from strength work, keep at least 2-3 resistance sessions each week, and use steps or cycling as the aerobic base.",
+                        "2. 運動負荷の提案: 有酸素と筋力トレーニングを分けて計画し、週 2-3 回の筋力トレーニングを確保しつつ、歩数やサイクリングを日常の消費基盤にします。",
+                    ),
+                    localize_three(
+                        locale,
+                        f"3. 作息与补剂建议：优先修复睡眠窗口与进餐节律；如近期热量约 {calorie_target}kcal 且训练频率较高，可结合日常饮食评估 Omega-3、维生素D 或电解质补充是否需要常规化。",
+                        f"3. Recovery and supplements: stabilize sleep and meal timing first; if training volume is high, review whether routine omega-3, vitamin D, or electrolytes make sense alongside your usual diet.",
+                        f"3. 生活リズムと補助栄養: まず睡眠時間帯と食事リズムを安定させ、運動量が高い場合は日常食に合わせて Omega-3・ビタミンD・電解質の補助を検討します。",
+                    ),
+                ]
+            )
+    else:
+        if not risk:
+            if low_scores:
+                risk = localize(locale, f"当前仍需重点关注：{'、'.join(low_scores)}。", f"The main watch-outs remain: {', '.join(low_scores)}.")
+            else:
+                risk = localize(locale, "本月整体风险信号不高，但仍需继续保持记录完整性。", "Overall risk signals stayed modest this month, but tracking consistency still matters.")
+
+        if not plan:
+            plan = localize(
+                locale,
+                "下月建议继续优先稳定饮食节奏、补齐专项监测，并把高风险触发因素写进每日记录，便于继续做趋势对照。",
+                "Next month, prioritize steadier meal timing, more complete specialty monitoring, and explicit trigger notes in daily logs so trends stay comparable.",
+            )
 
     return format_monthly_review_sections(
         locale,
         [
-            ("核心发现", "Key Findings", findings),
-            ("风险提示", "Risk Watch", risk),
-            ("下月调整", "Next-Month Actions", plan),
+            {**blueprint[0], "body": findings},
+            {**blueprint[1], "body": risk},
+            {**blueprint[2], "body": plan},
         ],
     )
 
@@ -700,6 +835,7 @@ def aggregate_monthly_data(month_dates: List[str], config: dict, locale: Optiona
         "monitoring_days": 0,
         "medication_enabled": medication_enabled,
         "residence": residence,
+        "population_branch": get_population_branch(config=config, user_profile=profile, primary_condition=primary_condition),
     }
 
     first_weight = None
@@ -732,6 +868,7 @@ def aggregate_monthly_data(month_dates: List[str], config: dict, locale: Optiona
         score_report = build_score_report(daily_data, config)
         water_total = int(daily_data.get("water_total", 0) or 0)
         steps = int(daily_data.get("steps", 0) or 0)
+        exercise_calories = sum(float(item.get("calories", 0) or 0) for item in daily_data.get("exercise_records", []))
         symptom_count = daily_symptom_count(daily_data)
         symptom_labels = extract_symptom_labels(daily_data, locale)
         medication_records = daily_data.get("medication_records", [])
@@ -827,6 +964,8 @@ def aggregate_monthly_data(month_dates: List[str], config: dict, locale: Optiona
                 "water_total": water_total,
                 "steps": steps,
                 "calories": daily_data.get("total_calories", 0),
+                "exercise_calories": exercise_calories,
+                "exercise_count": len(daily_data.get("exercise_records", [])),
                 "protein": daily_data.get("total_protein", 0),
                 "carb": daily_data.get("total_carb", 0),
                 "fiber": daily_data.get("total_fiber", 0),
@@ -953,7 +1092,114 @@ def build_specialty_charts(monthly_data: dict, config: dict, locale: str) -> Lis
     standards = get_condition_standards(config, monthly_data.get("conditions", []))
     daily_records = monthly_data.get("daily_records", [])
     conditions = monthly_data.get("conditions", [])
+    primary_condition = monthly_data.get("primary_condition")
+    lifestyle_mode = is_lifestyle_mode(primary_condition, monthly_data.get("population_branch"))
     is_ja = resolve_locale(locale=locale) == "ja-JP"
+
+    if lifestyle_mode:
+        deficit_target = 350 if str(primary_condition) == "fat_loss" else 150
+        charts.extend(
+            [
+                {
+                    "type": "energy_deficit",
+                    "title": localize_three(
+                        locale,
+                        "能量收支与代谢缺口",
+                        "Energy Balance And Deficit",
+                        "エネルギー収支と代謝ギャップ",
+                    ),
+                    "subtitle": localize_three(
+                        locale,
+                        "绿色柱代表估算总消耗，橙色或红色柱代表当日摄入，虚线表示本月建议的热量目标线。",
+                        "Green bars show estimated total expenditure, orange or red bars show daily intake, and the dashed line marks the suggested intake ceiling.",
+                        "緑の棒は推定総消費、オレンジまたは赤の棒は当日の摂取量、破線は今月の推奨摂取目安です。",
+                    ),
+                    "records": daily_records,
+                    "deficit_target_kcal": deficit_target,
+                    "summary": localize_three(
+                        locale,
+                        f"本月日均摄入约 {monthly_data.get('avg_calories', 0):.0f} kcal，对照估算总消耗后，可以直接看出哪些日期维持平衡、哪些日期真正形成了热量赤字。",
+                        f"Average intake was about {monthly_data.get('avg_calories', 0):.0f} kcal this month, so the chart shows which days stayed near maintenance and which days created a real deficit.",
+                        f"今月の平均摂取量は約 {monthly_data.get('avg_calories', 0):.0f} kcal で、推定総消費と重ねることで維持日と赤字日を見分けやすくなります。",
+                    ),
+                },
+                {
+                    "type": "weekly_progression",
+                    "title": localize_three(
+                        locale,
+                        "四周习惯养成趋势对比",
+                        "Four-Week Habit Progression",
+                        "4週間の習慣推移比較",
+                    ),
+                    "subtitle": localize_three(
+                        locale,
+                        "按 W1-W4 拆分本月节奏，分别比较步数、饮水与热量的阶段性变化。",
+                        "This compares weekly averages for steps, hydration, and calories across W1-W4.",
+                        "W1-W4 に分けて、歩数・飲水量・カロリーの週次変化を比較します。",
+                    ),
+                    "records": daily_records,
+                    "summary": localize_three(
+                        locale,
+                        "如果前半月执行更稳、后半月明显回落，这组图会比单日曲线更容易看出习惯松动的位置。",
+                        "These weekly bars make it easier to spot whether habits improved over time or faded in the second half of the month.",
+                        "日次推移よりも、月前半で安定していたのか、後半で崩れたのかを見分けやすい構成です。",
+                    ),
+                },
+            ]
+        )
+
+        body_comp_records = [
+            record
+            for record in daily_records
+            if record.get("weight") is not None and record.get("body_fat_percent") is not None
+        ]
+        if len(body_comp_records) >= 2:
+            charts.append(
+                {
+                    "type": "body_composition_area",
+                    "title": localize_three(
+                        locale,
+                        "去脂体重与脂肪重量变化",
+                        "Lean Mass And Fat Mass Trend",
+                        "除脂肪体重と脂肪量の推移",
+                    ),
+                    "subtitle": localize_three(
+                        locale,
+                        "根据体重和体脂率拆分出瘦体重与脂肪重量，帮助判断减下来的到底是什么。",
+                        "Weight and body-fat records are decomposed into lean mass and fat mass so the quality of progress is easier to judge.",
+                        "体重と体脂率から除脂肪体重と脂肪量を分けて、何が減っているのかを判断しやすくします。",
+                    ),
+                    "records": body_comp_records,
+                    "summary": localize_three(
+                        locale,
+                        "若体重下降主要来自脂肪层收缩，说明策略更健康；若瘦体重同步下滑，则要重新检查蛋白质、力量训练与恢复质量。",
+                        "If the decline is driven mainly by fat mass, progress is usually healthier; if lean mass also drops, protein, resistance work, and recovery need a closer look.",
+                        "脂肪量の縮小が中心なら順調ですが、除脂肪体重も落ちている場合はたんぱく質・筋トレ・回復の見直しが必要です。",
+                    ),
+                }
+            )
+
+        for metric in sorted(monthly_data.get("custom_numeric_metrics", {}).values(), key=lambda item: len(item.get("points", [])), reverse=True):
+            if len(metric.get("points", [])) < 2:
+                continue
+            charts.append(
+                {
+                    "type": "custom_metric",
+                    "title": localize(locale, f"额外监测：{metric.get('section')} · {metric.get('label')}", f"Additional monitoring: {metric.get('section')} · {metric.get('label')}"),
+                    "subtitle": localize(locale, "来自自定义监测模块的数值趋势。", "Numeric trend extracted from a custom monitoring module."),
+                    "section": metric.get("section"),
+                    "label": metric.get("label"),
+                    "unit": metric.get("unit"),
+                    "points": metric.get("points", []),
+                    "summary": localize(locale, f"该指标来自“{metric.get('section')}”模块，当前已有 {len(metric.get('points', []))} 个数值点，后续会继续参与月度趋势分析。", f"This metric comes from the '{metric.get('section')}' module and already has {len(metric.get('points', []))} numeric points for monthly trend analysis."),
+                }
+            )
+        if resolve_locale(locale=locale) == "ja-JP":
+            for chart in charts:
+                for key in ("title", "subtitle", "summary", "healthy_legend", "symptom_legend", "section", "label", "unit"):
+                    if chart.get(key):
+                        chart[key] = sanitize_locale_line(locale, str(chart.get(key)))
+        return charts[:6]
 
     if "gallstones" in conditions:
         symptom_days = [record for record in daily_records if record.get("symptom_count", 0) > 0]
@@ -1121,7 +1367,64 @@ def build_follow_up_reminders(monthly_data: dict, profile: dict, locale: str) ->
     conditions = monthly_data.get("conditions", [])
     symptom_days = monthly_data.get("symptom_days", 0)
     ultrasound = monthly_data.get("ultrasound_summary", {})
+    primary_condition = monthly_data.get("primary_condition")
     is_ja = resolve_locale(locale=locale) == "ja-JP"
+
+    if is_lifestyle_mode(primary_condition, monthly_data.get("population_branch")):
+        reminders.append(
+            localize_three(
+                locale,
+                "建议每 4-6 周固定复盘一次体重、体脂率、围度、睡眠与训练恢复，避免只看体重单一指标。",
+                "Review weight, body fat, measurements, sleep, and training recovery every 4-6 weeks instead of relying on weight alone.",
+                "体重だけでなく、体脂率・囲み寸法・睡眠・回復も含めて 4〜6 週ごとに見直すのがおすすめです。",
+            )
+        )
+        reminders.append(
+            localize_three(
+                locale,
+                "可把血压、空腹血糖、血脂、肝肾功能等基础体测安排为季度或年度筛查，用来验证当前饮食和运动习惯是否真正稳住。",
+                "Basic screening such as blood pressure, fasting glucose, lipids, and liver-kidney markers can be scheduled quarterly or annually to validate whether current habits are truly sustainable.",
+                "血圧・空腹時血糖・脂質・肝腎機能などの基礎チェックを四半期または年次で行うと、今の習慣が本当に安定しているかを確認しやすくなります。",
+            )
+        )
+        if monthly_data.get("valid_weight_days", 0) < max(4, monthly_data.get("observed_days", 0) // 4):
+            reminders.append(
+                localize_three(
+                    locale,
+                    "当前体重/体脂记录还不够密，建议下月固定每周至少 2-3 次在同一时段测量，避免趋势图被稀疏数据拉偏。",
+                    "Weight and body-fat logging are still sparse, so next month should include at least 2-3 measurements per week at a consistent time.",
+                    "体重や体脂率の記録密度がまだ低いため、来月は毎週 2〜3 回以上、同じ時間帯で測ると推移が安定します。",
+                )
+            )
+        if str(primary_condition) == "fat_loss":
+            if abs(float(monthly_data.get("weight_change", 0) or 0)) > 2.5:
+                reminders.append(
+                    localize_three(
+                        locale,
+                        "若月内减重过快，建议把下月目标调回更温和的赤字，并同步关注睡眠、疲劳感和训练表现，必要时做一次基础营养评估。",
+                        "If weight is dropping too quickly, ease the deficit next month and monitor sleep, fatigue, and training performance together with a basic nutrition check.",
+                        "減量ペースが速すぎる場合は、来月の赤字を少し緩めて、睡眠・疲労感・トレーニングの質も一緒に確認してください。",
+                    )
+                )
+            else:
+                reminders.append(
+                    localize_three(
+                        locale,
+                        "减脂模式下可每月检查一次去脂体重与脂肪重量走势，确认掉下来的主要是脂肪而不是肌肉。",
+                        "In fat-loss mode, review lean mass and fat mass at least monthly to confirm that progress is driven mainly by fat loss rather than muscle loss.",
+                        "減脂モードでは、月 1 回は除脂肪体重と脂肪量を見直し、筋肉ではなく脂肪が主に減っているかを確認しましょう。",
+                    )
+                )
+        else:
+            reminders.append(
+                localize_three(
+                    locale,
+                    "健康维持模式下，建议把作息、步数、饮水和三大营养素的月均稳定性放在首位，再逐步增加力量训练或灵活性训练模块。",
+                    "In balanced-wellness mode, prioritize the month-to-month stability of sleep, steps, hydration, and macro intake before expanding strength or mobility work.",
+                    "バランス重視モードでは、まず睡眠・歩数・飲水・三大栄養素の安定性を整えてから、筋トレや柔軟性トレーニングを広げるのがおすすめです。",
+                )
+            )
+        return dedupe_preserve_order(reminders)[:6]
 
     if "gallstones" in conditions:
         reminders.append("空腹での肝胆膵脾エコーと肝機能検査は、少なくとも四半期に 1 回を目安に再確認してください。" if is_ja else localize(locale, "肝胆胰脾彩超（空腹）+ 肝功能，建议按季度完成一次复查。", "A fasting hepatobiliary ultrasound plus liver-function labs should be reviewed at least once per quarter."))
@@ -2386,6 +2689,10 @@ Candidate data:
 
 
 def build_hospital_recommendations(monthly_data: dict, profile: dict, locale: str, config: Optional[dict] = None) -> tuple[List[dict], str]:
+    primary_condition = monthly_data.get("primary_condition")
+    if is_lifestyle_mode(primary_condition, monthly_data.get("population_branch")):
+        return [], "local"
+
     residence = monthly_data.get("residence", {}) or {}
     residence_text = residence.get("display_name", "")
     residence_label = residence.get("city") or residence_text
@@ -2416,7 +2723,6 @@ def build_hospital_recommendations(monthly_data: dict, profile: dict, locale: st
         },
     }
 
-    primary_condition = monthly_data.get("primary_condition")
     meta = condition_queries.get(primary_condition, next(iter(condition_queries.values())))
     fallback = build_local_rule_hospital_recommendations(residence_label, residence_text, primary_condition, meta["department"], locale)
     if resolve_locale(locale=locale) == "ja-JP" and fallback:
@@ -2470,6 +2776,7 @@ def build_hospital_recommendations(monthly_data: dict, profile: dict, locale: st
 
 def build_monthly_fallback_review(monthly_data: dict, profile: dict, locale: str, config: Optional[dict] = None) -> tuple[str, str]:
     macro_scores = monthly_data.get("macro_scores", {})
+    primary_condition = monthly_data.get("primary_condition")
     is_ja = resolve_locale(locale=locale) == "ja-JP"
     low_dims = [
         label
@@ -2488,6 +2795,144 @@ def build_monthly_fallback_review(monthly_data: dict, profile: dict, locale: str
         if resolve_locale(locale=locale) == "zh-CN"
         else "、".join(f"{label} {count}回" for label, count in top_symptoms) if is_ja else ", ".join(f"{label} {count}x" for label, count in top_symptoms)
     )
+
+    if is_lifestyle_mode(primary_condition, monthly_data.get("population_branch")):
+        weakest_text = "、".join(low_dims) if resolve_locale(locale=locale) in {"zh-CN", "ja-JP"} else ", ".join(low_dims)
+        findings = localize_three(
+            locale,
+            f"本月平均综合评分约 {monthly_data.get('avg_total_score', 0):.1f}/100，月均热量 {monthly_data.get('avg_calories', 0):.0f} kcal、饮水 {monthly_data.get('avg_water', 0):.0f} ml、步数 {monthly_data.get('avg_steps', 0):.0f} 步。"
+            + (
+                f" 体重月内变化 {monthly_data.get('weight_change', 0):.2f}kg。"
+                if monthly_data.get("latest_weight") is not None
+                else ""
+            ),
+            f"The average overall score was about {monthly_data.get('avg_total_score', 0):.1f}/100, with roughly {monthly_data.get('avg_calories', 0):.0f} kcal, {monthly_data.get('avg_water', 0):.0f} ml hydration, and {monthly_data.get('avg_steps', 0):.0f} steps per day."
+            + (
+                f" Weight changed by {monthly_data.get('weight_change', 0):.2f} kg across the month."
+                if monthly_data.get("latest_weight") is not None
+                else ""
+            ),
+            f"今月の平均総合スコアは約 {monthly_data.get('avg_total_score', 0):.1f}/100 で、平均摂取量は {monthly_data.get('avg_calories', 0):.0f} kcal、平均飲水量は {monthly_data.get('avg_water', 0):.0f} ml、平均歩数は {monthly_data.get('avg_steps', 0):.0f} 歩でした。"
+            + (
+                f" 体重変化は月内で {monthly_data.get('weight_change', 0):.2f} kg です。"
+                if monthly_data.get("latest_weight") is not None
+                else ""
+            ),
+        )
+
+        watch_parts = []
+        if weakest_text:
+            watch_parts.append(
+                localize_three(
+                    locale,
+                    f"当前最弱的执行维度是：{weakest_text}。",
+                    f"The weakest execution dimensions right now are: {weakest_text}.",
+                    f"現在もっとも弱い実行項目は {weakest_text} です。",
+                )
+            )
+        if monthly_data.get("valid_weight_days", 0) < max(4, monthly_data.get("observed_days", 0) // 4):
+            watch_parts.append(
+                localize_three(
+                    locale,
+                    "体重与体脂记录密度偏低，趋势判断容易被偶然波动放大。",
+                    "Weight and body-fat logging are still sparse, so trends may be distorted by one-off fluctuations.",
+                    "体重と体脂率の記録密度が低く、単発の変動に引っ張られやすい状態です。",
+                )
+            )
+        if str(primary_condition) == "fat_loss":
+            if float(monthly_data.get("weight_change", 0) or 0) >= 0:
+                watch_parts.append(
+                    localize_three(
+                        locale,
+                        "减脂模式下体重没有形成稳定下行，说明热量缺口、训练负荷或作息恢复至少有一项还不够稳定。",
+                        "In fat-loss mode the trend is not yet moving down consistently, which usually means the calorie deficit, training load, or recovery routine is still unstable.",
+                        "減脂モードで体重が安定して下がっていないため、赤字設定・運動負荷・回復習慣のどれかがまだ不安定です。",
+                    )
+                )
+            elif abs(float(monthly_data.get("weight_change", 0) or 0)) > 2.5:
+                watch_parts.append(
+                    localize_three(
+                        locale,
+                        "本月下降速度偏快，除了继续关注体脂，也要警惕恢复不足和瘦体重流失。",
+                        "The rate of loss was relatively fast this month, so body-fat progress should be tracked together with recovery quality and lean-mass protection.",
+                        "今月は減少ペースがやや速く、体脂肪だけでなく回復不足や除脂肪体重の低下にも注意が必要です。",
+                    )
+                )
+        elif symptom_text:
+            watch_parts.append(
+                localize_three(
+                    locale,
+                    f"本月也出现过不适记录，主要集中在：{symptom_text}。",
+                    f"There were still some discomfort entries this month, mainly: {symptom_text}.",
+                    f"今月は不調記録もあり、主な内容は {symptom_text} でした。",
+                )
+            )
+        if not watch_parts:
+            watch_parts.append(
+                localize_three(
+                    locale,
+                    "整体执行面比较平稳，但作息规律、三大营养素比例和训练结构仍值得持续微调。",
+                    "Execution was broadly steady overall, but sleep timing, macro balance, and training structure still deserve fine-tuning.",
+                    "全体としては安定していますが、睡眠リズム・三大栄養素の配分・運動構成は引き続き微調整する価値があります。",
+                )
+            )
+
+        current_weight = float(monthly_data.get("latest_weight") or monthly_data.get("avg_weight") or profile.get("current_weight_kg") or 60)
+        protein_target = max(90, int(round(current_weight * (1.6 if str(primary_condition) == "fat_loss" else 1.3))))
+        water_target = int(profile.get("water_target_ml", 2000) or 2000)
+        plan = "\n".join(
+            [
+                localize_three(
+                    locale,
+                    f"1. 饮食宏观结构微调：把蛋白质稳定到每天约 {protein_target}g，控制工作日与周末之间的热量波动，并优先保证蔬菜、全谷物和优质脂肪的稳定出现。",
+                    f"1. Macro adjustment: keep protein near {protein_target}g per day, reduce weekday-versus-weekend calorie swings, and keep vegetables, whole grains, and quality fats consistently present.",
+                    f"1. 食事マクロ調整：たんぱく質を 1 日 {protein_target}g 前後で安定させ、平日と週末のカロリー差を抑えつつ、野菜・全粒穀物・良質な脂質を欠かさないようにします。",
+                ),
+                localize_three(
+                    locale,
+                    "2. 运动负荷建议：把有氧与力量训练分开规划，优先保证每周 2-3 次力量训练，再用步数或骑行去补足基础活动量。",
+                    "2. Training load: plan cardio and resistance work separately, protect 2-3 strength sessions per week first, and use steps or cycling to fill the aerobic base.",
+                    "2. 運動負荷の提案：有酸素運動と筋力トレーニングを分けて設計し、まず週 2〜3 回の筋トレを確保したうえで、歩数やサイクリングで基礎活動量を補います。",
+                ),
+                localize_three(
+                    locale,
+                    f"3. 作息与补剂建议：优先把睡眠、进餐时间和饮水节奏稳定下来，饮水目标至少维持在 {water_target}ml；若训练量偏高，再结合日常饮食评估 Omega-3、维生素 D 或电解质是否需要补充。",
+                    f"3. Recovery and supplements: stabilize sleep, meal timing, and hydration first, keeping at least {water_target} ml of fluid daily; only then review whether omega-3, vitamin D, or electrolytes make sense for your routine.",
+                    f"3. 生活リズムと補助提案：まず睡眠・食事時間・飲水リズムを安定させ、飲水量は少なくとも {water_target} ml を目安に保ちます。そのうえで、運動量が高い場合のみ Omega-3・ビタミンD・電解質の補助を検討します。",
+                ),
+            ]
+        )
+
+        source = "fallback"
+        if has_tavily_api_key(config):
+            query = localize_three(
+                locale,
+                f"{monthly_data.get('condition_text')} 月度健康复盘 饮食 运动 睡眠 体脂 管理建议",
+                f"{monthly_data.get('condition_text')} monthly health review diet exercise sleep body fat management advice",
+                f"{monthly_data.get('condition_text')} 月次レビュー 食事 運動 睡眠 体脂肪 管理アドバイス",
+            )
+            search_results = tavily_search(query, max_results=2, config=config)
+            snippets = []
+            for result in search_results:
+                content = clean_search_excerpt(str(result.get("content", "") or ""), locale, max_length=140)
+                if content:
+                    snippets.append(content)
+            if snippets:
+                plan = f"{plan}\n{localize_three(locale, f'参考观点：{snippets[0]}', f'Reference note: {snippets[0]}', f'参考メモ：{snippets[0]}')}"
+                source = "fallback_tavily"
+
+        blueprint = get_monthly_review_blueprint(primary_condition, monthly_data.get("population_branch"))
+        return (
+            format_monthly_review_sections(
+                locale,
+                [
+                    {**blueprint[0], "body": findings},
+                    {**blueprint[1], "body": " ".join(watch_parts)},
+                    {**blueprint[2], "body": plan},
+                ],
+            ),
+            source,
+        )
 
     findings = (
         f"今月は {monthly_data.get('condition_text')} を中心に管理し、月平均総合評価は {monthly_data.get('avg_total_score', 0):.1f}/100 でした。"
@@ -2591,7 +3036,89 @@ def build_monthly_fallback_review(monthly_data: dict, profile: dict, locale: str
 
 
 def get_ai_monthly_review(monthly_data: dict, profile: dict, config: dict, locale: str) -> tuple[str, str]:
-    if resolve_locale(locale=locale) == "ja-JP":
+    primary_condition = monthly_data.get("primary_condition")
+    if is_lifestyle_mode(primary_condition, monthly_data.get("population_branch")):
+        if resolve_locale(locale=locale) == "ja-JP":
+            prompt = f"""次の 30 日分の健康データをもとに、生活習慣レビューを作成してください。余計な前置きは禁止です。以下の見出しをこの順番でそのまま使ってください。
+**【核心发现】**
+2-3 文で、今月の全体傾向・実行度・体重または体脂肪の方向性を要約する。
+
+**【体态与习惯预警】**
+2 文で、睡眠・食事バランス・運動構成・記録不足など、来月に持ち越したくない注意点を書く。
+
+**【次月高阶干预清单】**
+以下の 3 行を必ず含めること。各行は具体的な行動にする。
+1. 饮食宏观结构微调：
+2. 运动负荷建议：
+3. 作息与补剂建议：
+
+ユーザー: {profile.get('name', 'User')}
+主目標: {monthly_data.get('condition_text')}
+月平均総合スコア: {monthly_data.get('avg_total_score', 0):.1f}
+達成率: {json.dumps(monthly_data.get('macro_scores', {}), ensure_ascii=False)}
+月平均カロリー: {monthly_data.get('avg_calories', 0):.0f} kcal
+月平均飲水量: {monthly_data.get('avg_water', 0):.0f} ml
+月平均歩数: {monthly_data.get('avg_steps', 0):.0f}
+体重変化: {monthly_data.get('weight_change', 0):.2f} kg
+平均体脂率: {monthly_data.get('avg_body_fat_percent', 0):.1f}%
+症状日数: {monthly_data.get('symptom_days', 0)}
+ハイライト: {" | ".join(monthly_data.get('macro_highlights', []))}
+"""
+        else:
+            prompt = localize(
+                locale,
+                f"""请基于最近 30 天的数据，输出一份生活方式导向的月度复盘，不要写任何额外开场白，且必须严格使用以下结构：
+**【核心发现】**
+2-3 句，总结本月整体趋势、依从性，以及体重/体脂方向。
+
+**【体态与习惯预警】**
+2 句，指出睡眠、三大营养素、训练结构、记录密度等最需要警惕的问题。
+
+**【次月高阶干预清单】**
+必须包含下面 3 行，并给出非常具体的行动点：
+1. 饮食宏观结构微调：
+2. 运动负荷建议：
+3. 作息与补剂建议：
+
+用户：{profile.get('name', '用户')}
+主目标：{monthly_data.get('condition_text')}
+月均综合评分：{monthly_data.get('avg_total_score', 0):.1f}
+达标率：{json.dumps(monthly_data.get('macro_scores', {}), ensure_ascii=False)}
+月均热量：{monthly_data.get('avg_calories', 0):.0f} kcal
+月均饮水：{monthly_data.get('avg_water', 0):.0f} ml
+月均步数：{monthly_data.get('avg_steps', 0):.0f}
+体重变化：{monthly_data.get('weight_change', 0):.2f} kg
+平均体脂率：{monthly_data.get('avg_body_fat_percent', 0):.1f}%
+症状天数：{monthly_data.get('symptom_days', 0)}
+亮点：{" | ".join(monthly_data.get('macro_highlights', []))}
+""",
+                f"""Write a lifestyle-oriented monthly review from the last 30 days with no extra introduction and keep this exact structure:
+**[Core Findings]**
+2-3 sentences summarizing overall trend, adherence, and body-composition direction.
+
+**[Body Composition & Habit Watch]**
+2 sentences on the biggest warnings around sleep, macro balance, training structure, or missing logs.
+
+**[Advanced Next-Month Checklist]**
+You must include the following three lines with concrete actions:
+1. Macro adjustment:
+2. Training load:
+3. Recovery and supplements:
+
+User: {profile.get('name', 'User')}
+Primary goal: {monthly_data.get('condition_text')}
+Average overall score: {monthly_data.get('avg_total_score', 0):.1f}
+Goal rates: {json.dumps(monthly_data.get('macro_scores', {}), ensure_ascii=False)}
+Average calories: {monthly_data.get('avg_calories', 0):.0f} kcal
+Average hydration: {monthly_data.get('avg_water', 0):.0f} ml
+Average steps: {monthly_data.get('avg_steps', 0):.0f}
+Weight change: {monthly_data.get('weight_change', 0):.2f} kg
+Average body fat: {monthly_data.get('avg_body_fat_percent', 0):.1f}%
+Symptom days: {monthly_data.get('symptom_days', 0)}
+Highlights: {" | ".join(monthly_data.get('macro_highlights', []))}
+""",
+            )
+    elif resolve_locale(locale=locale) == "ja-JP":
         prompt = f"""以下の 30 日分の健康データをもとに、月次の病状レビューを約 260-320 文字で作成してください。余計な前置きは不要で、必ず次の構成を守ってください。
 **【主要な所見】**
 2-3 文で、今月の全体状態、遵守状況、主要トレンドを要約する。
@@ -2672,9 +3199,17 @@ Return the review with those exact three section headings.""",
     output = run_local_llm(
         prompt=prompt,
         system_prompt=(
-            "あなたは慎重で専門的な健康データ分析者です。"
-            if resolve_locale(locale=locale) == "ja-JP"
-            else localize(locale, "你是一位谨慎、专业的健康数据分析师。", "You are a careful and professional health data analyst.")
+            (
+                "あなたは生活習慣データを整理する慎重な健康アナリストです。見出し構造を厳守し、余計な導入は書かないでください。"
+                if is_lifestyle_mode(primary_condition, monthly_data.get("population_branch")) and resolve_locale(locale=locale) == "ja-JP"
+                else "あなたは慎重で専門的な健康データ分析者です。"
+                if resolve_locale(locale=locale) == "ja-JP"
+                else localize(
+                    locale,
+                    "你是一位严谨的健康数据分析师。请严格遵守指定结构，不要输出额外寒暄。",
+                    "You are a careful and professional health data analyst. Follow the requested structure exactly and do not add small talk.",
+                )
+            )
         ),
         settings=get_generation_settings(config, "expert_commentary"),
         locale=locale,
@@ -2682,7 +3217,7 @@ Return the review with those exact three section headings.""",
         failure_key="weekly_ai_failed",
     )
     if output and len(output.strip()) > 60:
-        return ensure_monthly_review_sections(output.strip(), monthly_data, locale), "llm"
+        return ensure_monthly_review_sections(output.strip(), monthly_data, locale, primary_condition=primary_condition), "llm"
     return build_monthly_fallback_review(monthly_data, profile, locale, config=config)
 
 
@@ -2704,6 +3239,14 @@ def build_custom_monitoring_summary(monthly_data: dict, locale: str) -> List[dic
 def generate_monthly_text_report(monthly_data: dict, profile: dict, ai_review: str, locale: str, review_source: str, recommendation_source: str) -> str:
     def section(title: str, icon: str) -> str:
         return f"{icon} {title}"
+
+    primary_condition = monthly_data.get("primary_condition")
+    population_branch = monthly_data.get("population_branch")
+    lifestyle_mode = is_lifestyle_mode(primary_condition, population_branch)
+    deep_dive_title = monthly_section_label(locale, primary_condition, "deep_dive", population_branch)
+    ai_review_title = monthly_section_label(locale, primary_condition, "ai_review", population_branch)
+    follow_up_title = monthly_section_label(locale, primary_condition, "follow_up", population_branch)
+    hospital_title = monthly_section_label(locale, primary_condition, "hospital", population_branch)
 
     profile_lines = [
         f"- 👤 {localize(locale, '姓名', 'Name')}: {profile.get('name', '-')}",
@@ -2765,20 +3308,25 @@ def generate_monthly_text_report(monthly_data: dict, profile: dict, ai_review: s
         f"### {section(localize(locale, '本月亮点', 'Highlights'), '✨')}",
         *[f"- 🌟 {item}" for item in monthly_data.get("macro_highlights", [])],
         "",
-        f"### {section(localize(locale, '专项趋势', 'Specialty Trends'), '📈')}",
+        f"### {section(deep_dive_title, '📈')}",
         *(specialty_lines or [f"- 📉 {localize(locale, '当前专项图表数据仍不足，后续可通过血压/血糖/体脂/生化模块自动补齐。', 'Specialty chart data are still limited this month. Blood pressure, glucose, body-fat, and lab modules will automatically enrich future reports.')}"]),
         "",
-        f"### {section(localize(locale, 'AI 月度病情研判', 'AI Monthly Review'), '🧠')}",
+        f"### {section(ai_review_title, '🧠')}",
         ai_review.strip(),
         f"_{generation_source_label(locale, review_source)}_",
         "",
-        f"### {section(localize(locale, '复查提醒', 'Follow-up Reminders'), '📌')}",
+        f"### {section(follow_up_title, '📌')}",
         *(followup_lines or [f"- 📭 {localize(locale, '当前没有额外复查提醒。', 'There are no extra follow-up reminders for now.')}"]),
-        "",
-        f"### {section(localize(locale, '医院与门诊建议', 'Hospital and Clinic Suggestions'), '🏥')}",
-        *(recommendation_lines or [f"- 📍 {localize(locale, '请先在 user_config.json 中补充常居地后再生成更具体的医院推荐。', 'Add residence details to user_config.json to unlock more specific hospital recommendations.')}"]),
-        f"_{generation_source_label(locale, recommendation_source)}_",
     ]
+    if not lifestyle_mode:
+        lines.extend(
+            [
+                "",
+                f"### {section(hospital_title, '🏥')}",
+                *(recommendation_lines or [f"- 📍 {localize(locale, '请先在 user_config.json 中补充常居地后再生成更具体的医院推荐。', 'Add residence details to user_config.json to unlock more specific hospital recommendations.')}"]),
+                f"_{generation_source_label(locale, recommendation_source)}_",
+            ]
+        )
     render_notice = str(monthly_data.get("render_notice") or "").strip()
     if render_notice:
         lines.extend(["", f"### {section(localize(locale, '渲染说明', 'Rendering Notice'), 'ℹ️')}", render_notice])

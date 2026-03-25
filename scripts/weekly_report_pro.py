@@ -7,6 +7,7 @@ import re
 import shutil
 import sys
 from datetime import datetime, timedelta
+from pathlib import Path
 
 
 def console_print(*args, sep=" ", end="\n", file=sys.stdout, flush=False):
@@ -39,6 +40,7 @@ from daily_report_pro import (
     get_condition_standards,
     get_conditions_display_name,
     get_generation_settings,
+    get_population_branch,
     get_primary_condition,
     get_profile_conditions,
     get_scoring_modules,
@@ -105,6 +107,55 @@ def normalize_name(value):
 def should_ignore_custom_section(title):
     normalized = normalize_name(title)
     return any(normalize_name(hint) in normalized for hint in CUSTOM_SECTION_IGNORE_HINTS if hint)
+
+
+def section_matches(title, aliases):
+    normalized_title = normalize_name(title)
+    return any(normalize_name(alias) in normalized_title for alias in aliases if alias)
+
+
+def read_text(file_path):
+    try:
+        return Path(file_path).read_text(encoding="utf-8")
+    except OSError:
+        return ""
+
+
+def extract_structured_metrics(file_path, daily_data):
+    content = read_text(file_path)
+    custom_sections = daily_data.get("custom_sections", {})
+    metrics = {
+        "body_fat_percent": None,
+        "blood_pressure": [],
+    }
+
+    body_fat_match = re.search(r"(?:体脂率|body\s*fat(?:\s*percentage)?)\s*[:：]\s*(\d+(?:\.\d+)?)\s*%", content, re.IGNORECASE)
+    if body_fat_match:
+        metrics["body_fat_percent"] = float(body_fat_match.group(1))
+
+    bp_aliases = ["血压", "blood pressure", "bp"]
+    bodyfat_aliases = ["体脂", "body fat", "body composition", "身体成分"]
+    for header, items in custom_sections.items():
+        if should_ignore_custom_section(header):
+            continue
+        if section_matches(header, bp_aliases):
+            for item in items:
+                bp_match = re.search(r"(\d{2,3})\s*/\s*(\d{2,3})\s*(?:mmhg)?", str(item), re.IGNORECASE)
+                if not bp_match:
+                    continue
+                metrics["blood_pressure"].append(
+                    {
+                        "raw": item,
+                        "systolic": int(bp_match.group(1)),
+                        "diastolic": int(bp_match.group(2)),
+                    }
+                )
+        elif section_matches(header, bodyfat_aliases):
+            for item in items:
+                bodyfat_match = re.search(r"(?:体脂率|body\s*fat(?:\s*percentage)?)\s*[:：]?\s*(\d+(?:\.\d+)?)\s*%", str(item), re.IGNORECASE)
+                if bodyfat_match:
+                    metrics["body_fat_percent"] = float(bodyfat_match.group(1))
+    return metrics
 
 
 def safe_average(values):
@@ -446,6 +497,7 @@ def aggregate_weekly_data(week_dates, config, locale=None, memory_dir=None):
         "medication_days": 0,
         "monitoring_days": 0,
         "medication_enabled": medication_enabled,
+        "population_branch": get_population_branch(config=config, user_profile=profile, primary_condition=primary_condition),
     }
 
     first_weight = None
@@ -471,13 +523,18 @@ def aggregate_weekly_data(week_dates, config, locale=None, memory_dir=None):
                 stats["days_recorded"] += 1
                 stats["items"] += len(items)
 
+        structured = extract_structured_metrics(file_path, daily_data)
         score_report = build_score_report(daily_data, config)
         water_total = int(daily_data.get("water_total", 0) or 0)
         steps = int(daily_data.get("steps", 0) or 0)
+        exercise_calories = sum(float(item.get("calories", 0) or 0) for item in daily_data.get("exercise_records", []))
         symptom_keywords = daily_data.get("symptom_keywords", [])
         medication_records = daily_data.get("medication_records", [])
         weight_value = daily_data.get("weight_morning")
-        monitoring_present = bool(weight_value is not None or filtered_custom_sections)
+        body_fat_percent = structured.get("body_fat_percent")
+        bp_readings = structured.get("blood_pressure", [])
+        bp_peak_systolic = max((item.get("systolic", 0) for item in bp_readings), default=None)
+        monitoring_present = any([weight_value is not None, body_fat_percent is not None, bool(filtered_custom_sections), bool(bp_readings)])
         has_data = any([
             bool(daily_data.get("meals")),
             bool(daily_data.get("water_records")),
@@ -536,10 +593,17 @@ def aggregate_weekly_data(week_dates, config, locale=None, memory_dir=None):
             "water_total": water_total,
             "steps": steps,
             "calories": daily_data.get("total_calories", 0),
+            "exercise_calories": exercise_calories,
+            "exercise_count": len(daily_data.get("exercise_records", [])),
+            "fat": daily_data.get("total_fat", 0),
+            "protein": daily_data.get("total_protein", 0),
+            "carb": daily_data.get("total_carb", 0),
             "weight": weight_value,
+            "body_fat_percent": body_fat_percent,
             "symptom_count": len(symptom_keywords),
             "medication_count": len(medication_records),
-            "monitoring_count": sum(len(items) for items in filtered_custom_sections.values()) + (1 if weight_value is not None else 0),
+            "monitoring_count": sum(len(items) for items in filtered_custom_sections.values()) + (1 if weight_value is not None else 0) + len(bp_readings),
+            "bp_peak_systolic": bp_peak_systolic,
         })
 
     divisor = max(1, weekly_data["observed_days"])

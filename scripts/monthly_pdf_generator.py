@@ -76,6 +76,51 @@ def source_text(locale: str, source: str) -> str:
     return labels.get(source or "fallback", labels["fallback"])
 
 
+def localize_three(locale: str, zh_text: str, en_text: str, ja_text: Optional[str] = None) -> str:
+    resolved = resolve_locale(locale=locale)
+    if resolved == "zh-CN":
+        return zh_text
+    if resolved == "ja-JP" and ja_text is not None:
+        return ja_text
+    return en_text
+
+
+def is_lifestyle_mode(primary_condition: Optional[str], population_branch: Optional[str] = None) -> bool:
+    normalized_branch = str(population_branch or "").strip().lower()
+    if normalized_branch in {"lifestyle", "disease"}:
+        return normalized_branch == "lifestyle"
+    return str(primary_condition or "").strip() in {"balanced", "fat_loss"}
+
+
+def monthly_section_label(locale: str, primary_condition: Optional[str], key: str, population_branch: Optional[str] = None) -> str:
+    lifestyle_mode = is_lifestyle_mode(primary_condition, population_branch)
+    mappings = {
+        "deep_dive": (
+            ("核心体征与习惯洞察", "Core Vitals & Habit Insights", "コア指標と習慣インサイト"),
+            ("专科病理深度对齐", "Specialty Deep Dive", "病態別ディープダイブ"),
+        ),
+        "action_plan": (
+            ("月度健康复盘与行动策略", "Monthly Review & Action Strategy", "月次レビューと行動戦略"),
+            ("专家会诊与医疗规划", "Medical Action Plan", "医療アクションプラン"),
+        ),
+        "ai_review": (
+            ("AI 综合健康研判", "AI Comprehensive Assessment", "AI 総合ヘルス評価"),
+            ("AI 月度病情研判", "AI Monthly Review", "AI 月次レビュー"),
+        ),
+        "follow_up": (
+            ("周期性体测与筛查建议", "Periodic Screening Suggestions", "定期スクリーニング提案"),
+            ("复查提醒", "Follow-up Reminders", "フォローアップ提案"),
+        ),
+        "hospital": (
+            ("医院与门诊建议", "Hospital and Clinic Suggestions", "病院・外来提案"),
+            ("医院与门诊建议", "Hospital and Clinic Suggestions", "病院・外来提案"),
+        ),
+    }
+    lifestyle_titles, default_titles = mappings[key]
+    chosen = lifestyle_titles if lifestyle_mode else default_titles
+    return localize_three(locale, *chosen)
+
+
 def _save_figure(fig) -> Optional[str]:
     temp_img = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
     fig.savefig(temp_img.name, transparent=True, dpi=220, bbox_inches="tight")
@@ -305,6 +350,124 @@ def create_symptom_heatmap(daily_records: List[dict], locale: str, min_weeks: in
         return None
 
 
+def create_activity_heatmap(
+    daily_records: List[dict],
+    locale: str,
+    step_target: int = 8000,
+    min_weeks: int = 4,
+) -> Optional[str]:
+    if not MATPLOTLIB_AVAILABLE or not daily_records:
+        return None
+
+    try:
+        font_prop = get_font_prop(locale)
+        valid_records = [record for record in daily_records if record.get("date")]
+        if not valid_records:
+            return None
+
+        import datetime as _dt
+
+        start_date = _dt.datetime.strptime(valid_records[0]["date"], "%Y-%m-%d").date()
+        end_date = _dt.datetime.strptime(valid_records[-1]["date"], "%Y-%m-%d").date()
+        total_days = (end_date - start_date).days + 1
+        weeks = max(min_weeks, math.ceil((start_date.weekday() + total_days) / 7))
+        matrix = np.full((7, weeks), -1, dtype=int)
+        day_numbers = {}
+        target = max(1, int(step_target or 8000))
+
+        for record in valid_records:
+            current = _dt.datetime.strptime(record["date"], "%Y-%m-%d").date()
+            offset = (current - start_date).days + start_date.weekday()
+            row = current.weekday()
+            col = offset // 7
+
+            steps = int(record.get("steps", 0) or 0)
+            exercise_calories = float(record.get("exercise_calories", 0) or 0)
+            exercise_count = int(record.get("exercise_count", 0) or 0)
+            has_data = bool(record.get("has_data"))
+
+            if not has_data:
+                state = 0
+            elif steps >= max(int(target * 1.5), target + 4000) or exercise_calories >= 450:
+                state = 3
+            elif steps >= target or exercise_count > 0 or exercise_calories >= 150:
+                state = 2
+            elif steps >= int(target * 0.5) or exercise_calories >= 60:
+                state = 1
+            else:
+                state = 0
+
+            matrix[row, col] = state
+            day_numbers[(row, col)] = current.day
+
+        cmap = plt.matplotlib.colors.ListedColormap(
+            [C_BG_SOFT, C_EMPTY, "#BBF7D0", C_SUCCESS, "#166534"]
+        )
+        norm = plt.matplotlib.colors.BoundaryNorm([-1.5, -0.5, 0.5, 1.5, 2.5, 3.5], cmap.N)
+
+        fig, ax = plt.subplots(figsize=(max(8.8, weeks * 1.6), 3.45))
+        fig.patch.set_alpha(0)
+        ax.imshow(matrix, cmap=cmap, norm=norm, aspect="equal")
+
+        weekdays = [
+            localize(locale, "周一", "Mon"),
+            localize(locale, "周二", "Tue"),
+            localize(locale, "周三", "Wed"),
+            localize(locale, "周四", "Thu"),
+            localize(locale, "周五", "Fri"),
+            localize(locale, "周六", "Sat"),
+            localize(locale, "周日", "Sun"),
+        ]
+        ax.set_yticks(range(7))
+        ax.set_yticklabels(weekdays, fontsize=8.2, color=C_TEXT_MAIN)
+        ax.set_xticks(range(weeks))
+        ax.set_xticklabels(
+            [localize(locale, f"{index + 1}周", f"W{index + 1}") for index in range(weeks)],
+            fontsize=5.8,
+            color=C_TEXT_MAIN,
+        )
+        _apply_tick_font(ax, font_prop)
+
+        ax.set_xticks(np.arange(-0.5, weeks, 1), minor=True)
+        ax.set_yticks(np.arange(-0.5, 7, 1), minor=True)
+        ax.grid(which="minor", color="white", linewidth=2)
+        ax.tick_params(which="minor", bottom=False, left=False)
+        ax.tick_params(axis="both", length=0)
+        ax.tick_params(axis="x", pad=2)
+        for spine in ax.spines.values():
+            spine.set_visible(False)
+
+        for (row, col), day_num in day_numbers.items():
+            state = matrix[row, col]
+            color = "white" if state >= 2 else C_TEXT_MAIN
+            text = ax.text(col, row, str(day_num), ha="center", va="center", fontsize=6.8, color=color)
+            _style_text(text, font_prop, color=color, fontsize=6.8)
+
+        legend_items = [
+            mpatches.Patch(color=C_EMPTY, label=localize(locale, "休息/未达标", "Rest / below target")),
+            mpatches.Patch(color="#BBF7D0", label=localize(locale, "轻度活跃", "Light activity")),
+            mpatches.Patch(color=C_SUCCESS, label=localize(locale, "完全达标", "Goal met")),
+            mpatches.Patch(color="#166534", label=localize(locale, "强化训练", "High-intensity day")),
+        ]
+        legend_kwargs = {
+            "handles": legend_items,
+            "loc": "upper center",
+            "bbox_to_anchor": (0.5, -0.2),
+            "frameon": False,
+            "ncol": 2,
+            "fontsize": 6.5,
+            "columnspacing": 1.6,
+            "handlelength": 1.2,
+        }
+        legend = ax.legend(**legend_kwargs)
+        _style_legend(legend, font_prop, fontsize=6.5)
+        fig.subplots_adjust(bottom=0.26)
+
+        return _save_figure(fig)
+    except Exception:
+        return None
+
+
 def _moving_average(values: List[Optional[float]], window: int = 3) -> List[Optional[float]]:
     smoothed = []
     for index, value in enumerate(values):
@@ -321,6 +484,13 @@ def _estimate_bmr(weight_kg: float, height_cm: float, age: float, gender: str) -
     gender_value = str(gender or "male").strip().lower()
     gender_offset = 5 if gender_value in {"male", "man", "m"} else -161
     return 10 * float(weight_kg) + 6.25 * float(height_cm) - 5 * float(age) + gender_offset
+
+
+def _estimate_activity_burn(record: dict) -> float:
+    exercise_calories = float(record.get("exercise_calories", 0) or 0)
+    steps = float(record.get("steps", 0) or 0)
+    step_burn = max(0.0, steps - 4000) * 0.03
+    return exercise_calories + step_burn
 
 
 def create_weight_bmr_trend_chart(records: List[dict], profile: dict, locale: str) -> Optional[str]:
@@ -694,6 +864,191 @@ def create_weight_bodyfat_chart(records: List[dict], locale: str) -> Optional[st
         return None
 
 
+def create_energy_deficit_chart(records: List[dict], profile: dict, locale: str, deficit_target_kcal: float = 300) -> Optional[str]:
+    if not MATPLOTLIB_AVAILABLE:
+        return None
+
+    try:
+        filtered = [record for record in records if record.get("has_data") and (record.get("calories", 0) or record.get("steps", 0) or record.get("exercise_calories", 0))]
+        if len(filtered) < 2:
+            return None
+
+        font_prop = get_font_prop(locale)
+        age = float(profile.get("age", 30) or 30)
+        height_cm = float(profile.get("height_cm", 170) or 170)
+        gender = str(profile.get("gender", "male") or "male")
+        fallback_weight = float(profile.get("current_weight_kg", 60) or 60)
+
+        labels = [record["date"][8:] for record in filtered]
+        x = np.arange(len(filtered))
+        intake = np.array([float(record.get("calories", 0) or 0) for record in filtered])
+        weights = [float(record.get("weight")) if record.get("weight") is not None else fallback_weight for record in filtered]
+        bmr = np.array([_estimate_bmr(weight, height_cm, age, gender) for weight in weights])
+        activity = np.array([_estimate_activity_burn(record) for record in filtered])
+        tdee = bmr + activity
+        intake_ceiling = max(0.0, float(np.mean(tdee)) - float(deficit_target_kcal))
+
+        fig, ax = plt.subplots(figsize=(8.2, 3.4))
+        fig.patch.set_alpha(0)
+        width = 0.38
+        intake_colors = [C_WARNING if value <= target else C_DANGER for value, target in zip(intake, tdee)]
+
+        ax.bar(x - width / 2, tdee, width=width, color=C_SUCCESS, alpha=0.85, label=localize(locale, "估算总消耗", "Estimated TDEE"))
+        ax.bar(x + width / 2, intake, width=width, color=intake_colors, alpha=0.92, label=localize(locale, "当日摄入", "Daily intake"))
+        target_line = ax.axhline(intake_ceiling, color=C_PRIMARY, linewidth=1.4, linestyle="--", alpha=0.85)
+
+        ylabel = ax.set_ylabel("kcal", color=C_TEXT_MAIN)
+        tick_step = max(1, math.ceil(len(labels) / 7))
+        ax.set_xticks(x[::tick_step])
+        ax.set_xticklabels([labels[index] for index in range(0, len(labels), tick_step)], color=C_TEXT_MUTED, fontsize=8)
+        ax.tick_params(axis="x", colors=C_TEXT_MUTED, labelsize=8)
+        ax.tick_params(axis="y", colors=C_TEXT_MAIN, labelsize=8)
+        ax.grid(axis="y", color=C_GRID, linestyle="--", alpha=0.45)
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+        ax.spines["left"].set_color(C_BORDER)
+        ax.spines["bottom"].set_color(C_BORDER)
+        _apply_tick_font(ax, font_prop)
+        _style_text(ylabel, font_prop, color=C_TEXT_MAIN)
+
+        legend = ax.legend(
+            handles=[
+                mpatches.Patch(color=C_SUCCESS, label=localize(locale, "估算总消耗", "Estimated TDEE")),
+                mpatches.Patch(color=C_WARNING, label=localize(locale, "摄入达标", "Intake within target")),
+                mpatches.Patch(color=C_DANGER, label=localize(locale, "摄入偏高", "Intake above target")),
+                target_line,
+            ],
+            labels=[
+                localize(locale, "估算总消耗", "Estimated TDEE"),
+                localize(locale, "摄入达标", "Intake within target"),
+                localize(locale, "摄入偏高", "Intake above target"),
+                localize(locale, "建议目标线", "Suggested intake line"),
+            ],
+            loc="upper right",
+            frameon=False,
+            fontsize=7.8,
+        )
+        _style_legend(legend, font_prop, fontsize=7.8)
+
+        return _save_figure(fig)
+    except Exception:
+        return None
+
+
+def create_weekly_progression_bars(records: List[dict], locale: str) -> Optional[str]:
+    if not MATPLOTLIB_AVAILABLE:
+        return None
+
+    try:
+        filtered = [record for record in records if record.get("has_data")]
+        if len(filtered) < 4:
+            return None
+
+        font_prop = get_font_prop(locale)
+        week_slices = [filtered[0:7], filtered[7:14], filtered[14:21], filtered[21:]]
+        labels = ["W1", "W2", "W3", "W4"]
+
+        def average(bucket: List[dict], key: str) -> float:
+            values = [float(item.get(key, 0) or 0) for item in bucket if item]
+            return sum(values) / len(values) if values else 0.0
+
+        steps = [average(bucket, "steps") for bucket in week_slices]
+        water = [average(bucket, "water_total") for bucket in week_slices]
+        calories = [average(bucket, "calories") for bucket in week_slices]
+
+        fig, axes = plt.subplots(1, 3, figsize=(9.4, 3.2))
+        fig.patch.set_alpha(0)
+        plots = [
+            (axes[0], steps, C_PRIMARY, localize(locale, "日均步数", "Avg steps"), ""),
+            (axes[1], water, C_SUCCESS, localize(locale, "日均饮水", "Avg hydration"), "ml"),
+            (axes[2], calories, C_WARNING, localize(locale, "日均热量", "Avg calories"), "kcal"),
+        ]
+
+        for ax, values, color, title, unit in plots:
+            bars = ax.bar(labels, values, color=color, alpha=0.88, width=0.6)
+            ax.set_title(title, color=C_TEXT_MAIN, fontsize=9.6)
+            ax.grid(axis="y", color=C_GRID, linestyle="--", alpha=0.38)
+            ax.spines["top"].set_visible(False)
+            ax.spines["right"].set_visible(False)
+            ax.spines["left"].set_color(C_BORDER)
+            ax.spines["bottom"].set_color(C_BORDER)
+            ax.tick_params(axis="x", colors=C_TEXT_MUTED, labelsize=8)
+            ax.tick_params(axis="y", colors=C_TEXT_MAIN, labelsize=7.8)
+            _apply_tick_font(ax, font_prop)
+            _style_text(ax.title, font_prop, color=C_TEXT_MAIN, fontsize=9.6)
+            ymax = max(values) if values else 0
+            ax.set_ylim(0, max(1, ymax * 1.25))
+            for bar, value in zip(bars, values):
+                label = f"{int(round(value))}{unit}" if unit else f"{int(round(value))}"
+                text = ax.text(
+                    bar.get_x() + bar.get_width() / 2,
+                    bar.get_height() + max(1, ymax * 0.04),
+                    label,
+                    ha="center",
+                    va="bottom",
+                    fontsize=7.2,
+                    color=C_TEXT_MAIN,
+                )
+                _style_text(text, font_prop, color=C_TEXT_MAIN, fontsize=7.2)
+
+        plt.tight_layout(w_pad=1.4)
+        return _save_figure(fig)
+    except Exception:
+        return None
+
+
+def create_body_composition_area_chart(records: List[dict], locale: str) -> Optional[str]:
+    if not MATPLOTLIB_AVAILABLE:
+        return None
+
+    try:
+        filtered = [
+            record
+            for record in records
+            if record.get("weight") is not None and record.get("body_fat_percent") is not None
+        ]
+        if len(filtered) < 2:
+            return None
+
+        font_prop = get_font_prop(locale)
+        labels = [record["date"][8:] for record in filtered]
+        x = np.arange(len(filtered))
+        weights = np.array([float(record.get("weight", 0) or 0) for record in filtered])
+        bodyfat = np.array([float(record.get("body_fat_percent", 0) or 0) for record in filtered])
+        lbm = weights * (1 - bodyfat / 100.0)
+        fat_mass = np.maximum(weights - lbm, 0)
+
+        fig, ax = plt.subplots(figsize=(8.2, 3.3))
+        fig.patch.set_alpha(0)
+        layers = ax.stackplot(x, lbm, fat_mass, colors=[C_PRIMARY, "#FDE68A"], alpha=0.92)
+
+        tick_step = max(1, math.ceil(len(labels) / 7))
+        ax.set_xticks(x[::tick_step])
+        ax.set_xticklabels([labels[index] for index in range(0, len(labels), tick_step)], color=C_TEXT_MUTED, fontsize=8)
+        ylabel = ax.set_ylabel(localize(locale, "体重组成 (kg)", "Body composition (kg)"), color=C_TEXT_MAIN)
+        ax.tick_params(axis="x", colors=C_TEXT_MUTED, labelsize=8)
+        ax.tick_params(axis="y", colors=C_TEXT_MAIN, labelsize=8)
+        ax.grid(axis="y", color=C_GRID, linestyle="--", alpha=0.45)
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+        ax.spines["left"].set_color(C_BORDER)
+        ax.spines["bottom"].set_color(C_BORDER)
+        _apply_tick_font(ax, font_prop)
+        _style_text(ylabel, font_prop, color=C_TEXT_MAIN)
+
+        legend = ax.legend(
+            layers,
+            [localize(locale, "去脂体重", "Lean mass"), localize(locale, "脂肪重量", "Fat mass")],
+            loc="upper left",
+            frameon=False,
+            fontsize=8,
+        )
+        _style_legend(legend, font_prop, fontsize=8)
+        return _save_figure(fig)
+    except Exception:
+        return None
+
+
 def create_glucose_trend_chart(glucose_records: List[dict], locale: str) -> Optional[str]:
     if not MATPLOTLIB_AVAILABLE or len(glucose_records) < 2:
         return None
@@ -802,6 +1157,14 @@ def generate_monthly_pdf_report(
     locale = resolve_locale(locale=locale)
     font_name = register_chinese_font(locale)
     render_notice = str(monthly_data.get("render_notice") or "").strip()
+    primary_condition = monthly_data.get("primary_condition")
+    population_branch = monthly_data.get("population_branch")
+    lifestyle_mode = is_lifestyle_mode(primary_condition, population_branch)
+    deep_dive_title = monthly_section_label(locale, primary_condition, "deep_dive", population_branch)
+    action_plan_title = monthly_section_label(locale, primary_condition, "action_plan", population_branch)
+    ai_review_title = monthly_section_label(locale, primary_condition, "ai_review", population_branch)
+    follow_up_title = monthly_section_label(locale, primary_condition, "follow_up", population_branch)
+    hospital_title = monthly_section_label(locale, primary_condition, "hospital", population_branch)
 
     doc = SimpleDocTemplate(
         output_path,
@@ -874,6 +1237,17 @@ def generate_monthly_pdf_report(
 
     def build_chart(chart: dict) -> Optional[str]:
         chart_type = chart.get("type")
+        if chart_type == "energy_deficit":
+            return create_energy_deficit_chart(
+                chart.get("records", []),
+                profile,
+                locale,
+                deficit_target_kcal=chart.get("deficit_target_kcal", 300),
+            )
+        if chart_type == "weekly_progression":
+            return create_weekly_progression_bars(chart.get("records", []), locale)
+        if chart_type == "body_composition_area":
+            return create_body_composition_area_chart(chart.get("records", []), locale)
         if chart_type == "gallstones":
             return create_gallstone_correlation_chart(chart.get("records", []), locale, fat_target=chart.get("fat_target"))
         if chart_type == "symptom_distribution":
@@ -899,7 +1273,14 @@ def generate_monthly_pdf_report(
         story.append(Paragraph("1. " + localize(locale, "宏观依从性与状态全景", "Macro Overview"), heading_style))
 
         radar_path = create_macro_radar_chart(monthly_data.get("macro_scores", {}), locale)
-        heatmap_path = create_symptom_heatmap(monthly_data.get("daily_records", []), locale)
+        if lifestyle_mode:
+            heatmap_path = create_activity_heatmap(
+                monthly_data.get("daily_records", []),
+                locale,
+                step_target=int(profile.get("step_target", 8000) or 8000),
+            )
+        else:
+            heatmap_path = create_symptom_heatmap(monthly_data.get("daily_records", []), locale)
         weight_trend_path = create_weight_bmr_trend_chart(monthly_data.get("daily_records", []), profile, locale)
         if radar_path:
             temp_images.append(radar_path)
@@ -920,7 +1301,13 @@ def generate_monthly_pdf_report(
         if heatmap_path:
             story.append(
                 Paragraph(
-                    localize(locale, "热力图右上角 “M” 表示该日有用药记录。", "In the heatmap, the corner marker 'M' indicates a medication day."),
+                    localize(
+                        locale,
+                        "热力图颜色越深，表示当天步数/运动完成度越高；浅灰色表示休息或未达标。",
+                        "Darker heatmap cells indicate stronger daily activity; light gray marks rest days or below-target days.",
+                    )
+                    if lifestyle_mode
+                    else localize(locale, "热力图右上角 “M” 表示该日有用药记录。", "In the heatmap, the corner marker 'M' indicates a medication day."),
                     muted_style,
                 )
             )
@@ -953,7 +1340,7 @@ def generate_monthly_pdf_report(
         add_bullet_lines(monthly_data.get("macro_highlights", []))
 
         story.append(PageBreak())
-        story.append(Paragraph("2. " + localize(locale, "专科病理深度对齐", "Specialty Deep Dive"), heading_style))
+        story.append(Paragraph("2. " + deep_dive_title, heading_style))
         specialty_charts = monthly_data.get("specialty_charts", [])
         if specialty_charts:
             for chart in specialty_charts:
@@ -1015,7 +1402,7 @@ def generate_monthly_pdf_report(
                 )
 
         story.append(PageBreak())
-        story.append(Paragraph("3. " + localize(locale, "专家会诊与医疗规划", "Medical Action Plan"), heading_style))
+        story.append(Paragraph("3. " + action_plan_title, heading_style))
 
         residence_text = clean_html_tags(monthly_data.get("residence_text") or localize(locale, "未配置常居地", "Residence not configured"))
         profile_rows = [
@@ -1030,66 +1417,67 @@ def generate_monthly_pdf_report(
         story.append(profile_table)
         story.append(Spacer(1, 0.18 * cm))
 
-        story.append(Paragraph(localize(locale, "AI 月度病情研判", "AI Monthly Review"), sub_heading_style))
+        story.append(Paragraph(ai_review_title, sub_heading_style))
         add_review_cards(ai_review)
         add_source_note(source_text(locale, review_source))
         story.append(Spacer(1, 0.18 * cm))
 
         followups = monthly_data.get("follow_up_reminders", [])
         if followups:
-            story.append(Paragraph(localize(locale, "复查提醒", "Follow-up Reminders"), sub_heading_style))
+            story.append(Paragraph(follow_up_title, sub_heading_style))
             add_bullet_lines(followups)
 
         recommendation_groups = monthly_data.get("hospital_recommendation_groups", [])
-        story.append(Paragraph(localize(locale, "医院与门诊建议", "Hospital and Clinic Suggestions"), sub_heading_style))
-        if recommendation_groups:
-            for group_index, group in enumerate(recommendation_groups):
-                hospital_title = clean_html_tags(group.get("hospital", "-"))
-                if group_index == 0:
-                    hospital_title = localize(locale, f"{hospital_title}（首推）", f"{hospital_title} (Top Choice)")
-                hospital_stars_html = stars_to_text(group.get("hospital_stars", ""))
-                story.append(Paragraph(f"<b>{hospital_title}</b> {hospital_stars_html}", card_title_style))
-                hospital_lines = [
-                    localize(locale, f"医院等级：{group.get('hospital_grade', '-')}", f"Hospital grade: {group.get('hospital_grade', '-')}"),
-                    localize(locale, f"医院优势：{group.get('hospital_strength', '-')}", f"Hospital strengths: {group.get('hospital_strength', '-')}"),
-                ]
-                if group.get("hospital_address"):
-                    hospital_lines.append(localize(locale, f"医院地址：{group.get('hospital_address')}", f"Address: {group.get('hospital_address')}"))
-                if group.get("booking_method"):
-                    hospital_lines.append(localize(locale, f"挂号方式：{group.get('booking_method')}", f"Booking: {group.get('booking_method')}"))
-                add_bullet_lines(hospital_lines)
-                for doctor in group.get("doctors", []):
-                    doctor_name = clean_html_tags(doctor.get("doctor_name", "-"))
-                    doctor_title = clean_html_tags(doctor.get("doctor_title", localize(locale, "医生", "Doctor")))
-                    doctor_stars_html = stars_to_text(doctor.get("doctor_stars", ""))
-                    doctor_heading = localize(
-                        locale,
-                        f"{doctor_name}【{doctor_title}】",
-                        f"{doctor_name} [{doctor_title}]",
-                    )
-                    story.append(Paragraph(f"<b>{doctor_heading}</b> {doctor_stars_html}", normal_style))
-                    doctor_lines = [
-                        localize(locale, f"推荐科室：{doctor.get('department', '-')}", f"Recommended department: {doctor.get('department', '-')}"),
-                        localize(locale, f"医生擅长：{doctor.get('doctor_specialty', '-')}", f"Doctor specialty: {doctor.get('doctor_specialty', '-')}"),
-                        localize(locale, f"挂号费：{doctor.get('registration_fee', '-')}", f"Registration fee: {doctor.get('registration_fee', '-')}"),
-                        localize(locale, f"坐诊时间：{doctor.get('clinic_schedule', '-')}", f"Clinic schedule: {doctor.get('clinic_schedule', '-')}"),
-                        localize(locale, f"推荐理由：{doctor.get('reason', '-')}", f"Recommendation reason: {doctor.get('reason', '-')}"),
+        if not lifestyle_mode:
+            story.append(Paragraph(hospital_title, sub_heading_style))
+            if recommendation_groups:
+                for group_index, group in enumerate(recommendation_groups):
+                    hospital_name = clean_html_tags(group.get("hospital", "-"))
+                    if group_index == 0:
+                        hospital_name = localize(locale, f"{hospital_name}（首推）", f"{hospital_name} (Top Choice)")
+                    hospital_stars_html = stars_to_text(group.get("hospital_stars", ""))
+                    story.append(Paragraph(f"<b>{hospital_name}</b> {hospital_stars_html}", card_title_style))
+                    hospital_lines = [
+                        localize(locale, f"医院等级：{group.get('hospital_grade', '-')}", f"Hospital grade: {group.get('hospital_grade', '-')}"),
+                        localize(locale, f"医院优势：{group.get('hospital_strength', '-')}", f"Hospital strengths: {group.get('hospital_strength', '-')}"),
                     ]
-                    add_bullet_lines(doctor_lines)
+                    if group.get("hospital_address"):
+                        hospital_lines.append(localize(locale, f"医院地址：{group.get('hospital_address')}", f"Address: {group.get('hospital_address')}"))
+                    if group.get("booking_method"):
+                        hospital_lines.append(localize(locale, f"挂号方式：{group.get('booking_method')}", f"Booking: {group.get('booking_method')}"))
+                    add_bullet_lines(hospital_lines)
+                    for doctor in group.get("doctors", []):
+                        doctor_name = clean_html_tags(doctor.get("doctor_name", "-"))
+                        doctor_title = clean_html_tags(doctor.get("doctor_title", localize(locale, "医生", "Doctor")))
+                        doctor_stars_html = stars_to_text(doctor.get("doctor_stars", ""))
+                        doctor_heading = localize(
+                            locale,
+                            f"{doctor_name}【{doctor_title}】",
+                            f"{doctor_name} [{doctor_title}]",
+                        )
+                        story.append(Paragraph(f"<b>{doctor_heading}</b> {doctor_stars_html}", normal_style))
+                        doctor_lines = [
+                            localize(locale, f"推荐科室：{doctor.get('department', '-')}", f"Recommended department: {doctor.get('department', '-')}"),
+                            localize(locale, f"医生擅长：{doctor.get('doctor_specialty', '-')}", f"Doctor specialty: {doctor.get('doctor_specialty', '-')}"),
+                            localize(locale, f"挂号费：{doctor.get('registration_fee', '-')}", f"Registration fee: {doctor.get('registration_fee', '-')}"),
+                            localize(locale, f"坐诊时间：{doctor.get('clinic_schedule', '-')}", f"Clinic schedule: {doctor.get('clinic_schedule', '-')}"),
+                            localize(locale, f"推荐理由：{doctor.get('reason', '-')}", f"Recommendation reason: {doctor.get('reason', '-')}"),
+                        ]
+                        add_bullet_lines(doctor_lines)
+                        story.append(Spacer(1, 0.08 * cm))
                     story.append(Spacer(1, 0.08 * cm))
-                story.append(Spacer(1, 0.08 * cm))
-        else:
-            story.append(
-                Paragraph(
-                    localize(
-                        locale,
-                        "当前没有足够的居住地或检索信息来生成医院名单。请在 user_config.json 中补充常居地后再生成月报。",
-                        "There is not enough residence or retrieval information to suggest hospitals yet. Add residence details to user_config.json and regenerate the monthly report.",
-                    ),
-                    normal_style,
+            else:
+                story.append(
+                    Paragraph(
+                        localize(
+                            locale,
+                            "当前没有足够的居住地或检索信息来生成医院名单。请在 user_config.json 中补充常居地后再生成月报。",
+                            "There is not enough residence or retrieval information to suggest hospitals yet. Add residence details to user_config.json and regenerate the monthly report.",
+                        ),
+                        normal_style,
+                    )
                 )
-            )
-        add_source_note(source_text(locale, recommendation_source))
+            add_source_note(source_text(locale, recommendation_source))
 
         story.append(Spacer(1, 0.16 * cm))
         story.append(

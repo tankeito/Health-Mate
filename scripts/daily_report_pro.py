@@ -436,14 +436,20 @@ def normalize_user_config(raw_config):
         existing = normalized_condition_standards.get(canonical_key, {})
         normalized_condition_standards[canonical_key] = deep_merge_dict(existing, value)
     merged["condition_standards"] = deep_merge_dict(base.get("condition_standards", {}), normalized_condition_standards)
-    merged["_version"] = "1.5.1"
-    merged["config_version"] = "1.5.1"
+    merged["_version"] = "1.5.2"
+    merged["config_version"] = "1.5.2"
     merged["ai_generation"] = deep_merge_dict(clone_ai_generation_defaults(), raw_config.get("ai_generation", {}))
     merged["scoring"] = {"modules": normalize_scoring_modules(raw_config, locale)}
     merged.setdefault("integrations", {"tavily_api_key": ""})
     merged["integrations"] = deep_merge_dict({"tavily_api_key": ""}, merged.get("integrations", {}))
-    merged.setdefault("report_preferences", {"append_custom_sections": True})
-    merged["report_preferences"] = deep_merge_dict({"append_custom_sections": True}, merged.get("report_preferences", {}))
+    merged.setdefault("report_preferences", {"append_custom_sections": True, "population_branch": "lifestyle"})
+    merged["report_preferences"] = deep_merge_dict(
+        {"append_custom_sections": True, "population_branch": "lifestyle"},
+        merged.get("report_preferences", {}),
+    )
+    merged["report_preferences"]["population_branch"] = normalize_population_branch(
+        merged.get("report_preferences", {}).get("population_branch")
+    ) or infer_population_branch(primary_condition)
     return merged
 
 
@@ -667,8 +673,8 @@ def prepare_font_compatible_memory(requested_locale, source_dir, default_memory_
 def _get_default_config():
     locale = "zh-CN"
     return {
-        "_version": "1.5.1",
-        "config_version": "1.5.1",
+        "_version": "1.5.2",
+        "config_version": "1.5.2",
         "language": "zh-CN",
         "user_profile": {
             "name": "Demo User",
@@ -709,7 +715,7 @@ def _get_default_config():
         "exercise_standards": {"weekly_target_minutes": 150},
         "ai_generation": clone_ai_generation_defaults(),
         "integrations": {"tavily_api_key": ""},
-        "report_preferences": {"append_custom_sections": True},
+        "report_preferences": {"append_custom_sections": True, "population_branch": "lifestyle"},
     }
 
 def get_profile_conditions(user_profile):
@@ -728,6 +734,34 @@ def get_primary_condition(user_profile):
     conditions = get_profile_conditions(user_profile)
     primary = condition_key((user_profile or {}).get("primary_condition", conditions[0])) or conditions[0]
     return primary if primary in conditions else conditions[0]
+
+
+def normalize_population_branch(value):
+    normalized = str(value or "").strip().lower().replace("-", "_")
+    if normalized in {"lifestyle", "health", "healthy", "balanced", "fat_loss", "wellness"}:
+        return "lifestyle"
+    if normalized in {"disease", "medical", "condition", "illness"}:
+        return "disease"
+    return ""
+
+
+def infer_population_branch(primary_condition=None):
+    return "lifestyle" if condition_key(primary_condition) in {"balanced", "fat_loss"} else "disease"
+
+
+def get_population_branch(config=None, user_profile=None, primary_condition=None):
+    runtime_config = config if isinstance(config, dict) else {}
+    explicit = normalize_population_branch(runtime_config.get("report_preferences", {}).get("population_branch"))
+    if explicit:
+        return explicit
+
+    profile = user_profile if isinstance(user_profile, dict) else runtime_config.get("user_profile", {})
+    resolved_primary = condition_key(primary_condition) or get_primary_condition(profile)
+    return infer_population_branch(resolved_primary)
+
+
+def is_lifestyle_branch(config=None, user_profile=None, primary_condition=None):
+    return get_population_branch(config=config, user_profile=user_profile, primary_condition=primary_condition) == "lifestyle"
 
 
 def get_conditions_display_name(locale, conditions):

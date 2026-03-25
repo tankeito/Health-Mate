@@ -6,7 +6,7 @@ English | [中文](README_ZH.md) | [日本語](README_JP.md)
 >
 > Track meals, hydration, exercise, symptoms, medication, and custom monitoring modules from local Markdown memories, then turn them into Daily, Weekly, and Monthly PDF reports with optional text push delivery.
 
-[![Version](https://img.shields.io/badge/version-1.5.1-blue.svg)](https://github.com/tankeito/Health-Mate/releases)
+[![Version](https://img.shields.io/badge/version-1.5.2-blue.svg)](https://github.com/tankeito/Health-Mate/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![OpenClaw](https://img.shields.io/badge/OpenClaw-Skill-green.svg)](https://openclaw.ai)
 
@@ -65,6 +65,7 @@ What changes by mode:
 - weekly / monthly follow-up logic
 - specialty chart selection
 - monthly clinic and hospital recommendation strategy
+- explicit report routing through `report_preferences.population_branch`
 
 ---
 
@@ -115,20 +116,22 @@ Design goals:
 ### Weekly PDF
 
 - weekly metrics overview
-- symptom and medication heatmap
-- weight, calorie, nutrition, hydration, and step trends
+- activity heatmap for `balanced` / `fat_loss`, symptom-medication heatmap for disease modes
+- paired trend charts: weight + calorie balance, steps + hydration
+- audience-specific add-on: macro-adherence bars for lifestyle mode, trigger-vs-symptom tracker for disease mode
 - strengths, attention points, and next-week focus
 - custom monitoring summary
 
 ### Monthly PDF
 
 - macro adherence radar
-- symptom and medication heatmap
+- GitHub-style activity heatmap for lifestyle mode, symptom-medication heatmap for disease mode
 - 30-day weight and BMR trend
 - condition-specific specialty charts
+- lifestyle-mode monthly charts for `balanced` / `fat_loss`: energy balance, four-week habit progression, and lean-mass vs fat-mass composition
 - AI monthly review
-- follow-up reminders
-- hospital and clinic recommendations
+- follow-up reminders or periodic screening suggestions, depending on mode
+- hospital and clinic recommendations for disease-management modes; lifestyle modes skip hospital routing
 
 Specialty chart examples:
 
@@ -174,19 +177,22 @@ pip install -r requirements.txt
 ### 2. Configure Environment Variables
 
 ClawHub manual folder upload may omit `config/.env.example`.
-Please open `config/user_config.example.json`, review the top-level `env` block, and create `config/.env` manually with the same keys.
-The runtime logic stays unchanged: the Python entry points and shell runners still read `config/.env`.
+Please open `config/user_config.example.json`, review the top-level `env` block, and use it as the upload-safe reference.
+The setup wizard now creates a commented project-local `config/.env` template when the file does not already exist, and the runtime logic stays unchanged: the Python entry points and shell runners still read `config/.env`.
 
 ```bash
-MEMORY_DIR="/absolute/path/to/health-memory"
+NVM_DIR="/root/.nvm"
+CRON_PATH="/root/.nvm/versions/node/v22.22.0/bin:/root/.local/bin:/root/bin:/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin:/usr/local/bin:/usr/bin:/bin:/root/.npm-global/bin"
 OPENCLAW_BIN="/root/.nvm/versions/node/v22.22.0/bin/openclaw" # Optional but recommended for cron
-TAVILY_API_KEY="tvly-..."                  # Optional
-DINGTALK_WEBHOOK="https://..."             # Optional
-FEISHU_WEBHOOK="https://..."               # Optional
-TELEGRAM_BOT_TOKEN="..."                   # Optional
-TELEGRAM_CHAT_ID="..."                     # Optional
-REPORT_WEB_DIR="/var/www/html/reports"     # Optional
-REPORT_BASE_URL="https://example.com/reports"
+MEMORY_DIR="/root/.openclaw/workspace/memory"
+LOG_FILE="/root/.openclaw/logs/health_report_pro.log"          # Optional shared log override
+DINGTALK_WEBHOOK="https://..."                                 # Optional
+FEISHU_WEBHOOK="https://..."                                   # Optional
+TELEGRAM_BOT_TOKEN="..."                                       # Optional
+TELEGRAM_CHAT_ID="..."                                         # Optional
+TAVILY_API_KEY="tvly-..."                                      # Optional
+REPORT_WEB_DIR="/var/www/html/reports"                         # Optional
+REPORT_BASE_URL="https://example.com/reports"                  # Optional
 ALLOW_RUNTIME_FONT_DOWNLOAD="false"
 ```
 
@@ -204,7 +210,10 @@ The wizard writes all persistent settings into `config/user_config.json`, includ
 - medication participation
 - residence used by monthly medical planning
 - custom monitoring modules
+- `report_preferences.population_branch` for lifestyle-vs-disease report routing
 - report and AI-generation preferences
+
+If `config/.env` does not already exist, the wizard also creates a commented project-local template with safe placeholders and OpenClaw-friendly defaults so users can fill in only the keys they actually need.
 
 ### 4. Generate Reports
 
@@ -253,6 +262,12 @@ This is the main long-term profile file. It stores:
 - custom monitoring modules
 - report preferences
 - AI-generation preferences
+
+Important report preference:
+
+- `report_preferences.population_branch`
+- supported values: `lifestyle` / `disease`
+- the example config starts with `lifestyle`; the setup wizard auto-suggests `lifestyle` for `balanced` / `fat_loss`, and `disease` for disease-management goals
 
 ### Common Runtime Variables
 
@@ -398,6 +413,14 @@ Repository:
 ---
 
 ## 📌 Changelog
+
+### v1.5.2 — 2026-03-25
+
+- 🧩 Updated `config/user_config.example.json` with sanitized web-publish placeholders, OpenClaw default `MEMORY_DIR`, and the shared `LOG_FILE` example.
+- 📝 Extended `scripts/init_config.py` so first-time setup can create a commented project-local `config/.env` template without overwriting an existing one.
+- 🔒 Clarified README / SKILL / package metadata around project-local `.env` loading, cron PATH helpers, and optional-network behavior.
+- ✅ Verified the setup wizard can actually generate a commented `config/.env` template when the file is missing.
+- 📊 Split monthly report behavior for `balanced` / `fat_loss`: those modes now use lifestyle insight titles, energy-balance charts, screening suggestions, and an advanced next-month checklist while skipping hospital lookup.
 
 ### v1.5.1 — 2026-03-24
 

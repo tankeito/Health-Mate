@@ -1,9 +1,9 @@
 ---
 name: health-mate
 display_name: Health-Mate
-version: 1.5.1
+version: 1.5.2
 type: python/app
-description: "Executable OpenClaw health-report skill with Chinese, English, and Japanese report flows. It reads Markdown logs from an explicitly configured MEMORY_DIR, generates daily, weekly, and monthly PDF reports, and only performs Tavily, webhook, or font-download network activity when the corresponding runtime options are enabled."
+description: "Executable OpenClaw health-report skill with Chinese, English, and Japanese report flows. It reads Markdown logs only from an explicitly configured MEMORY_DIR, writes reports and logs locally, can create a commented project-local config/.env template during setup, separates monthly disease mode from balanced/fat-loss lifestyle mode, and only performs Tavily, webhook, or font-download network activity when the corresponding runtime options are configured."
 install: pip install -r requirements.txt
 capabilities:
   - file_read
@@ -20,13 +20,16 @@ metadata:
         - MEMORY_DIR
 env:
   MEMORY_DIR: Required. Explicitly set this to the Markdown health-memory directory that the skill may read.
-  OPENCLAW_BIN: Optional. Absolute path to the local `openclaw` binary, recommended for cron or minimal-PATH shells.
+  NVM_DIR: Optional. Node.js NVM directory used by the shell runners for scheduled execution.
+  CRON_PATH: Optional. Cron-safe PATH value used by the shell runners so `openclaw` and system commands can be found.
+  OPENCLAW_BIN: Optional. Absolute path to the local `openclaw` binary used by the Python local-LLM resolver.
   HEALTH_MATE_LANG: Optional. Force the output locale such as `zh-CN`, `en-US`, or `ja-JP`.
   TAVILY_API_KEY: Optional. Enables Tavily-assisted fallback guidance and monthly clinic lookup hints.
   DINGTALK_WEBHOOK: Optional. Enables DingTalk delivery.
   FEISHU_WEBHOOK: Optional. Enables Feishu delivery.
   TELEGRAM_BOT_TOKEN: Optional. Enables Telegram delivery when paired with TELEGRAM_CHAT_ID.
   TELEGRAM_CHAT_ID: Optional. Required only for Telegram delivery.
+  LOG_FILE: Optional. Overrides the shell-runner log file path; if omitted, each runner uses its own file under `logs/`.
   REPORT_WEB_DIR: Optional. Local directory used when generated PDFs should be copied for public download.
   REPORT_BASE_URL: Optional. Public base URL used for generated PDF links.
   ALLOW_RUNTIME_FONT_DOWNLOAD: Optional. Disabled by default. Set to true only if runtime fallback download of NotoSansSC-VF.ttf is explicitly allowed.
@@ -42,8 +45,10 @@ It reads structured Markdown logs from `MEMORY_DIR`, generates localized PDF rep
 
 - Parses meals, hydration, exercise, symptoms, medication, and custom monitoring sections
 - Generates daily reports with scoring, detail sections, AI insight, risk alerts, and next-day actions
-- Generates weekly reports with rings, heatmap, trend charts, nutrition chart, weekly review, and next-week plan
-- Generates monthly reports with radar, heatmap, 30-day weight and BMR trend, specialty charts, follow-up reminders, and clinic suggestions
+- Generates weekly reports with rings, paired trend charts, audience-specific insight modules, weekly review, and next-week plan
+- Generates monthly reports with radar, branch-aware heatmaps, 30-day weight and BMR trend, specialty charts, follow-up reminders, and clinic suggestions
+- Supports explicit report routing through `report_preferences.population_branch`, while the setup wizard still auto-suggests lifestyle vs disease mode from the primary goal
+- Switches `balanced` / `fat_loss` reports into a lifestyle-review path with activity heatmaps, energy-balance, habit-progression, and lean-mass/fat-mass charts while skipping hospital lookup
 - Supports multi-condition management in both LLM and local fallback paths
 - Keeps core parsing, scoring, and PDF rendering local
 
@@ -67,11 +72,15 @@ Required:
 
 Optional:
 
+- `NVM_DIR`
+- `CRON_PATH`
+- `OPENCLAW_BIN`
 - `TAVILY_API_KEY`
 - `DINGTALK_WEBHOOK`
 - `FEISHU_WEBHOOK`
 - `TELEGRAM_BOT_TOKEN`
 - `TELEGRAM_CHAT_ID`
+- `LOG_FILE`
 - `REPORT_WEB_DIR`
 - `REPORT_BASE_URL`
 - `ALLOW_RUNTIME_FONT_DOWNLOAD`
@@ -79,8 +88,10 @@ Optional:
 For ClawHub manual folder upload:
 
 - `config/.env.example` may be missing from the uploaded package
-- use the top-level `env` block inside `config/user_config.example.json` as the reference template
-- create `config/.env` manually with the same keys
+- use the top-level `env` block inside `config/user_config.example.json` as the upload-safe reference template
+- the setup wizard can create a commented project-local `config/.env` template if the file does not already exist
+- runtime scripts still read project-local `config/.env`
+- keep only the keys you intend this skill to read inside project-local `config/.env`
 
 ## Upgrade And Backup Notice
 
@@ -94,14 +105,16 @@ Important:
 
 - some platform upgrade or reinstall flows may overwrite, reset, or remove local configuration files
 - after an upgrade, re-check `MEMORY_DIR`, report preferences, scoring modules, webhook settings, and Tavily settings before running scheduled jobs again
+- if needed, also verify `report_preferences.population_branch` in `config/user_config.json`
 
 ## Local And Network Behavior
 
 Expected local file I/O:
 
 - reads Markdown logs from `MEMORY_DIR`
-- reads `config/.env` when shell runners are used
-- may rely on `config/user_config.example.json` as an upload-safe env reference during manual installation
+- reads project-local `config/.env` when shell runners are used and the file exists
+- the setup wizard may create a commented project-local `config/.env` template when the file is missing
+- may rely on `config/user_config.example.json` as the upload-safe env reference during manual installation
 - writes PDFs into `reports/`
 - writes logs into `logs/`
 - may create a temporary English memory mirror for rendering fallback
@@ -116,7 +129,8 @@ Important:
 
 - there is no implicit default `MEMORY_DIR` fallback in the shell runners
 - the skill exits if `MEMORY_DIR` is missing
-- if `OPENCLAW_BIN` is configured, the shell runners expose its directory to `PATH`; if it is not configured, the Python layer still tries common install paths without hardcoding a fixed cron `PATH`
+- shell runners use `NVM_DIR` and `CRON_PATH` from the environment or project-local `config/.env`, with built-in defaults when those keys are missing
+- the Python local-LLM resolver uses `OPENCLAW_BIN` first and then tries common install paths without hardcoding a single fixed cron `PATH`
 
 ## Commands
 
@@ -252,9 +266,10 @@ The monthly report now includes:
 - symptom and medication heatmap
 - 30-day weight and BMR trend
 - condition-specific specialty charts
+- lifestyle-mode specialty charts for `balanced` / `fat_loss`: energy balance, four-week habit progression, and lean-mass/fat-mass composition
 - AI monthly review
-- follow-up reminders
-- residence-aware hospital-and-doctor suggestions with grouped recommendations, grades, booking hints, and optional fee / schedule fields
+- follow-up reminders or periodic screening suggestions, depending on the active monthly mode
+- residence-aware hospital-and-doctor suggestions with grouped recommendations, grades, booking hints, and optional fee / schedule fields for disease-management modes
 
 If the user manages multiple conditions, the monthly report should combine them instead of collapsing to a single narrow perspective.
 
@@ -273,6 +288,14 @@ If one of them is missing:
 - users who need Japanese PDF output should place `NotoSansJP-VF.ttf` into `assets/`
 
 ## Changelog
+
+### v1.5.2 - 2026-03-25
+
+- Updated the upload-safe env example with OpenClaw default `MEMORY_DIR`, sanitized web-publish placeholders, and the shared `LOG_FILE` example
+- Extended `init_config.py` so first-time setup can create a commented project-local `config/.env` template without overwriting an existing one
+- Clarified SKILL metadata and runtime notes around project-local `.env`, cron PATH helpers, and optional-network behavior
+- Verified that the setup wizard really creates the commented `config/.env` template when the file is missing
+- Added a monthly lifestyle-review split for `balanced` / `fat_loss`, including new charts, renamed section titles, screening suggestions, and hospital-lookup bypass
 
 ### v1.5.1 - 2026-03-24
 
