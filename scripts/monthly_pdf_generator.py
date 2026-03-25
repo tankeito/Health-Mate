@@ -888,8 +888,9 @@ def create_energy_deficit_chart(records: List[dict], profile: dict, locale: str,
         tdee = bmr + activity
         intake_ceiling = max(0.0, float(np.mean(tdee)) - float(deficit_target_kcal))
 
-        fig, ax = plt.subplots(figsize=(8.2, 3.4))
+        fig, ax = plt.subplots(figsize=(8.2, 3.55))
         fig.patch.set_alpha(0)
+        fig.subplots_adjust(top=0.9, right=0.98)
         width = 0.38
         intake_colors = [C_WARNING if value <= target else C_DANGER for value, target in zip(intake, tdee)]
 
@@ -925,6 +926,8 @@ def create_energy_deficit_chart(records: List[dict], profile: dict, locale: str,
                 localize(locale, "建议目标线", "Suggested intake line"),
             ],
             loc="upper right",
+            bbox_to_anchor=(1.0, 1.13),
+            borderaxespad=0.0,
             frameon=False,
             fontsize=7.8,
         )
