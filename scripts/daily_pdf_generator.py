@@ -413,7 +413,15 @@ def build_ai_comment_sections(comment_text, locale):
     lines = []
     for line in str(comment_text or "").splitlines():
         clean = clean_html_tags(line).strip()
-        if not clean or clean.startswith(("[plugins]", "[adp-", "Hint:", "error:")):
+        lowered = clean.lower()
+        if (
+            not clean
+            or clean.startswith(("[plugins]", "[adp-", "[qqbot-", "[openclaw", "Hint:", "error:"))
+            or "plugin registration complete" in lowered
+            or "registering tool factory:" in lowered
+            or "registered qqbot remind tool" in lowered
+            or "no qqbot accounts configured, skipping" in lowered
+        ):
             continue
         lines.append(clean)
 

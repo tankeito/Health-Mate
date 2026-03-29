@@ -6,7 +6,7 @@
 >
 > 将本地 Markdown 健康记录转化为专业的日报、周报、月报 PDF，支持病种感知评分、专项图表、医疗规划及可选的消息推送。
 
-[![Version](https://img.shields.io/badge/version-1.5.2-blue.svg)](https://github.com/tankeito/Health-Mate/releases)
+[![Version](https://img.shields.io/badge/version-1.5.3-blue.svg)](https://github.com/tankeito/Health-Mate/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![OpenClaw](https://img.shields.io/badge/OpenClaw-Skill-green.svg)](https://openclaw.ai)
 
@@ -154,6 +154,8 @@ pip install -r requirements.txt
 ClawHub 手动上传文件夹可能不包含 `config/.env.example`。请打开 `config/user_config.example.json`，查看顶层 `env` 块作为上传安全参考。
 
 设置向导会在 `config/.env` 不存在时自动创建带注释的项目本地模板。
+
+直接执行 Python 入口脚本时，如果项目本地 `config/.env` 存在，也会自动加载，从而尽量与 shell 运行器保持一致。
 
 ```bash
 # ========== Cron 环境变量（定时任务必需） ==========
@@ -416,12 +418,14 @@ python scripts/export_memory_en.py
 
 Health-Mate 围绕明确的隐私边界构建。
 
+
 ### 默认本地完成（无需联网）
 
 - 📁 **Markdown 解析**：所有健康数据从本地 `MEMORY_DIR` 文件提取
 - 📊 **评分与图表**：病种感知评分、统计计算、图表渲染
 - 📄 **PDF 生成**：ReportLab 完全离线渲染 PDF
 - 📝 **LLM 点评**：本地 `openclaw agent --local` 生成 AI 洞察（无需云端 API）
+- 🧹 **LLM 输出清洗**：在将 AI 点评写入文字推送或 PDF 前，会先剔除 `[qqbot-*]`、`[adp-*]`、`[openclaw*]` 等插件注册日志噪音
 
 ### 需要显式启用（可选）
 

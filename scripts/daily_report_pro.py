@@ -466,8 +466,8 @@ def normalize_user_config(raw_config):
         existing = normalized_condition_standards.get(canonical_key, {})
         normalized_condition_standards[canonical_key] = deep_merge_dict(existing, value)
     merged["condition_standards"] = deep_merge_dict(base.get("condition_standards", {}), normalized_condition_standards)
-    merged["_version"] = "1.5.2"
-    merged["config_version"] = "1.5.2"
+    merged["_version"] = "1.5.3"
+    merged["config_version"] = "1.5.3"
     merged["ai_generation"] = deep_merge_dict(clone_ai_generation_defaults(), raw_config.get("ai_generation", {}))
     merged["scoring"] = {"modules": normalize_scoring_modules(raw_config, locale)}
     merged.setdefault("integrations", {"tavily_api_key": ""})
@@ -703,8 +703,8 @@ def prepare_font_compatible_memory(requested_locale, source_dir, default_memory_
 def _get_default_config():
     locale = "zh-CN"
     return {
-        "_version": "1.5.2",
-        "config_version": "1.5.2",
+        "_version": "1.5.3",
+        "config_version": "1.5.3",
         "language": "zh-CN",
         "user_profile": {
             "name": "Demo User",
@@ -1487,6 +1487,86 @@ def resolve_openclaw_binary():
     return None
 
 
+LOCAL_LLM_LOG_PREFIXES = ("[plugins]", "[adp-", "[qqbot-", "[openclaw")
+LOCAL_LLM_LOG_PHRASES = (
+    "register() called - starting plugin registration",
+    "registering tool factory:",
+    "tool adp_upload_file registered successfully",
+    "plugin registration complete",
+    "no qqbot accounts configured, skipping",
+    "registered qqbot remind tool",
+)
+LOCAL_LLM_INLINE_LOG_PATTERNS = (
+    r"\[adp-openclaw\]\s*register\(\)\s*called\s*-\s*starting plugin registration",
+    r"\[adp-openclaw\]\s*registering tool factory:\s*adp_upload_file",
+    r"\[adp-openclaw\]\s*tool adp_upload_file registered successfully",
+    r"\[adp-openclaw\]\s*plugin registration complete",
+    r"\[qqbot-channel-api\]\s*no qqbot accounts configured,\s*skipping",
+    r"\[qqbot-remind\]\s*registered qqbot remind tool",
+)
+LOCAL_LLM_SECTION_MARKERS = (
+    "【做得很好的地方】",
+    "【需要关注的隐患】",
+    "【核心发现】",
+    "【体态与习惯预警】",
+    "【次月高阶干预清单】",
+    "【下周调整】",
+    "【下周干预方案】",
+    "【主要な発見】",
+    "【注意点】",
+    "【次月アクションチェックリスト】",
+    "[What Went Well]",
+    "[Watchouts]",
+    "[Core Findings]",
+    "[Body & Habit Alerts]",
+    "[Advanced Next-Month Checklist]",
+)
+
+
+def sanitize_local_llm_output(text):
+    raw = str(text or "")
+    if not raw:
+        return ""
+
+    cleaned = raw.replace("\r\n", "\n").replace("\r", "\n")
+    cleaned = re.sub(r"\x1b\[[0-9;?]*[A-Za-z]", "", cleaned)
+
+    for pattern in LOCAL_LLM_INLINE_LOG_PATTERNS:
+        cleaned = re.sub(pattern, " ", cleaned, flags=re.IGNORECASE)
+
+    cleaned = re.sub(
+        r"(?<!\n)(\[(?:plugins|adp-[^\]]+|qqbot-[^\]]+|openclaw[^\]]*)\])",
+        r"\n\1",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+    for marker in LOCAL_LLM_SECTION_MARKERS:
+        cleaned = cleaned.replace(marker, f"\n{marker}")
+    cleaned = re.sub(r"([】\]])\s*-\s*", r"\1\n- ", cleaned)
+    cleaned = re.sub(
+        r"(?<!\n)\s+-\s+(?=(?:\d+[.)]\s*)?[A-Za-z\u4e00-\u9fff])",
+        "\n- ",
+        cleaned,
+    )
+
+    lines = []
+    for raw_line in cleaned.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        lowered = line.lower()
+        if lowered.startswith(LOCAL_LLM_LOG_PREFIXES):
+            continue
+        if any(phrase in lowered for phrase in LOCAL_LLM_LOG_PHRASES):
+            continue
+        lines.append(line)
+
+    cleaned = "\n".join(lines)
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+    cleaned = re.sub(r"[ \t]{2,}", " ", cleaned).strip()
+    return cleaned
+
+
 def run_local_llm(prompt, system_prompt, settings, locale, timeout_key, failure_key):
     mode = str(settings.get("mode", "hybrid")).strip().lower()
     if mode == "local_only":
@@ -1509,14 +1589,9 @@ def run_local_llm(prompt, system_prompt, settings, locale, timeout_key, failure_
                 env={**os.environ, 'SYSTEM_PROMPT': system_prompt},
             )
             if result.returncode == 0 and result.stdout.strip():
-                output = result.stdout.strip()
-                if '[plugins]' in output:
-                    lines = output.split('\n')
-                    output = '\n'.join(
-                        line for line in lines
-                        if not line.startswith('[plugins]') and not line.startswith('[adp-')
-                    ).strip()
-                return output
+                output = sanitize_local_llm_output(result.stdout)
+                if output:
+                    return output
         except subprocess.TimeoutExpired:
             print(t(locale, timeout_key, attempt=attempt + 1), file=sys.stderr)
         except Exception as e:

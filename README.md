@@ -6,7 +6,7 @@ English | [中文](README_ZH.md) | [日本語](README_JP.md)
 >
 > Transform local Markdown health memories into polished Daily, Weekly, and Monthly PDF reports with condition-aware scoring, specialty charts, medical planning, and optional webhook delivery.
 
-[![Version](https://img.shields.io/badge/version-1.5.2-blue.svg)](https://github.com/tankeito/Health-Mate/releases)
+[![Version](https://img.shields.io/badge/version-1.5.3-blue.svg)](https://github.com/tankeito/Health-Mate/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![OpenClaw](https://img.shields.io/badge/OpenClaw-Skill-green.svg)](https://openclaw.ai)
 
@@ -154,6 +154,8 @@ pip install -r requirements.txt
 ClawHub manual folder upload may omit `config/.env.example`. Open `config/user_config.example.json` and review the top-level `env` block as an upload-safe reference.
 
 The setup wizard creates a commented project-local `config/.env` template when the file does not exist.
+
+Direct Python entry points also auto-load project-local `config/.env` when present, so manual script runs stay aligned with the shell runners.
 
 ```bash
 # ========== Cron Environment Variables (Required for scheduled tasks) ==========
@@ -416,12 +418,14 @@ When an assistant writes into `MEMORY_DIR`, it must behave like a **strict recor
 
 Health-Mate is built around explicit privacy boundaries.
 
+
 ### What Stays Local (Default)
 
 - 📁 **Markdown Parsing**: All health data extracted from local `MEMORY_DIR` files
 - 📊 **Scoring & Charts**: Condition-aware scoring, statistical calculations, chart rendering
 - 📄 **PDF Generation**: ReportLab renders PDFs entirely offline
-- 📝 **LLM Commentary**: Local `openclaw agent --local` for AI insights (no cloud API required)
+- **LLM Commentary**: Local `openclaw agent --local` for AI insights (no cloud API required)
+- **LLM Output Sanitization**: Plugin-registration logs are stripped before AI commentary is embedded into text pushes or PDFs
 
 ### What Requires Explicit Opt-In
 

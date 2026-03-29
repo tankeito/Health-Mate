@@ -1,9 +1,9 @@
 ---
 name: health-mate
 display_name: Health-Mate
-version: 1.5.2
+version: 1.5.3
 type: python/app
-description: "Executable OpenClaw health-report skill with Chinese, English, and Japanese report flows. It reads Markdown logs only from an explicitly configured MEMORY_DIR, writes reports and logs locally, can create a commented project-local config/.env template during setup, separates monthly disease mode from balanced/fat-loss lifestyle mode, and only performs Tavily, webhook, or font-download network activity when the corresponding runtime options are configured."
+description: "Executable OpenClaw health-report skill with Chinese, English, and Japanese report flows. It reads Markdown logs only from an explicitly configured MEMORY_DIR, writes reports and logs locally, can create a commented project-local config/.env template during setup, sanitizes local-LLM stdout before AI commentary is embedded into reports, separates monthly disease mode from balanced/fat-loss lifestyle mode, and only performs Tavily, webhook, or font-download network activity when the corresponding runtime options are configured."
 install: pip install -r requirements.txt
 capabilities:
   - file_read
@@ -288,6 +288,12 @@ If one of them is missing:
 - users who need Japanese PDF output should place `NotoSansJP-VF.ttf` into `assets/`
 
 ## Changelog
+
+### v1.5.3 - 2026-03-29
+
+- Sanitized local-LLM stdout before AI commentary is embedded into push text or PDFs, preventing OpenClaw plugin-registration logs from leaking into reports
+- Added a second daily-PDF commentary filter as a defensive fallback for unexpected plugin log fragments
+- Aligned direct Python execution with the shell runners by auto-loading project-local config/.env when variables are not already exported
 
 ### v1.5.2 - 2026-03-25
 
