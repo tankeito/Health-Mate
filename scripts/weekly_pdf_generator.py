@@ -15,7 +15,7 @@ from reportlab.lib.units import cm
 from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
 from reportlab.lib.utils import ImageReader
 
-from daily_pdf_generator import register_chinese_font, get_font_prop, clean_html_tags
+from daily_pdf_generator import register_chinese_font, get_font_prop, clean_html_tags, GradientBanner, AccentHeading, SummaryCard, get_score_color
 from i18n import condition_name, format_weight, format_weight_delta, inline_localize, resolve_locale, t, weight_unit
 from monthly_pdf_generator import create_activity_heatmap, create_macro_radar_chart, create_symptom_heatmap
 
@@ -35,6 +35,7 @@ C_WARNING = "#F59E0B"
 C_TEXT_MAIN = "#1E293B"
 C_TEXT_MUTED = "#64748B"
 C_BORDER = "#E2E8F0"
+C_DANGER = "#EF4444"
 C_BG_HEAD = "#F8FAFC"
 
 C_CARB, C_PROTEIN, C_FAT = "#3B82F6", "#10B981", "#F59E0B"
@@ -579,9 +580,9 @@ def generate_weekly_pdf_report(weekly_data, profile, ai_review, ai_plan, output_
     render_notice = str(weekly_data.get("render_notice") or "").strip()
     doc = SimpleDocTemplate(output_path, pagesize=A4, rightMargin=2*cm, leftMargin=2*cm, topMargin=2*cm, bottomMargin=2*cm, title=t(locale, 'weekly_report_title'))
     styles = getSampleStyleSheet()
-    title_style = ParagraphStyle('Title', parent=styles['Heading1'], fontSize=22, textColor=HexColor(C_PRIMARY), spaceAfter=5, alignment=TA_CENTER, fontName=font_name)
+    title_style = ParagraphStyle('Title', parent=styles['Heading1'], fontSize=22, textColor=HexColor(C_PRIMARY), spaceAfter=6, alignment=TA_CENTER, fontName=font_name, leading=28)
     sub_title = ParagraphStyle('SubTitle', parent=styles['Normal'], fontSize=10, textColor=HexColor(C_TEXT_MUTED), spaceAfter=16, alignment=TA_CENTER, fontName=font_name)
-    heading_style = ParagraphStyle('Heading', parent=styles['Heading2'], fontSize=14, textColor=HexColor(C_PRIMARY), spaceBefore=18, spaceAfter=12, fontName=font_name)
+    heading_style = ParagraphStyle('Heading', parent=styles['Heading2'], fontSize=14, textColor=HexColor(C_PRIMARY), spaceBefore=20, spaceAfter=14, fontName=font_name)
     normal_style = ParagraphStyle('Normal', parent=styles['Normal'], fontSize=10, textColor=HexColor(C_TEXT_MAIN), fontName=font_name, leading=18)
     muted_style = ParagraphStyle('Muted', parent=normal_style, textColor=HexColor(C_TEXT_MUTED), fontSize=9, leading=13)
     footer_style = ParagraphStyle('Footer', parent=normal_style, fontSize=9, textColor=HexColor(C_TEXT_MUTED), alignment=TA_CENTER, leading=13)
@@ -611,35 +612,93 @@ def generate_weekly_pdf_report(weekly_data, profile, ai_review, ai_plan, output_
             clean = clean_html_tags(para).strip()
             if not clean or clean.startswith("["):
                 continue
-            if clean.startswith("-") or clean.startswith("*"):
+            is_heading = clean.startswith("【") or clean.startswith("**")
+            if is_heading:
+                clean = clean.strip("*【】")
+                story.append(Spacer(1, 0.1*cm))
+                story.append(Paragraph(f"<font color='{C_PRIMARY}'><b>{clean}</b></font>", normal_style))
+            elif clean.startswith("-") or clean.startswith("*"):
                 clean = clean[1:].strip()
-                story.append(Paragraph(f"<font color='{C_PRIMARY}'>■</font> {clean}", normal_style))
+                story.append(Paragraph(f"<font color='{C_PRIMARY}'>●</font> {clean}", normal_style))
             else:
                 story.append(Paragraph(clean, normal_style))
-            story.append(Spacer(1, 0.08*cm))
+            story.append(Spacer(1, 0.06*cm))
 
     story = []
     temp_images = []
 
     story.append(Paragraph(f"<b>{profile_condition_title(profile, locale)} · {t(locale, 'weekly_report_title')}</b>", title_style))
+    story.append(GradientBanner(16.1 * cm))
     story.append(Paragraph(t(locale, 'weekly_period', start_date=weekly_data['start_date'], end_date=weekly_data['end_date'], name=profile.get('name', t(locale, 'default_name'))), sub_title))
     if render_notice:
         story.append(Paragraph(f"<b>{t(locale, 'render_notice_title')}</b><br/>{clean_html_tags(render_notice)}", notice_style))
         story.append(Spacer(1, 0.15*cm))
 
+    # Weekly Summary KPI Cards — dual-mode branching
+    avg_score = float(weekly_data.get('avg_total_score', 0))
+    card_w = 3.72 * cm
+    card_h = 2.2 * cm
+    _lifestyle = is_lifestyle_branch(weekly_data, profile)
+
+    _wcard1 = SummaryCard(localize(locale, '周均评分', 'Avg Score'), f"{avg_score:.0f}",
+                   localize(locale, '优秀', 'Excellent') if avg_score >= 80 else localize(locale, '良好', 'Good'),
+                   get_score_color(avg_score), font_name, card_w, card_h)
+    _wcard2 = SummaryCard(localize(locale, '周均体重', 'Avg Weight'), format_weight(locale, weekly_data.get('avg_weight')),
+                   format_weight_delta(locale, weekly_data.get('weight_change', 0)),
+                   C_PRIMARY, font_name, card_w, card_h)
+
+    if _lifestyle:
+        _wcard3 = SummaryCard(localize(locale, '饮食达标', 'Diet Goal'), f"{weekly_data.get('water_goal_days', 0)}/7",
+                           localize(locale, '达标天数', 'Goal Days'),
+                           C_SUCCESS, font_name, card_w, card_h)
+        _wcard4 = SummaryCard(localize(locale, '运动达标', 'Exercise Goal'), f"{weekly_data.get('step_goal_days', 0)}/7",
+                           localize(locale, '达标天数', 'Goal Days'),
+                           C_WARNING, font_name, card_w, card_h)
+    else:
+        _med_days = weekly_data.get('medication_days', 0)
+        _wcard3 = SummaryCard(localize(locale, '用药依从', 'Med Adherence'), f"{_med_days}/7",
+                           localize(locale, '服药天数', 'Med Days'),
+                           "#7C3AED", font_name, card_w, card_h)
+        _sym_days = weekly_data.get('symptom_days', 0)
+        _wcard4 = SummaryCard(localize(locale, '症状天数', 'Symptom Days'), f"{_sym_days}",
+                           localize(locale, '天', 'days'),
+                           "#EF4444" if _sym_days > 3 else C_WARNING, font_name, card_w, card_h)
+
+    summary_cards = Table(
+        [[_wcard1, _wcard2, _wcard3, _wcard4]],
+        colWidths=[card_w + 0.25*cm] * 4,
+    )
+    summary_cards.setStyle(TableStyle([
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 0),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+        ('TOPPADDING', (0, 0), (-1, -1), 0),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+    ]))
+    story.append(summary_cards)
+    story.append(Spacer(1, 0.35*cm))
+
     table_style = [
-        ('BACKGROUND', (0, 0), (-1, 0), HexColor(C_BG_HEAD)),
-        ('TEXTCOLOR', (0, 0), (-1, 0), HexColor(C_TEXT_MUTED)),
+        ('BACKGROUND', (0, 0), (-1, 0), HexColor("#EFF6FF")),
+        ('TEXTCOLOR', (0, 0), (-1, 0), HexColor("#1E40AF")),
         ('TEXTCOLOR', (0, 1), (-1, -1), HexColor(C_TEXT_MAIN)),
         ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
         ('FONTNAME', (0, 0), (-1, -1), font_name),
-        ('FONTSIZE', (0, 0), (-1, -1), 9),
-        ('TOPPADDING', (0, 0), (-1, -1), 8),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
-        ('LINEBELOW', (0, 0), (-1, -1), 0.5, HexColor(C_BORDER)),
+        ('FONTSIZE', (0, 0), (-1, 0), 9.2),
+        ('FONTSIZE', (0, 1), (-1, -1), 9),
+        ('TOPPADDING', (0, 0), (-1, -1), 9),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 9),
+        ('LEFTPADDING', (0, 0), (-1, -1), 10),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 10),
+        ('LINEBELOW', (0, 0), (-1, 0), 1.0, HexColor('#BFDBFE')),
+        ('LINEBELOW', (0, 1), (-1, -2), 0.4, HexColor('#F1F5F9')),
+        ('LINEBELOW', (0, -1), (-1, -1), 0.6, HexColor(C_BORDER)),
     ]
 
-    story.append(Paragraph(f"1. {localize(locale, '个人信息', 'Profile')}", heading_style))
+    story.append(Spacer(1, 0.35*cm))
+    story.append(AccentHeading(f"1. {localize(locale, '个人信息', 'Profile')}", font_name=font_name))
+    story.append(Spacer(1, 0.25*cm))
     profile_rows = [
         [localize(locale, '项目', 'Item'), localize(locale, '内容', 'Value')],
         [localize(locale, '监测人', 'Name'), profile.get('name', t(locale, 'default_name'))],
@@ -653,7 +712,9 @@ def generate_weekly_pdf_report(weekly_data, profile, ai_review, ai_plan, output_
     story.append(profile_table)
     story.append(Spacer(1, 0.3*cm))
 
-    story.append(Paragraph(f"2. {t(locale, 'weekly_overview_title')}", heading_style))
+    story.append(Spacer(1, 0.35*cm))
+    story.append(AccentHeading(f"2. {t(locale, 'weekly_overview_title')}", font_name=font_name))
+    story.append(Spacer(1, 0.25*cm))
     macro_scores = weekly_data.get('macro_scores', {})
     radar_chart = create_macro_radar_chart(macro_scores, locale)
     lifestyle_mode = is_lifestyle_branch(weekly_data, profile)
@@ -712,7 +773,9 @@ def generate_weekly_pdf_report(weekly_data, profile, ai_review, ai_plan, output_
     story.append(summary_table)
     story.append(Spacer(1, 0.3*cm))
 
-    story.append(Paragraph(f"3. {localize(locale, '本周亮点与重点', 'Highlights And Focus')}", heading_style))
+    story.append(Spacer(1, 0.35*cm))
+    story.append(AccentHeading(f"3. {localize(locale, '本周亮点与重点', 'Highlights And Focus')}", font_name=font_name))
+    story.append(Spacer(1, 0.25*cm))
     story.append(Paragraph(f"<b>{localize(locale, '本周亮点', 'Strengths This Week')}</b>", normal_style))
     append_lines("\n".join(f"- {item}" for item in weekly_data.get("strengths", [])[:4]))
     story.append(Spacer(1, 0.1*cm))
@@ -734,7 +797,9 @@ def generate_weekly_pdf_report(weekly_data, profile, ai_review, ai_plan, output_
         story.append(custom_table)
         story.append(Spacer(1, 0.2*cm))
 
-    story.append(Paragraph(f"4. {t(locale, 'weekly_trend_title')}", heading_style))
+    story.append(Spacer(1, 0.35*cm))
+    story.append(AccentHeading(f"4. {t(locale, 'weekly_trend_title')}", font_name=font_name))
+    story.append(Spacer(1, 0.25*cm))
     paired_weight_calorie = create_weight_calorie_pair_chart(weekly_data, profile, locale)
     if paired_weight_calorie:
         temp_images.append(paired_weight_calorie)
@@ -769,11 +834,15 @@ def generate_weekly_pdf_report(weekly_data, profile, ai_review, ai_plan, output_
         story.append(_build_chart_image(audience_chart, 16.0, 4.8))
         story.append(Spacer(1, 0.16*cm))
 
-    story.append(Paragraph(f"5. {t(locale, 'weekly_ai_review_title')}", heading_style))
+    story.append(Spacer(1, 0.35*cm))
+    story.append(AccentHeading(f"5. {t(locale, 'weekly_ai_review_title')}", font_name=font_name))
+    story.append(Spacer(1, 0.25*cm))
     append_lines(ai_review)
     story.append(Paragraph(source_text(review_source), source_note_style))
 
-    story.append(Paragraph(f"6. {t(locale, 'weekly_next_plan_title')}", heading_style))
+    story.append(Spacer(1, 0.35*cm))
+    story.append(AccentHeading(f"6. {t(locale, 'weekly_next_plan_title')}", font_name=font_name))
+    story.append(Spacer(1, 0.25*cm))
     append_lines(ai_plan)
     story.append(Paragraph(source_text(plan_source), source_note_style))
 

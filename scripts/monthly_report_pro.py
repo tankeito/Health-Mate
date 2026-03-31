@@ -1012,6 +1012,37 @@ def aggregate_monthly_data(month_dates: List[str], config: dict, locale: Optiona
         "monitoring": round(monthly_data["monitoring_days"] / divisor * 100, 1),
     }
 
+    # 构建头部卡片数据
+    valid_weights = [w for w in monthly_data["weights"] if w is not None]
+    first_weight = valid_weights[0] if valid_weights else None
+    last_weight = valid_weights[-1] if valid_weights else None
+    weight_change = (last_weight - first_weight) if (last_weight is not None and first_weight is not None) else 0
+    
+    monthly_data["overview"] = {
+        "avg_score": monthly_data.get("avg_total_score", 0),
+        "trend": "stable",
+        "total_days": monthly_data["observed_days"],
+        "condition": primary_condition,
+    }
+    
+    monthly_data["weight_summary"] = {
+        "start": first_weight or 0,
+        "end": last_weight or 0,
+        "change": weight_change,
+    }
+    
+    monthly_data["medication_summary"] = {
+        "total_days": monthly_data["medication_days"],
+        "expected_days": monthly_data["observed_days"] if medication_enabled else 0,
+        "adherence_rate": (monthly_data["medication_days"] / max(1, monthly_data["observed_days"])) * 100 if medication_enabled else 0,
+    }
+    
+    monthly_data["symptom_summary"] = {
+        "total_symptom_days": monthly_data["symptom_days"],
+        "total_symptom_events": monthly_data["symptom_events"],
+        "symptom_distribution": monthly_data["symptom_distribution"],
+    }
+
     monthly_data["ultrasound_summary"] = extract_gallstone_ultrasound_summary(memory_dir)
     return monthly_data
 
@@ -2693,10 +2724,74 @@ def build_hospital_recommendations(monthly_data: dict, profile: dict, locale: st
     if is_lifestyle_mode(primary_condition, monthly_data.get("population_branch")):
         return [], "local"
 
+    # 基于用户个人档案的就医分析（胆结石专属）
+    user_recommendations = []
+    if primary_condition == "gallstones" and profile.get("medical_history", {}).get("gallstones"):
+        gallstones_history = profile["medical_history"]["gallstones"]
+        ultrasound_records = gallstones_history.get("ultrasound_records", [])
+        recent_visits = profile.get("recent_medical_visits", [])
+        
+        # 分析是否需要就医
+        needs_followup = False
+        followup_reason = ""
+        
+        # 检查最近彩超记录
+        if ultrasound_records:
+            latest = ultrasound_records[-1]
+            stone_size = float(latest.get("max_stone_cm", 0) or 0)
+            wall_thickness = latest.get("gallbladder_wall", "")
+            
+            # 结石>1cm 或胆囊壁毛糙/增厚 → 建议复查
+            if stone_size >= 1.0 or "毛糙" in wall_thickness or "增厚" in wall_thickness:
+                needs_followup = True
+                followup_reason = localize(
+                    locale,
+                    f"最近彩超显示结石{stone_size}cm，胆囊壁{wall_thickness}，建议 3 个月内复查彩超和肝功能。",
+                    f"Recent ultrasound shows {stone_size}cm gallstone with gallbladder wall {wall_thickness}. Follow-up ultrasound and liver function test recommended within 3 months."
+                )
+        
+        # 检查是否有近期就医记录
+        if recent_visits:
+            latest_visit = recent_visits[-1]
+            follow_up_plan = latest_visit.get("follow_up_plan", {})
+            next_visit_date = follow_up_plan.get("next_visit_date", "")
+            
+            # 如果复查日期临近（30 天内），提醒就医
+            if next_visit_date:
+                try:
+                    from datetime import datetime, timedelta
+                    next_date = datetime.strptime(next_visit_date, "%Y-%m-%d")
+                    days_until = (next_date - datetime.now()).days
+                    if 0 <= days_until <= 30:
+                        needs_followup = True
+                        followup_reason = localize(
+                            locale,
+                            f"医生建议{next_visit_date}复查（{days_until}天后），请按时进行腹部彩超和肝功能检查。",
+                            f"Doctor recommended follow-up on {next_visit_date} ({days_until} days). Please schedule abdominal ultrasound and liver function test."
+                        )
+                except:
+                    pass
+        
+        # 如果需要就医，生成推荐
+        if needs_followup and recent_visits:
+            latest_visit = recent_visits[-1]
+            user_recommendations.append({
+                "hospital": latest_visit.get("hospital", ""),
+                "department": latest_visit.get("department", ""),
+                "doctor_name": latest_visit.get("doctor", {}).get("name", "") if isinstance(latest_visit.get("doctor"), dict) else latest_visit.get("doctor", ""),
+                "doctor_title": localize(locale, "复诊", "Follow-up"),
+                "reason": followup_reason,
+                "priority": "high",
+                "source": "user_medical_history"
+            })
+
     residence = monthly_data.get("residence", {}) or {}
     residence_text = residence.get("display_name", "")
     residence_label = residence.get("city") or residence_text
     if not residence_text:
+        # 如果没有居住地信息，但用户档案有就医推荐，返回用户档案推荐
+        if user_recommendations:
+            return user_recommendations, "user_medical_history"
         return [], "fallback"
     location_hints = [str(item or "").strip() for item in [residence.get("province"), residence.get("city"), residence_text] if str(item or "").strip()]
 
@@ -2762,16 +2857,24 @@ def build_hospital_recommendations(monthly_data: dict, profile: dict, locale: st
     if llm_recommendations:
         named_tavily = [item for item in tavily_recommendations if has_named_doctor(item.get("doctor", ""))]
         secondary = named_tavily if named_tavily else []
-        return merge_and_rank_hospital_recommendations(llm_recommendations, secondary, primary_condition, limit=MAX_HOSPITAL_RECOMMENDATIONS), "llm"
+        # 合并用户档案推荐
+        all_recommendations = user_recommendations + llm_recommendations + secondary
+        return merge_and_rank_hospital_recommendations(all_recommendations, [], primary_condition, limit=MAX_HOSPITAL_RECOMMENDATIONS), "llm"
     if refined_recommendations:
         secondary = [item for item in tavily_recommendations if has_named_doctor(item.get("doctor", ""))]
         if not secondary:
             secondary = [item for item in fallback if has_named_doctor(item.get("doctor", ""))]
-        return merge_and_rank_hospital_recommendations(refined_recommendations, secondary, primary_condition, limit=MAX_HOSPITAL_RECOMMENDATIONS), "llm"
+        # 合并用户档案推荐
+        all_recommendations = user_recommendations + refined_recommendations + secondary
+        return merge_and_rank_hospital_recommendations(all_recommendations, [], primary_condition, limit=MAX_HOSPITAL_RECOMMENDATIONS), "llm"
     if tavily_recommendations:
-        return merge_and_rank_hospital_recommendations(tavily_recommendations, fallback, primary_condition, limit=MAX_HOSPITAL_RECOMMENDATIONS), "fallback_tavily"
+        # 合并用户档案推荐
+        all_recommendations = user_recommendations + tavily_recommendations + fallback
+        return merge_and_rank_hospital_recommendations(all_recommendations, [], primary_condition, limit=MAX_HOSPITAL_RECOMMENDATIONS), "fallback_tavily"
 
-    return fallback, "fallback"
+    # 合并用户档案推荐
+    all_recommendations = user_recommendations + fallback
+    return merge_and_rank_hospital_recommendations(all_recommendations, [], primary_condition, limit=MAX_HOSPITAL_RECOMMENDATIONS), "fallback"
 
 
 def build_monthly_fallback_review(monthly_data: dict, profile: dict, locale: str, config: Optional[dict] = None) -> tuple[str, str]:

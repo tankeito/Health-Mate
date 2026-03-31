@@ -9,7 +9,7 @@ import tempfile
 from functools import partial
 from datetime import datetime
 from reportlab.lib import colors
-from reportlab.lib.colors import HexColor
+from reportlab.lib.colors import HexColor, Color
 from reportlab.lib.pagesizes import A4
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image, KeepTogether, Flowable
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -984,6 +984,117 @@ def create_exercise_chart(exercise_data, steps, step_target=8000, locale="zh-CN"
         print(f"WARNING: exercise chart generation failed: {e}")
         return None
 
+class GradientBanner(Flowable):
+    """A decorative gradient banner for report headers."""
+    def __init__(self, width, height=0.35*cm, color_left="#2563EB", color_right="#60A5FA"):
+        super().__init__()
+        self.width = width
+        self.height = height
+        self.color_left = HexColor(color_left)
+        self.color_right = HexColor(color_right)
+
+    def wrap(self, availWidth, availHeight):
+        self.width = min(self.width, availWidth)
+        return self.width, self.height
+
+    def draw(self):
+        self.canv.saveState()
+        steps = 60
+        step_w = self.width / steps
+        r1, g1, b1 = self.color_left.red, self.color_left.green, self.color_left.blue
+        r2, g2, b2 = self.color_right.red, self.color_right.green, self.color_right.blue
+        for i in range(steps):
+            t = i / steps
+            r = r1 + (r2 - r1) * t
+            g = g1 + (g2 - g1) * t
+            b = b1 + (b2 - b1) * t
+            self.canv.setFillColorRGB(r, g, b)
+            self.canv.rect(i * step_w, 0, step_w + 0.5, self.height, stroke=0, fill=1)
+        self.canv.restoreState()
+
+
+class AccentHeading(Flowable):
+    """Section heading with colored left accent bar."""
+    def __init__(self, text, font_name="Helvetica", font_size=13, accent_color="#2563EB", text_color="#1E293B"):
+        super().__init__()
+        self.text = text
+        self.font_name = font_name
+        self.font_size = font_size
+        self.accent_color = HexColor(accent_color)
+        self.text_color = HexColor(text_color)
+        self.bar_width = 4
+        self.padding_left = 10
+        self.height = font_size + 12
+
+    def wrap(self, availWidth, availHeight):
+        self.width = availWidth
+        return self.width, self.height
+
+    def draw(self):
+        self.canv.saveState()
+        # Draw accent bar
+        self.canv.setFillColor(self.accent_color)
+        self.canv.roundRect(0, 0, self.bar_width, self.height, 1.5, stroke=0, fill=1)
+        # Draw text
+        self.canv.setFillColor(self.text_color)
+        try:
+            self.canv.setFont(self.font_name, self.font_size)
+        except:
+            self.canv.setFont("Helvetica-Bold", self.font_size)
+        self.canv.drawString(self.bar_width + self.padding_left, (self.height - self.font_size) / 2 + 2, self.text)
+        self.canv.restoreState()
+
+
+class SummaryCard(Flowable):
+    """A KPI summary card with value and label."""
+    def __init__(self, label, value, sub_text="", color="#2563EB", font_name="Helvetica", width=3.8*cm, height=2.2*cm):
+        super().__init__()
+        self.label = clean_html_tags(label)
+        self.value = clean_html_tags(str(value))
+        self.sub_text = clean_html_tags(sub_text)
+        self.color = color if isinstance(color, Color) else HexColor(color)
+        self.font_name = font_name
+        self.width = width
+        self.height = height
+
+    def wrap(self, availWidth, availHeight):
+        return self.width, self.height
+
+    def draw(self):
+        self.canv.saveState()
+        # Card background
+        self.canv.setFillColor(HexColor("#F8FAFC"))
+        self.canv.setStrokeColor(HexColor("#E2E8F0"))
+        self.canv.setLineWidth(0.5)
+        self.canv.roundRect(0, 0, self.width, self.height, 6, stroke=1, fill=1)
+        # Top accent line
+        self.canv.setFillColor(self.color)
+        self.canv.roundRect(0, self.height - 3, self.width, 3, 1.5, stroke=0, fill=1)
+        # Value text
+        self.canv.setFillColor(self.color)
+        try:
+            self.canv.setFont(self.font_name, 16)
+        except:
+            self.canv.setFont("Helvetica-Bold", 16)
+        self.canv.drawCentredString(self.width / 2, self.height / 2 + 2, self.value)
+        # Label
+        self.canv.setFillColor(HexColor("#1E293B"))
+        try:
+            self.canv.setFont(self.font_name, 8.5)
+        except:
+            self.canv.setFont("Helvetica", 8.5)
+        self.canv.drawCentredString(self.width / 2, self.height / 2 - 14, self.label)
+        # Sub text
+        if self.sub_text:
+            self.canv.setFillColor(HexColor("#475569"))
+            try:
+                self.canv.setFont(self.font_name, 7)
+            except:
+                self.canv.setFont("Helvetica", 7)
+            self.canv.drawCentredString(self.width / 2, 6, self.sub_text)
+        self.canv.restoreState()
+
+
 def generate_pdf_report(data, profile, scores, nutrition, macros, risks, plan, output_path, locale="zh-CN", water_records=None, meals=None, exercise_data=None, ai_comment=None, medication_records=None, custom_sections=None, generation_meta=None):
     locale = resolve_locale(locale=locale)
     font_name = register_chinese_font(locale)
@@ -1007,8 +1118,8 @@ def generate_pdf_report(data, profile, scores, nutrition, macros, risks, plan, o
 
     doc = SimpleDocTemplate(output_path, pagesize=A4, rightMargin=2*cm, leftMargin=2*cm, topMargin=2*cm, bottomMargin=2*cm, title=t(locale, 'daily_report_title'))
     styles = getSampleStyleSheet()
-    title_style = ParagraphStyle('CustomTitle', parent=styles['Heading1'], fontSize=20, textColor=C_PRIMARY, spaceAfter=10, alignment=TA_CENTER, fontName=font_name)
-    heading_style = ParagraphStyle('CustomHeading', parent=styles['Heading2'], fontSize=13, textColor=C_PRIMARY, spaceBefore=15, spaceAfter=10, fontName=font_name)
+    title_style = ParagraphStyle('CustomTitle', parent=styles['Heading1'], fontSize=22, textColor=C_PRIMARY, spaceAfter=6, alignment=TA_CENTER, fontName=font_name, leading=28)
+    heading_style = ParagraphStyle('CustomHeading', parent=styles['Heading2'], fontSize=13, textColor=C_PRIMARY, spaceBefore=18, spaceAfter=12, fontName=font_name)
     normal_style = ParagraphStyle('CustomNormal', parent=styles['Normal'], fontSize=10, textColor=C_TEXT_MAIN, fontName=font_name, leading=15)
     normal_bold_style = ParagraphStyle('CustomNormalBold', parent=normal_style, fontSize=10, leading=15)
     muted_style = ParagraphStyle('Muted', parent=normal_style, textColor=C_TEXT_MUTED, fontSize=9, leading=12)
@@ -1032,17 +1143,20 @@ def generate_pdf_report(data, profile, scores, nutrition, macros, risks, plan, o
     food_meta_style = ParagraphStyle('FoodMetaCell', parent=muted_style, alignment=TA_CENTER, leading=11, fontSize=8.6)
 
     base_table_style = [
-        ('BACKGROUND', (0, 0), (-1, 0), C_BG_HEAD),
-        ('TEXTCOLOR', (0, 0), (-1, 0), C_TEXT_MUTED),
+        ('BACKGROUND', (0, 0), (-1, 0), HexColor("#EFF6FF")),
+        ('TEXTCOLOR', (0, 0), (-1, 0), HexColor("#1E40AF")),
         ('TEXTCOLOR', (0, 1), (-1, -1), C_TEXT_MAIN),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
         ('FONTNAME', (0, 0), (-1, -1), font_name),
-        ('FONTSIZE', (0, 0), (-1, -1), 9),
-        ('TOPPADDING', (0, 0), (-1, -1), 8),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
-        ('LEFTPADDING', (0, 0), (-1, -1), 8),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 8),
-        ('LINEBELOW', (0, 0), (-1, -1), 0.55, HexColor('#E5E7EB')),
+        ('FONTSIZE', (0, 0), (-1, 0), 9.2),
+        ('FONTSIZE', (0, 1), (-1, -1), 9),
+        ('TOPPADDING', (0, 0), (-1, -1), 9),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 9),
+        ('LEFTPADDING', (0, 0), (-1, -1), 10),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 10),
+        ('LINEBELOW', (0, 0), (-1, 0), 1.0, HexColor('#BFDBFE')),
+        ('LINEBELOW', (0, 1), (-1, -2), 0.4, HexColor('#F1F5F9')),
+        ('LINEBELOW', (0, -1), (-1, -1), 0.6, HexColor('#E2E8F0')),
     ]
 
     def checklist_paragraph(content):
@@ -1074,12 +1188,60 @@ def generate_pdf_report(data, profile, scores, nutrition, macros, risks, plan, o
     condition_title = profile_condition_title(profile, locale)
     story.append(Paragraph(f"<b>{condition_title} | {t(locale, 'daily_report_title')}</b>", title_style))
     story.append(Paragraph(f"<font color='#64748B'>{data['date']} | {profile.get('name', t(locale, 'default_name'))}</font>", ParagraphStyle('Date', parent=normal_style, alignment=TA_CENTER)))
+    story.append(GradientBanner(16.1 * cm))
     if render_notice:
         story.append(Spacer(1, 0.2*cm))
         story.append(Paragraph(f"<b>{t(locale, 'render_notice_title')}</b><br/>{clean_html_tags(render_notice)}", notice_style))
     story.append(Spacer(1, 0.5*cm))
 
-    story.append(Paragraph(f"1. {t(locale, 'overall_score_title', date=data.get('date', ''))}", heading_style))
+    # Summary KPI cards — dual-mode branching
+    total_score = float(scores.get('total', 0) or 0)
+    card_width = 3.72 * cm
+    card_height = 2.2 * cm
+    _primary_cond = str(profile.get('primary_condition') or profile.get('condition') or '').strip().lower()
+    _is_lifestyle = _primary_cond in {'balanced', 'fat_loss'}
+
+    _card_score = SummaryCard(t(locale, 'score_total_label'), f"{total_score:.0f}",
+                   t(locale, 'excellent') if total_score >= 80 else t(locale, 'good') if total_score >= 60 else t(locale, 'needs_improvement'),
+                   get_score_color(total_score), font_name, card_width, card_height)
+    _card_weight = SummaryCard(t(locale, 'weight'), format_weight(locale, data.get('weight_morning')),
+                   f"BMI {scores.get('bmi', 0) or (scores.get('module_map', {}).get('weight', {}).get('bmi', 0)):.1f}",
+                   C_PRIMARY_STR, font_name, card_width, card_height)
+
+    if _is_lifestyle:
+        _card3 = SummaryCard(t(locale, 'calories'), f"{nutrition.get('calories', 0):.0f} kcal", "",
+                           C_WARNING_STR, font_name, card_width, card_height)
+        _card4 = SummaryCard(localize('饮水', 'Water'), f"{data.get('water_total', 0)} ml",
+                           f"/ {data.get('water_target', 2000)} ml",
+                           C_SUCCESS_STR, font_name, card_width, card_height)
+    else:
+        _card3 = SummaryCard(t(locale, 'calories'), f"{nutrition.get('calories', 0):.0f} kcal", "",
+                           C_WARNING_STR, font_name, card_width, card_height)
+        _symptom_mod = next((m for m in score_modules if m.get('id') == 'symptom'), {})
+        _symptom_status = _symptom_mod.get('status', '-')
+        _symptom_score = float(_symptom_mod.get('raw', 0) or 0)
+        _card4 = SummaryCard(localize('症状管理', 'Symptoms'), _symptom_status,
+                           f"{_symptom_score:.0f}/100",
+                           get_score_color(_symptom_score), font_name, card_width, card_height)
+
+    summary_cards = Table(
+        [[_card_score, _card_weight, _card3, _card4]],
+        colWidths=[card_width + 0.25*cm] * 4,
+    )
+    summary_cards.setStyle(TableStyle([
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 0),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+        ('TOPPADDING', (0, 0), (-1, -1), 0),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+    ]))
+    story.append(summary_cards)
+    story.append(Spacer(1, 0.4*cm))
+
+    story.append(Spacer(1, 0.35*cm))
+    story.append(AccentHeading(f"1. {t(locale, 'overall_score_title', date=data.get('date', ''))}", font_name=font_name))
+    story.append(Spacer(1, 0.25*cm))
     score_data = [[t(locale, 'dimension'), t(locale, 'score'), t(locale, 'stars'), t(locale, 'status')]]
     for module in score_modules:
         raw_score = float(module.get('raw', 0) or 0)
@@ -1114,11 +1276,14 @@ def generate_pdf_report(data, profile, scores, nutrition, macros, risks, plan, o
     story.append(Spacer(1, 0.4*cm))
 
     if ai_comment:
-        story.append(Paragraph(t(locale, 'expert_ai_insights'), heading_style))
+        story.append(Spacer(1, 0.35*cm))
+        story.append(AccentHeading(t(locale, 'expert_ai_insights'), font_name=font_name))
+        story.append(Spacer(1, 0.25*cm))
         for section in build_ai_comment_sections(ai_comment, locale):
             title = clean_html_tags(section.get("title") or "").strip()
             items = [clean_html_tags(item).strip() for item in section.get("items", []) if clean_html_tags(item).strip()]
             section_nodes = []
+            title_color = C_WARNING_STR
             if title:
                 title_color = C_SUCCESS_STR if any(keyword in title.lower() for keyword in ("well", "good", "亮点", "做得")) else C_WARNING_STR
                 section_nodes.append(Paragraph(f"<font color='{title_color}'><b>{title}</b></font>", card_title_style))
@@ -1129,16 +1294,16 @@ def generate_pdf_report(data, profile, scores, nutrition, macros, risks, plan, o
                 section_nodes.append(Paragraph(title, normal_style))
             story.append(
                 Table(
-                    [[section_nodes]],
+                    [[[Spacer(3, 0)] + section_nodes]],
                     colWidths=[16.1 * cm],
                     style=TableStyle([
-                        ('BACKGROUND', (0, 0), (-1, -1), HexColor("#F8FAFC")),
+                        ('BACKGROUND', (0, 0), (-1, -1), HexColor("#FAFBFC")),
                         ('LINEBELOW', (0, 0), (-1, -1), 0.0, colors.white),
-                        ('BOX', (0, 0), (-1, -1), 0.55, HexColor('#E5E7EB')),
-                        ('LEFTPADDING', (0, 0), (-1, -1), 10),
-                        ('RIGHTPADDING', (0, 0), (-1, -1), 10),
-                        ('TOPPADDING', (0, 0), (-1, -1), 8),
-                        ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+                        ('LINEBEFORE', (0, 0), (0, -1), 3.0, HexColor(title_color)),
+                        ('LEFTPADDING', (0, 0), (-1, -1), 14),
+                        ('RIGHTPADDING', (0, 0), (-1, -1), 12),
+                        ('TOPPADDING', (0, 0), (-1, -1), 10),
+                        ('BOTTOMPADDING', (0, 0), (-1, -1), 10),
                         ('VALIGN', (0, 0), (-1, -1), 'TOP'),
                     ]),
                 )
@@ -1148,7 +1313,9 @@ def generate_pdf_report(data, profile, scores, nutrition, macros, risks, plan, o
             story.append(Paragraph(source_text(generation_meta.get('ai_comment')), source_note_style))
         story.append(Spacer(1, 0.2*cm))
 
-    story.append(Paragraph(f"2. {t(locale, 'daily_baseline_data')}", heading_style))
+    story.append(Spacer(1, 0.35*cm))
+    story.append(AccentHeading(f"2. {t(locale, 'daily_baseline_data')}", font_name=font_name))
+    story.append(Spacer(1, 0.25*cm))
     weight_module = module_map.get('weight', {})
     bmi_val = weight_module.get('bmi', scores.get('bmi', 0)) or 0
     weight_val = data.get('weight_morning')
@@ -1184,7 +1351,9 @@ def generate_pdf_report(data, profile, scores, nutrition, macros, risks, plan, o
 
     temp_images = []
 
-    story.append(Paragraph(f"3. {t(locale, 'daily_nutrition_breakdown')}", heading_style))
+    story.append(Spacer(1, 0.35*cm))
+    story.append(AccentHeading(f"3. {t(locale, 'daily_nutrition_breakdown')}", font_name=font_name))
+    story.append(Spacer(1, 0.25*cm))
     chart_path_nutrition = create_nutrition_chart(nutrition, locale)
     if chart_path_nutrition:
         temp_images.append(chart_path_nutrition)
@@ -1219,7 +1388,9 @@ def generate_pdf_report(data, profile, scores, nutrition, macros, risks, plan, o
     story.append(nutri_table)
     story.append(Spacer(1, 0.4*cm))
 
-    story.append(Paragraph(f"4. {t(locale, 'daily_water_details')}", heading_style))
+    story.append(Spacer(1, 0.35*cm))
+    story.append(AccentHeading(f"4. {t(locale, 'daily_water_details')}", font_name=font_name))
+    story.append(Spacer(1, 0.25*cm))
     if water_records and len(water_records) > 0:
         chart_path_water = create_water_chart(water_records, data.get('water_target', 2000), locale)
         if chart_path_water:
@@ -1232,7 +1403,9 @@ def generate_pdf_report(data, profile, scores, nutrition, macros, risks, plan, o
         story.append(Paragraph(f"<font color='#64748B'>{t(locale, 'no_water_today')}</font>", normal_style))
         story.append(Spacer(1, 0.4*cm))
 
-    story.append(Paragraph(f"5. {t(locale, 'daily_meal_details')}", heading_style))
+    story.append(Spacer(1, 0.35*cm))
+    story.append(AccentHeading(f"5. {t(locale, 'daily_meal_details')}", font_name=font_name))
+    story.append(Spacer(1, 0.25*cm))
     if meals and len(meals) > 0:
         meal_chart_path = create_meal_macro_stacked_chart(meals, locale)
         if meal_chart_path:
@@ -1257,6 +1430,13 @@ def generate_pdf_report(data, profile, scores, nutrition, macros, risks, plan, o
             meal_elements.append(meal_title)
 
             food_nutrition = meal.get('food_nutrition', [])
+            _skip_kw = ('今日累计', '累计', '合计', '总计', 'total', 'subtotal',
+                         '钾', '钠', '钙', '铁', '锌', '镁', '维生素', 'potassium', 'sodium', 'calcium')
+            food_nutrition = [
+                f for f in (food_nutrition or [])
+                if not any(kw in str(f.get('name', '')).lower() for kw in _skip_kw)
+                and float(f.get('calories', 0) or 0) > 0
+            ]
             if food_nutrition and len(food_nutrition) > 0:
                 meal_data = [[t(locale, 'food_name'), t(locale, 'portion'), t(locale, 'calories'), t(locale, 'protein'), t(locale, 'fat'), t(locale, 'carb')]]
                 for food in food_nutrition:
@@ -1296,7 +1476,9 @@ def generate_pdf_report(data, profile, scores, nutrition, macros, risks, plan, o
         story.append(Paragraph(f"<font color='#64748B'>{t(locale, 'no_meals_today')}</font>", normal_style))
     story.append(Spacer(1, 0.2*cm))
 
-    story.append(Paragraph(f"6. {t(locale, 'daily_exercise_details')}", heading_style))
+    story.append(Spacer(1, 0.35*cm))
+    story.append(AccentHeading(f"6. {t(locale, 'daily_exercise_details')}", font_name=font_name))
+    story.append(Spacer(1, 0.25*cm))
     steps = data.get('steps', 0)
     step_target = profile.get('step_target', 8000)
     exercise_lines = build_exercise_detail_lines(exercise_data, steps, locale)
@@ -1328,7 +1510,9 @@ def generate_pdf_report(data, profile, scores, nutrition, macros, risks, plan, o
     has_medication_module = any(module.get('id') == 'medication' for module in score_modules)
     if has_medication_module:
         medication_title = localize('\u7528\u836f\u60c5\u51b5', 'Medication')
-        story.append(Paragraph(f"{section_idx}. {medication_title}", heading_style))
+        story.append(Spacer(1, 0.35*cm))
+        story.append(AccentHeading(f"{section_idx}. {medication_title}", font_name=font_name))
+        story.append(Spacer(1, 0.25*cm))
         section_idx += 1
         if medication_records:
             for item in medication_records:
@@ -1339,7 +1523,9 @@ def generate_pdf_report(data, profile, scores, nutrition, macros, risks, plan, o
         story.append(Spacer(1, 0.3*cm))
 
     if custom_sections:
-        story.append(Paragraph(f"{section_idx}. {t(locale, 'extra_monitoring_records')}", heading_style))
+        story.append(Spacer(1, 0.35*cm))
+        story.append(AccentHeading(f"{section_idx}. {t(locale, 'extra_monitoring_records')}", font_name=font_name))
+        story.append(Spacer(1, 0.25*cm))
         section_idx += 1
         for header, items in custom_sections.items():
             story.append(Paragraph(f"<b>{clean_html_tags(header)}</b>", ParagraphStyle('Sub', parent=normal_style, textColor=C_TEXT_MAIN, spaceAfter=4)))
@@ -1348,7 +1534,9 @@ def generate_pdf_report(data, profile, scores, nutrition, macros, risks, plan, o
                 story.append(Paragraph(f"- {clean_html_tags(item_text)}", normal_style))
             story.append(Spacer(1, 0.3*cm))
 
-    story.append(Paragraph(f"{section_idx}. {t(locale, 'risk_alerts')}", heading_style))
+    story.append(Spacer(1, 0.35*cm))
+    story.append(AccentHeading(f"{section_idx}. {t(locale, 'risk_alerts')}", font_name=font_name))
+    story.append(Spacer(1, 0.25*cm))
     section_idx += 1
     if risks:
         for risk in risks:
@@ -1362,7 +1550,9 @@ def generate_pdf_report(data, profile, scores, nutrition, macros, risks, plan, o
         story.append(Paragraph(source_text(generation_meta.get('risk_alerts')), source_note_style))
     story.append(Spacer(1, 0.4*cm))
 
-    story.append(Paragraph(f"{section_idx}. {t(locale, 'action_plan')}", heading_style))
+    story.append(Spacer(1, 0.35*cm))
+    story.append(AccentHeading(f"{section_idx}. {t(locale, 'action_plan')}", font_name=font_name))
+    story.append(Spacer(1, 0.25*cm))
     for category, title in [('diet', t(locale, 'diet_plan')), ('water', t(locale, 'water_plan')), ('exercise', t(locale, 'exercise_plan'))]:
         if plan.get(category):
             story.append(Paragraph(f"<b>{title}</b>", ParagraphStyle('Sub', parent=sub_heading_style, textColor=C_TEXT_MAIN, spaceAfter=6)))

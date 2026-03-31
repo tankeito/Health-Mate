@@ -20,7 +20,7 @@ from reportlab.lib.utils import ImageReader
 from reportlab.platypus import Image, KeepTogether, PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from i18n import condition_name, format_weight, inline_localize, resolve_locale
-from daily_pdf_generator import clean_html_tags, get_font_prop, register_chinese_font, stars_to_text
+from daily_pdf_generator import clean_html_tags, get_font_prop, register_chinese_font, stars_to_text, GradientBanner, AccentHeading, SummaryCard, get_score_color
 
 try:
     import matplotlib.patches as mpatches
@@ -1179,9 +1179,9 @@ def generate_monthly_pdf_report(
         title=localize(locale, "健康月报", "Monthly Health Report"),
     )
     styles = getSampleStyleSheet()
-    title_style = ParagraphStyle("Title", parent=styles["Heading1"], fontSize=22, textColor=HexColor(C_PRIMARY), spaceAfter=5, alignment=TA_CENTER, fontName=font_name)
+    title_style = ParagraphStyle("Title", parent=styles["Heading1"], fontSize=22, textColor=HexColor(C_PRIMARY), spaceAfter=6, alignment=TA_CENTER, fontName=font_name, leading=28)
     sub_title = ParagraphStyle("SubTitle", parent=styles["Normal"], fontSize=10, textColor=HexColor(C_TEXT_MUTED), spaceAfter=14, alignment=TA_CENTER, fontName=font_name)
-    heading_style = ParagraphStyle("Heading", parent=styles["Heading2"], fontSize=14, textColor=HexColor(C_PRIMARY), spaceBefore=12, spaceAfter=8, fontName=font_name)
+    heading_style = ParagraphStyle("Heading", parent=styles["Heading2"], fontSize=14, textColor=HexColor(C_PRIMARY), spaceBefore=14, spaceAfter=10, fontName=font_name)
     sub_heading_style = ParagraphStyle("SubHeading", parent=styles["Heading3"], fontSize=11, textColor=HexColor(C_TEXT_MAIN), spaceBefore=6, spaceAfter=4, fontName=font_name)
     normal_style = ParagraphStyle("NormalText", parent=styles["Normal"], fontSize=9.6, textColor=HexColor(C_TEXT_MAIN), fontName=font_name, leading=16)
     muted_style = ParagraphStyle("Muted", parent=normal_style, textColor=HexColor(C_TEXT_MUTED), fontSize=8.5, leading=13)
@@ -1199,7 +1199,7 @@ def generate_monthly_pdf_report(
             clean = clean_html_tags(str(line or "")).strip()
             if not clean:
                 continue
-            story.append(Paragraph(f"<font color='{C_PRIMARY}'>■</font> {clean}", normal_style))
+            story.append(Paragraph(f"<font color='{C_PRIMARY}'>●</font> {clean}", normal_style))
             story.append(Spacer(1, 0.05 * cm))
 
     def add_source_note(value: str) -> None:
@@ -1212,9 +1212,10 @@ def generate_monthly_pdf_report(
             if not title and not body:
                 continue
 
+            accent_color = C_SUCCESS if any(kw in title for kw in ("亮点", "做得", "稳定", "Good", "Well", "改善", "综合")) else C_WARNING if any(kw in title for kw in ("风险", "关注", "隐患", "Risk", "Attention", "改进")) else C_PRIMARY
             card_content: List = []
             if title:
-                card_content.append(Paragraph(f"<b>{title}</b>", card_title_style))
+                card_content.append(Paragraph(f"<font color='{accent_color}'><b>{title}</b></font>", card_title_style))
             if body:
                 card_content.append(Paragraph(body.replace("\n", "<br/>"), review_body_style))
 
@@ -1226,9 +1227,12 @@ def generate_monthly_pdf_report(
                             colWidths=[16.2 * cm],
                             style=TableStyle(
                                 [
-                                    ("BACKGROUND", (0, 0), (-1, -1), HexColor(C_BG_SOFT)),
-                                    ("BOX", (0, 0), (-1, -1), 0.6, HexColor(C_BORDER)),
-                                    ("INNERPADDING", (0, 0), (-1, -1), 8),
+                                    ("BACKGROUND", (0, 0), (-1, -1), HexColor("#FAFBFC")),
+                                    ("LINEBEFORE", (0, 0), (0, -1), 3.0, HexColor(accent_color)),
+                                    ("LEFTPADDING", (0, 0), (-1, -1), 14),
+                                    ("RIGHTPADDING", (0, 0), (-1, -1), 12),
+                                    ("TOPPADDING", (0, 0), (-1, -1), 10),
+                                    ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
                                     ("VALIGN", (0, 0), (-1, -1), "TOP"),
                                 ]
                             ),
@@ -1269,11 +1273,64 @@ def generate_monthly_pdf_report(
 
     try:
         story.append(Paragraph(f"<b>{profile_condition_title(profile, locale)} · {localize(locale, '健康月报', 'Monthly Health Report')}</b>", title_style))
+        story.append(GradientBanner(17.8 * cm))
         story.append(Paragraph(localize(locale, f"评估周期：{monthly_data.get('start_date')} 至 {monthly_data.get('end_date')} | 监测人：{profile.get('name', '-')}", f"Period: {monthly_data.get('start_date')} to {monthly_data.get('end_date')} | User: {profile.get('name', '-')}"), sub_title))
         if render_notice:
             story.append(Paragraph(f"<b>{localize(locale, '渲染说明', 'Rendering Notice')}</b><br/>{clean_html_tags(render_notice)}", notice_style))
 
-        story.append(Paragraph("1. " + localize(locale, "宏观依从性与状态全景", "Macro Overview"), heading_style))
+        # Monthly Summary KPI Cards — dual-mode branching
+        overview = monthly_data.get("overview", {})
+        weight_summary = monthly_data.get("weight_summary", {})
+        avg_score = float(overview.get("avg_score", 0))
+        card_w = 3.72 * cm
+        card_h = 2.2 * cm
+
+        _mcard1 = SummaryCard(localize(locale, "月均评分", "Avg Score"), f"{avg_score:.0f}",
+                       localize(locale, "趋势: 上升", "Trend: improving") if overview.get("trend") == "improving" else "",
+                       get_score_color(avg_score), font_name, card_w, card_h)
+        _wt_change = weight_summary.get('change', 0) or 0
+        _mcard2 = SummaryCard(localize(locale, "体重变化", "Weight Change"), f"{_wt_change:+.1f}kg",
+                       f"{weight_summary.get('start', 0):.1f} → {weight_summary.get('end', 0):.1f}",
+                       C_PRIMARY if _wt_change <= 0 else C_WARNING, font_name, card_w, card_h)
+
+        if lifestyle_mode:
+            _diet_rate = monthly_data.get('macro_scores', {}).get('diet', 0)
+            _mcard3 = SummaryCard(localize(locale, "饮食达标", "Diet Score"), f"{_diet_rate}%",
+                           localize(locale, "达标率", "Goal Rate"),
+                           C_SUCCESS, font_name, card_w, card_h)
+            _exercise_rate = monthly_data.get('macro_scores', {}).get('exercise', 0)
+            _water_rate = monthly_data.get('macro_scores', {}).get('water', 0)
+            _mcard4 = SummaryCard(localize(locale, "运动/饮水", "Exercise/Water"), f"{_exercise_rate}/{_water_rate}",
+                           localize(locale, "达标率", "Goal Rate"),
+                           C_WARNING, font_name, card_w, card_h)
+        else:
+            _adherence = monthly_data.get('medication_summary', {}).get('adherence_rate', 0)
+            _mcard3 = SummaryCard(localize(locale, "用药依从", "Med Adherence"), f"{_adherence:.0f}%",
+                           "",
+                           "#7C3AED", font_name, card_w, card_h)
+            _sym_days = monthly_data.get('symptom_summary', {}).get('total_symptom_days', 0)
+            _mcard4 = SummaryCard(localize(locale, "症状天数", "Symptom Days"), f"{_sym_days}",
+                           localize(locale, "天", "days"),
+                           C_DANGER if _sym_days > 5 else C_WARNING, font_name, card_w, card_h)
+
+        summary_cards = Table(
+            [[_mcard1, _mcard2, _mcard3, _mcard4]],
+            colWidths=[card_w + 0.25*cm] * 4,
+        )
+        summary_cards.setStyle(TableStyle([
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 0),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+            ('TOPPADDING', (0, 0), (-1, -1), 0),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+        ]))
+        story.append(summary_cards)
+        story.append(Spacer(1, 0.35*cm))
+
+        story.append(Spacer(1, 0.35*cm))
+        story.append(AccentHeading("1. " + localize(locale, "宏观依从性与状态全景", "Macro Overview"), font_name=font_name))
+        story.append(Spacer(1, 0.25*cm))
 
         radar_path = create_macro_radar_chart(monthly_data.get("macro_scores", {}), locale)
         if lifestyle_mode:
@@ -1323,11 +1380,11 @@ def generate_monthly_pdf_report(
             [localize(locale, "运动达标率", "Exercise goal rate"), f"{monthly_data.get('macro_scores', {}).get('exercise', 0):.0f}%"],
             [localize(locale, "用药覆盖率", "Medication coverage"), f"{monthly_data.get('macro_scores', {}).get('medication', 0):.0f}%"],
             [localize(locale, "监测覆盖率", "Monitoring coverage"), f"{monthly_data.get('macro_scores', {}).get('monitoring', 0):.0f}%"],
-            [localize(locale, "症状天数", "Symptom days"), f"{monthly_data.get('symptom_days', 0)} / {monthly_data.get('observed_days', 0)}"],
-            [localize(locale, "月均综合评分", "Average overall score"), f"{monthly_data.get('avg_total_score', 0):.1f}/100"],
+            [localize(locale, "症状天数", "Symptom days"), f"{monthly_data.get('symptom_summary', {}).get('total_symptom_days', monthly_data.get('symptom_days', 0))} / {monthly_data.get('recorded_days', monthly_data.get('observed_days', 0))}"],
+            [localize(locale, "月均综合评分", "Average overall score"), f"{monthly_data.get('overview', {}).get('avg_score', monthly_data.get('avg_total_score', 0)):.1f}/100"],
         ]
         overview_table = Table(summary_rows, colWidths=[5.2 * cm, 10.8 * cm])
-        overview_table.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, 0), HexColor(C_BG_HEAD)), ("TEXTCOLOR", (0, 0), (-1, 0), HexColor(C_TEXT_MUTED)), ("TEXTCOLOR", (0, 1), (-1, -1), HexColor(C_TEXT_MAIN)), ("FONTNAME", (0, 0), (-1, -1), font_name), ("FONTSIZE", (0, 0), (-1, -1), 9), ("TOPPADDING", (0, 0), (-1, -1), 6), ("BOTTOMPADDING", (0, 0), (-1, -1), 6), ("LINEBELOW", (0, 0), (-1, -1), 0.5, HexColor(C_BORDER)), ("ALIGN", (0, 0), (-1, -1), "CENTER")]))
+        overview_table.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, 0), HexColor("#EFF6FF")), ("TEXTCOLOR", (0, 0), (-1, 0), HexColor("#1E40AF")), ("TEXTCOLOR", (0, 1), (-1, -1), HexColor(C_TEXT_MAIN)), ("FONTNAME", (0, 0), (-1, -1), font_name), ("FONTSIZE", (0, 0), (-1, -1), 9), ("TOPPADDING", (0, 0), (-1, -1), 6), ("BOTTOMPADDING", (0, 0), (-1, -1), 6), ("LINEBELOW", (0, 0), (-1, 0), 0.8, HexColor("#BFDBFE")), ("LINEBELOW", (0, 1), (-1, -1), 0.5, HexColor(C_BORDER)), ("ALIGN", (0, 0), (-1, -1), "CENTER")]))
         story.append(overview_table)
         if weight_trend_path:
             story.append(Spacer(1, 0.16 * cm))
@@ -1342,8 +1399,9 @@ def generate_monthly_pdf_report(
         story.append(Spacer(1, 0.18 * cm))
         add_bullet_lines(monthly_data.get("macro_highlights", []))
 
-        story.append(PageBreak())
-        story.append(Paragraph("2. " + deep_dive_title, heading_style))
+        story.append(Spacer(1, 0.35*cm))
+        story.append(AccentHeading("2. " + deep_dive_title, font_name=font_name))
+        story.append(Spacer(1, 0.25*cm))
         specialty_charts = monthly_data.get("specialty_charts", [])
         if specialty_charts:
             for chart in specialty_charts:
@@ -1404,8 +1462,9 @@ def generate_monthly_pdf_report(
                     )
                 )
 
-        story.append(PageBreak())
-        story.append(Paragraph("3. " + action_plan_title, heading_style))
+        story.append(Spacer(1, 0.35*cm))
+        story.append(AccentHeading("3. " + action_plan_title, font_name=font_name))
+        story.append(Spacer(1, 0.25*cm))
 
         residence_text = clean_html_tags(monthly_data.get("residence_text") or localize(locale, "未配置常居地", "Residence not configured"))
         profile_rows = [
@@ -1416,7 +1475,7 @@ def generate_monthly_pdf_report(
             [localize(locale, "常居地", "Residence"), residence_text],
         ]
         profile_table = Table(profile_rows, colWidths=[4.2 * cm, 11.8 * cm])
-        profile_table.setStyle(TableStyle([("BACKGROUND", (0, 0), (0, -1), HexColor(C_BG_HEAD)), ("TEXTCOLOR", (0, 0), (-1, -1), HexColor(C_TEXT_MAIN)), ("FONTNAME", (0, 0), (-1, -1), font_name), ("FONTSIZE", (0, 0), (-1, -1), 9), ("TOPPADDING", (0, 0), (-1, -1), 6), ("BOTTOMPADDING", (0, 0), (-1, -1), 6), ("GRID", (0, 0), (-1, -1), 0.5, HexColor(C_BORDER))]))
+        profile_table.setStyle(TableStyle([("BACKGROUND", (0, 0), (0, -1), HexColor("#EFF6FF")), ("TEXTCOLOR", (0, 0), (0, -1), HexColor("#1E40AF")), ("TEXTCOLOR", (1, 0), (-1, -1), HexColor(C_TEXT_MAIN)), ("FONTNAME", (0, 0), (-1, -1), font_name), ("FONTSIZE", (0, 0), (-1, -1), 9), ("TOPPADDING", (0, 0), (-1, -1), 6), ("BOTTOMPADDING", (0, 0), (-1, -1), 6), ("GRID", (0, 0), (-1, -1), 0.5, HexColor(C_BORDER))]))
         story.append(profile_table)
         story.append(Spacer(1, 0.18 * cm))
 
