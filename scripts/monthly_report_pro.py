@@ -1683,8 +1683,11 @@ def has_named_doctor(text: str) -> bool:
     doctor = str(text or "").strip()
     if is_placeholder_doctor_name(doctor):
         return False
+    # 允许中文姓名（2-4 个汉字）或带职称的姓名
+    if re.search(r"^[\u4e00-\u9fff]{2,4}$", doctor):
+        return True
     return bool(
-        re.search(r"[一-鿿]{2,4}\s*(?:主任医师|副主任医师|主任|副主任|教授|副教授|医生|医师)", doctor)
+        re.search(r"[\u4e00-\u9fff]{2,4}\s*(?:主任医师 | 副主任医师 | 主任 | 副主任 | 教授 | 副教授 | 医生 | 医师)", doctor)
         or re.search(r"Dr\.\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2}", doctor)
     )
 
@@ -2854,6 +2857,7 @@ def build_hospital_recommendations(monthly_data: dict, profile: dict, locale: st
             config or {},
             locale,
         )
+    
     if llm_recommendations:
         named_tavily = [item for item in tavily_recommendations if has_named_doctor(item.get("doctor", ""))]
         secondary = named_tavily if named_tavily else []
@@ -2874,6 +2878,7 @@ def build_hospital_recommendations(monthly_data: dict, profile: dict, locale: st
 
     # 合并用户档案推荐
     all_recommendations = user_recommendations + fallback
+    print(f"[DEBUG] Returning fallback recommendations with source='fallback'", file=sys.stderr)
     return merge_and_rank_hospital_recommendations(all_recommendations, [], primary_condition, limit=MAX_HOSPITAL_RECOMMENDATIONS), "fallback"
 
 

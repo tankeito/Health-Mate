@@ -93,8 +93,11 @@ def clean_html_tags(text):
         return ""
     text = re.sub(r'<[^>]+>', '', str(text))
     text = re.sub(r'[\U00010000-\U0010ffff]', '', text)
-    for token in ['★', '☆', '✓', '•', '|']:
+    for token in ['★', '☆', '✓', '•', '|', '☑']:
         text = text.replace(token, '')
+    text = re.sub(r'\*\*【', '【', text)
+    text = re.sub(r'】\*\*', '】', text)
+    text = re.sub(r'\*\*', '', text)
     return re.sub(r'\s+', ' ', re.sub(r'[\ufffd]', '', re.sub(r'[\x00-\x1f\x7f-\x9f]', '', text))).strip()
 
 def stars_to_text(stars_str):
@@ -507,10 +510,10 @@ def create_nutrition_chart(nutrition, locale):
             labels=[t(locale, 'carb'), t(locale, 'protein'), t(locale, 'fat')],
             colors=[C_CARB, C_PROTEIN, C_FAT],
             autopct='%1.1f%%',
-            pctdistance=0.84,
-            labeldistance=1.05,
+            pctdistance=0.78,
+            labeldistance=1.18,
             startangle=90,
-            wedgeprops=dict(width=0.4, edgecolor='w'),
+            wedgeprops=dict(width=0.42, edgecolor='w'),
         )
         for label_text in texts:
             _style_matplotlib_text(label_text, my_font, color=C_TEXT_MAIN_STR, fontsize=9.2)
@@ -1122,7 +1125,7 @@ def generate_pdf_report(data, profile, scores, nutrition, macros, risks, plan, o
     heading_style = ParagraphStyle('CustomHeading', parent=styles['Heading2'], fontSize=13, textColor=C_PRIMARY, spaceBefore=18, spaceAfter=12, fontName=font_name)
     normal_style = ParagraphStyle('CustomNormal', parent=styles['Normal'], fontSize=10, textColor=C_TEXT_MAIN, fontName=font_name, leading=15)
     normal_bold_style = ParagraphStyle('CustomNormalBold', parent=normal_style, fontSize=10, leading=15)
-    muted_style = ParagraphStyle('Muted', parent=normal_style, textColor=C_TEXT_MUTED, fontSize=9, leading=12)
+    muted_style = ParagraphStyle('Muted', parent=normal_style, textColor=C_TEXT_MUTED, fontSize=8, leading=11)
     card_title_style = ParagraphStyle('CardTitle', parent=normal_style, fontSize=10.5, textColor=C_TEXT_MAIN, spaceAfter=4)
     sub_heading_style = ParagraphStyle('SubHeading', parent=normal_style, fontSize=10.6, textColor=C_TEXT_MAIN, spaceAfter=6)
     source_note_style = ParagraphStyle('SourceNote', parent=muted_style, alignment=TA_RIGHT, spaceBefore=4, spaceAfter=0)
@@ -1150,8 +1153,8 @@ def generate_pdf_report(data, profile, scores, nutrition, macros, risks, plan, o
         ('FONTNAME', (0, 0), (-1, -1), font_name),
         ('FONTSIZE', (0, 0), (-1, 0), 9.2),
         ('FONTSIZE', (0, 1), (-1, -1), 9),
-        ('TOPPADDING', (0, 0), (-1, -1), 9),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 9),
+        ('TOPPADDING', (0, 0), (-1, -1), 11),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 11),
         ('LEFTPADDING', (0, 0), (-1, -1), 10),
         ('RIGHTPADDING', (0, 0), (-1, -1), 10),
         ('LINEBELOW', (0, 0), (-1, 0), 1.0, HexColor('#BFDBFE')),
@@ -1382,8 +1385,8 @@ def generate_pdf_report(data, profile, scores, nutrition, macros, risks, plan, o
     nutri_table.setStyle(TableStyle(base_table_style + [
         ('ALIGN', (0, 0), (0, -1), 'LEFT'),
         ('ALIGN', (1, 0), (-1, -1), 'CENTER'),
-        ('TOPPADDING', (0, 1), (-1, -1), 10),
-        ('BOTTOMPADDING', (0, 1), (-1, -1), 10),
+        ('TOPPADDING', (0, 1), (-1, -1), 12),
+        ('BOTTOMPADDING', (0, 1), (-1, -1), 12),
     ]))
     story.append(nutri_table)
     story.append(Spacer(1, 0.4*cm))

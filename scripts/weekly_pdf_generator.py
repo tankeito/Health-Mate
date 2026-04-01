@@ -619,7 +619,25 @@ def generate_weekly_pdf_report(weekly_data, profile, ai_review, ai_plan, output_
                 story.append(Paragraph(f"<font color='{C_PRIMARY}'><b>{clean}</b></font>", normal_style))
             elif clean.startswith("-") or clean.startswith("*"):
                 clean = clean[1:].strip()
-                story.append(Paragraph(f"<font color='{C_PRIMARY}'>●</font> {clean}", normal_style))
+                story.append(Paragraph(f"<font color='{C_PRIMARY}'>□</font> {clean}", normal_style))
+            else:
+                story.append(Paragraph(clean, normal_style))
+            story.append(Spacer(1, 0.06*cm))
+
+    def append_plan_lines(text):
+        """Like append_lines but uses ☑ checkbox icon for action items."""
+        for para in str(text or "").split("\n"):
+            clean = clean_html_tags(para).strip()
+            if not clean or clean.startswith("["):
+                continue
+            is_heading = clean.startswith("【") or clean.startswith("**")
+            if is_heading:
+                clean = clean.strip("*【】")
+                story.append(Spacer(1, 0.1*cm))
+                story.append(Paragraph(f"<font color='{C_PRIMARY}'><b>{clean}</b></font>", normal_style))
+            elif clean.startswith("-") or clean.startswith("*"):
+                clean = clean[1:].strip()
+                story.append(Paragraph(f"<font color='{C_PRIMARY}' size='11'>□</font> {clean}", normal_style))
             else:
                 story.append(Paragraph(clean, normal_style))
             story.append(Spacer(1, 0.06*cm))
@@ -687,8 +705,8 @@ def generate_weekly_pdf_report(weekly_data, profile, ai_review, ai_plan, output_
         ('FONTNAME', (0, 0), (-1, -1), font_name),
         ('FONTSIZE', (0, 0), (-1, 0), 9.2),
         ('FONTSIZE', (0, 1), (-1, -1), 9),
-        ('TOPPADDING', (0, 0), (-1, -1), 9),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 9),
+        ('TOPPADDING', (0, 0), (-1, -1), 11),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 11),
         ('LEFTPADDING', (0, 0), (-1, -1), 10),
         ('RIGHTPADDING', (0, 0), (-1, -1), 10),
         ('LINEBELOW', (0, 0), (-1, 0), 1.0, HexColor('#BFDBFE')),
@@ -843,7 +861,7 @@ def generate_weekly_pdf_report(weekly_data, profile, ai_review, ai_plan, output_
     story.append(Spacer(1, 0.35*cm))
     story.append(AccentHeading(f"6. {t(locale, 'weekly_next_plan_title')}", font_name=font_name))
     story.append(Spacer(1, 0.25*cm))
-    append_lines(ai_plan)
+    append_plan_lines(ai_plan)
     story.append(Paragraph(source_text(plan_source), source_note_style))
 
     story.append(Spacer(1, 0.16*cm))

@@ -1199,7 +1199,7 @@ def generate_monthly_pdf_report(
             clean = clean_html_tags(str(line or "")).strip()
             if not clean:
                 continue
-            story.append(Paragraph(f"<font color='{C_PRIMARY}'>●</font> {clean}", normal_style))
+            story.append(Paragraph(f"<font color='{C_PRIMARY}' size='11'>□</font> {clean}", normal_style))
             story.append(Spacer(1, 0.05 * cm))
 
     def add_source_note(value: str) -> None:
@@ -1384,7 +1384,7 @@ def generate_monthly_pdf_report(
             [localize(locale, "月均综合评分", "Average overall score"), f"{monthly_data.get('overview', {}).get('avg_score', monthly_data.get('avg_total_score', 0)):.1f}/100"],
         ]
         overview_table = Table(summary_rows, colWidths=[5.2 * cm, 10.8 * cm])
-        overview_table.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, 0), HexColor("#EFF6FF")), ("TEXTCOLOR", (0, 0), (-1, 0), HexColor("#1E40AF")), ("TEXTCOLOR", (0, 1), (-1, -1), HexColor(C_TEXT_MAIN)), ("FONTNAME", (0, 0), (-1, -1), font_name), ("FONTSIZE", (0, 0), (-1, -1), 9), ("TOPPADDING", (0, 0), (-1, -1), 6), ("BOTTOMPADDING", (0, 0), (-1, -1), 6), ("LINEBELOW", (0, 0), (-1, 0), 0.8, HexColor("#BFDBFE")), ("LINEBELOW", (0, 1), (-1, -1), 0.5, HexColor(C_BORDER)), ("ALIGN", (0, 0), (-1, -1), "CENTER")]))
+        overview_table.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, 0), HexColor("#EFF6FF")), ("TEXTCOLOR", (0, 0), (-1, 0), HexColor("#1E40AF")), ("TEXTCOLOR", (0, 1), (-1, -1), HexColor(C_TEXT_MAIN)), ("FONTNAME", (0, 0), (-1, -1), font_name), ("FONTSIZE", (0, 0), (-1, -1), 9), ("TOPPADDING", (0, 0), (-1, -1), 10), ("BOTTOMPADDING", (0, 0), (-1, -1), 10), ("LINEBELOW", (0, 0), (-1, 0), 0.8, HexColor("#BFDBFE")), ("LINEBELOW", (0, 1), (-1, -1), 0.5, HexColor(C_BORDER)), ("ALIGN", (0, 0), (-1, -1), "CENTER")]))
         story.append(overview_table)
         if weight_trend_path:
             story.append(Spacer(1, 0.16 * cm))
@@ -1475,7 +1475,7 @@ def generate_monthly_pdf_report(
             [localize(locale, "常居地", "Residence"), residence_text],
         ]
         profile_table = Table(profile_rows, colWidths=[4.2 * cm, 11.8 * cm])
-        profile_table.setStyle(TableStyle([("BACKGROUND", (0, 0), (0, -1), HexColor("#EFF6FF")), ("TEXTCOLOR", (0, 0), (0, -1), HexColor("#1E40AF")), ("TEXTCOLOR", (1, 0), (-1, -1), HexColor(C_TEXT_MAIN)), ("FONTNAME", (0, 0), (-1, -1), font_name), ("FONTSIZE", (0, 0), (-1, -1), 9), ("TOPPADDING", (0, 0), (-1, -1), 6), ("BOTTOMPADDING", (0, 0), (-1, -1), 6), ("GRID", (0, 0), (-1, -1), 0.5, HexColor(C_BORDER))]))
+        profile_table.setStyle(TableStyle([("BACKGROUND", (0, 0), (0, -1), HexColor("#EFF6FF")), ("TEXTCOLOR", (0, 0), (0, -1), HexColor("#1E40AF")), ("TEXTCOLOR", (1, 0), (-1, -1), HexColor(C_TEXT_MAIN)), ("FONTNAME", (0, 0), (-1, -1), font_name), ("FONTSIZE", (0, 0), (-1, -1), 9), ("TOPPADDING", (0, 0), (-1, -1), 10), ("BOTTOMPADDING", (0, 0), (-1, -1), 10), ("GRID", (0, 0), (-1, -1), 0.5, HexColor(C_BORDER))]))
         story.append(profile_table)
         story.append(Spacer(1, 0.18 * cm))
 
