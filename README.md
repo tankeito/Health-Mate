@@ -6,7 +6,7 @@ English | [中文](README_ZH.md) | [日本語](README_JP.md)
 >
 > Transform local Markdown health memories into polished Daily, Weekly, and Monthly PDF reports with condition-aware scoring, specialty charts, medical planning, and optional webhook delivery.
 
-[![Version](https://img.shields.io/badge/version-1.5.3-blue.svg)](https://github.com/tankeito/Health-Mate/releases)
+[![Version](https://img.shields.io/badge/version-1.5.4-blue.svg)](https://github.com/tankeito/Health-Mate/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![OpenClaw](https://img.shields.io/badge/OpenClaw-Skill-green.svg)](https://openclaw.ai)
 

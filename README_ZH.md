@@ -6,7 +6,7 @@
 >
 > 将本地 Markdown 健康记录转化为专业的日报、周报、月报 PDF，支持病种感知评分、专项图表、医疗规划及可选的消息推送。
 
-[![Version](https://img.shields.io/badge/version-1.5.3-blue.svg)](https://github.com/tankeito/Health-Mate/releases)
+[![Version](https://img.shields.io/badge/version-1.5.4-blue.svg)](https://github.com/tankeito/Health-Mate/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![OpenClaw](https://img.shields.io/badge/OpenClaw-Skill-green.svg)](https://openclaw.ai)
 

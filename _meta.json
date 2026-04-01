@@ -2,7 +2,7 @@
     "name":  "health-mate",
     "display_name":  "Health-Mate",
     "type":  "python/app",
-    "version":  "1.5.3",
+    "version":  "1.5.4",
     "description":  "Health-Mate is an executable OpenClaw health-management skill with Chinese, English, and Japanese report flows, local Markdown parsing, strict memory-write templates for LLM output, and daily/weekly/monthly PDF generation. It supports explicit report routing through report_preferences.population_branch, uses activity heatmaps plus lifestyle insight charts for balanced or fat-loss users, keeps hospital-and-doctor planning for disease modes, and sanitizes local-LLM stdout before AI commentary is embedded into pushed text or PDF content. SECURITY DISCLOSURE: 1. MEMORY_DIR must be explicitly set; there is no implicit fallback path. 2. The shell runners and direct Python entry points read the project-local config/.env when it exists, and the setup wizard can create a commented project-local template if the file is missing; users should keep only the keys they intend the skill to read. 3. Shell runners use NVM_DIR / CRON_PATH for cron-friendly PATH setup, while the Python local-LLM resolver uses OPENCLAW_BIN when provided. 4. Outbound network requests occur only when webhook or Tavily credentials are configured, or when runtime font download is explicitly enabled. 5. Before upgrades or reinstalls, users should back up config/user_config.json and config/.env because some platform workflows may reset local configuration files.",
     "author":  "tankeito",
     "email":  "tqd354@gmail.com",

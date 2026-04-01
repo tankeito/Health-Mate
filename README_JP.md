@@ -6,7 +6,7 @@
 >
 > ローカル Markdown 健康メモリを、病態感知採点、専用チャート、医療計画、オプション Webhook 配信付きの日報・週報・月報 PDF へ変換します。
 
-[![Version](https://img.shields.io/badge/version-1.5.3-blue.svg)](https://github.com/tankeito/Health-Mate/releases)
+[![Version](https://img.shields.io/badge/version-1.5.4-blue.svg)](https://github.com/tankeito/Health-Mate/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![OpenClaw](https://img.shields.io/badge/OpenClaw-Skill-green.svg)](https://openclaw.ai)
 
