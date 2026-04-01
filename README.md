@@ -488,6 +488,22 @@ health-mate/
 
 ---
 
+## 📝 Changelog
+
+### v1.5.4 - 2026-04-01
+
+- Enhanced PDF visual styling with refined layout and improved readability
+- Fixed minor formatting issues in daily, weekly, and monthly report generators
+- Optimized symbol rendering for better cross-platform compatibility
+
+### v1.5.3 - 2026-03-29
+
+- Sanitized local-LLM stdout before AI commentary is embedded into push text or PDFs
+- Added a second daily-PDF commentary filter as a defensive fallback
+- Aligned direct Python execution with shell runners by auto-loading project-local config/.env
+
+---
+
 ## 📬 Support
 
 - **GitHub Issues**: https://github.com/tankeito/Health-Mate/issues
